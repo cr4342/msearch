@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 uvicorn
 sqlalchemy
 pyyaml
@@ -22,3 +23,16 @@ pytest
 flask
 cn_clip
 requests
+=======
+fastapi
+uvicorn
+sqlalchemy
+mysql-connector-python
+torch
+torchvision
+qdrant-client
+redis
+pydantic
+pytest
+flask  # 添加 Flask 依赖
+>>>>>>> 4bc4798 (Initial commit)

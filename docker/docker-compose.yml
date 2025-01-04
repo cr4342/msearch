@@ -1,0 +1,14 @@
+version: '3.8'
+  milvus:
+    image: milvusdb/milvus:latest
+    container_name: milvus
+    environment:
+      - MILVUS_DB_TYPE=sqlite
+      - MILVUS_LOG_LEVEL=debug
+    ports:
+      - "19530:19530"  # Milvus服务端口
+      - "19121:19121"  # Milvus Web UI端口
+    volumes:
+      - /db/milvus_db:/var/lib/milvus  # 数据持久化
+
+volumes:
