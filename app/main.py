@@ -6,7 +6,7 @@ import time
 from task import TaskManager, init_sql, get_db_session
 
 
-def build_task_scan(self, file_path, cache_path):
+def build_task_scan(self, file_path, cache_dir):
         
     target_folder = config.get('General', 'target_folder')
     webdav_url = config.get('General', 'remote_folder')

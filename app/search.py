@@ -1,6 +1,6 @@
 import configparser
 from milvus_utils import connect_milvus, Collection
-from vector import vector_text, vector_image
+from app.vector import vector_text, vector_image
 import logging
 
 # 配置日志

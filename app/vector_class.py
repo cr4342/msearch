@@ -56,6 +56,7 @@ def combine_vectors(image_features, text_features):
 
 def vector_image(path):
     """处理单张图片并返回其向量特征"""
+    file_name = os.path.basename(path)
     try:
         image = preprocess(Image.open(path)).unsqueeze(0).to(device)
         text = clip.tokenize([file_name]).to(device)
@@ -63,7 +64,7 @@ def vector_image(path):
         with torch.no_grad():
             image_features = model.encode_image(image)
             image_features = image_features / image_features.norm(dim=-1, keepdim=True)
-            probs = combine_vectors(image_features, text)
+            probs = combine_vectors(image_features, text) 
 
         return probs
     except Exception as e:
@@ -71,32 +72,38 @@ def vector_image(path):
         raise VectorizationError(f"Error processing image {path}: {e}")
 
 def vector_video(path):
-    """利用file_processor.py中的pumping函数，将视频切分为图片帧"""
+    """利用ulity.py中的pumping函数，将视频切分为图片帧"""
     try:
         result = pumping(path)
         if not all(key in result for key in ['frames', 'frame_count', 'duration']):
             raise ValueError("Invalid video processing result")
 
         frames = result['frames']
-        vectors = []
-        timestamps = []
-        fps = result['frame_count'] / result['duration']  # 计算帧率
+        frame_vectors = {} 
+        fps = 1  
+
         for frame in frames:
             frame_path = frame['frame_path']
             frame_no = frame['no']
-            vector_features = vector_image(frame_path, file_name)
+            vector_features = vector_image(frame_path)
             if vector_features is not None:
-                vectors.append(vector_features)
-                timestamps.append(frame_no / fps)  # 将帧编号转换为秒数
+                frame_vectors[frame_no] = {
+                    'vector': vector_features,
+                    'timestamp': frame_no / fps  # 直接使用 frame_no 作为秒数
+                }
+
+        # 删除 pumping 产生的视频帧缓存
+        for frame in frames:
+            frame_path = frame['frame_path']
+            if os.path.exists(frame_path):
+                os.remove(frame_path)
 
         # 返回向量结果和时间戳
         return {
             'filename': result['filename'],
             'filepath': result['filepath'],
-            'vectors': vectors,
-            'timestamps': timestamps
+            'frame_vectors': frame_vectors
         }
     except Exception as e:
         logging.error(f"Error processing video {path}: {e}")
         raise VectorizationError(f"Error processing video {path}: {e}")
-

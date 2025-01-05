@@ -1,4 +1,3 @@
-# vector.py
 import cn_clip.clip as clip
 import torch
 from PIL import Image
@@ -26,23 +25,23 @@ logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(
 
 total_task_num = get_total_tasks()
 
-#从任务数据库中读取任务，将不是本地的文件下载到本地tmp目录，返回队列
+#从任务数据库中读取任务，将不是本地的文件下载到本地cache目录，返回队列
 def get_unvectorized_tasks(vectorized=0):
     tasks_queue = {}
-    tmp= confing.get('tmp_dir')
+    cache= confing.get('cache_dir')
     task_ids = get_task_list(vectorized=0)
     for task_id in task_ids:
         task = get_task_by_id(task_id)
         if task.type == 'remote' :
-            download_remote_file(task.file_path, tmp)
-            file_tmp_path = os.path.join(tmp, os.path.basename(task.file_name))
-            update_task(task_id, cache_path='file_tmp_path'，cache_complete='now()')
-            tasks_queue.append(task.id, file_tmp_path，task.task_type)
+            download_remote_file(task.file_path, cache)
+            file_cache_path = os.path.join(cache, os.path.basename(task.file_name))
+            update_task(task_id, cache_path='file_cache_path'，cache_complete='now()')
+            tasks_queue.append(task.id, file_cache_path，task.task_type)
         else:
             tasks_queue.append(task.id, task.file_path,task.task_type)
         return tasks_queue
 
-def emding_task(tasks_queue):
+def embedding_task(tasks_queue):
     for id in range(len(tasks_queue)):
         task_id, file_path, task_type = tasks_queue.get()
         if task_type == '1':
@@ -74,7 +73,7 @@ def main():
     # 读取未向量化的任务
     tasks_queue = get_unvectorized_tasks()
     # 向量化任务
-    emding_task(tasks_queue)
+    embedding_task(tasks_queue)
     # 关闭 Milvus 数据库
     close_milvus()
 

@@ -20,7 +20,7 @@ class Task(Base):
     file_path = Column(String(255), nullable=False)  # 原文件路径
     md5 = Column(String(32), nullable=False)  # MD5
     created_at = Column(TIMESTAMP, server_default=func.now())  # 创建时间
-    cache_path = Column(String(255), nullable=True)  # 缓存文件路径
+    cache_dir = Column(String(255), nullable=True)  # 缓存文件路径
     cache_completed_at = Column(TIMESTAMP, nullable=True)  # 缓存完成时间
     task_type = Column(Enum('0', '1', '2', '3', '4'), nullable=False)  # 任务类型
     vectorized = Column(Integer, default=0)  # 向量化状态，0表示未向量化

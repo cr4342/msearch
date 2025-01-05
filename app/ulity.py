@@ -29,12 +29,12 @@ def scan_files(folder_path, start_from=None, last_scanned=None):
         """
         从url下载文件到配置文件指定的缓存路径，返回缓存的文件路径
         """
-        cache_path = config.get('cache_path', 'default_cache_path')
-        if not os.path.exists(cache_path):
-            os.makedirs(cache_path)
+        cache_dir = config.get('cache_dir', 'default_cache_dir')
+        if not os.path.exists(cache_dir):
+            os.makedirs(cache_dir)
 
         file_name = os.path.basename(file_url)
-        cache_file_path = os.path.join(cache_path, file_name)
+        cache_file_path = os.path.join(cache_dir, file_name)
 
         try:
             response = requests.get(file_url, stream=True)
@@ -68,7 +68,7 @@ def file_type(file_path):
 logging.basicConfig(level=logging.INFO)
 
 def pumping(file_path):
-    video_name = os.path.splitext(os.path.basename(file_path))[0]  # 获取视频文件名（不带扩展名）
+    video_name = os.path.splitext(os.path.basename(file_path))[0]  # 获取视频文件名
     cache_dir = tempfile.mkdtemp(prefix=f"{video_name}_")  # 创建临时缓存目录
     
     cap = cv2.VideoCapture(file_path)
@@ -138,15 +138,15 @@ import os
 import subprocess
 from urllib.parse import urlparse
 
-def download_remote_file(remote_url, cache_path):
+def download_remote_file(remote_url, cache_dir):
     """下载远程文件到缓存路径"""
     try:
         response = requests.get(remote_url, stream=True)
         response.raise_for_status()  # 检查请求是否成功
-        with open(cache_path, 'wb') as f:
+        with open(cache_dir, 'wb') as f:
             for chunk in response.iter_content(chunk_size=8192):
                 f.write(chunk)
-        logging.info(f"文件 {remote_url} 下载成功，保存到 {cache_path}")
+        logging.info(f"文件 {remote_url} 下载成功，保存到 {cache_dir}")
     except requests.exceptions.RequestException as e:
         logging.error(f"Error downloading remote file {remote_url}: {e}")
         raise Error(f"Error downloading remote file {remote_url}: {e}")
@@ -167,4 +167,3 @@ def check_storage_type(file_path):
                     return False  
         return True
     return False
-
