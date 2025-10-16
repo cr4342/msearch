@@ -130,81 +130,126 @@ msearch/
 ├── IFLOW.md                # iFlow CLI上下文文档
 ├── requirements.txt        # Python依赖清单
 ├── config/                 # 配置文件目录
-│   ├── config.yml          # 主配置文件
-│   └── face_retrieval.yml  # 人脸检索配置文件
+│   └── config.yml          # 主配置文件
 ├── data/                   # 数据目录
-│   ├── db/                 # SQLite数据库文件
+│   ├── database/           # 数据库文件
+│   ├── logs/               # 日志文件
 │   ├── temp/               # 临时文件目录
 │   └── thumbnails/         # 缩略图目录
-├── deploy_test/            # 部署测试目录
 ├── docs/                   # 文档目录
-│   ├── config_management_guide.md # 配置管理指南
+│   ├── api_documentation.md # API文档
+│   ├── deployment_and_operations.md # 部署和运维文档
 │   ├── deployment_guide.md # 部署指南
 │   ├── design.md           # 系统设计文档
 │   ├── development_plan.md # 开发计划文档
 │   ├── processing_orchestrator.md # 处理编排器文档
+│   ├── README.md           # 文档目录说明
 │   ├── requirements.md     # 需求文档
-│   ├── technical_reference.md # 技术参考文档
-│   └── test_strategy.md    # 测试策略文档
-├── offline/                # 离线资源目录
-│   ├── models/             # 预训练模型
-│   └── packages/           # Python依赖包
+│   ├── technical_implementation.md # 技术实现文档
+│   ├── test_strategy.md    # 测试策略文档
+│   ├── troubleshooting.md  # 故障排除文档
+│   └── user_manual.md      # 用户手册
+├── examples/               # 示例代码目录
+│   └── logging_examples.py # 日志使用示例
 ├── scripts/                # 脚本目录
 │   ├── deploy_msearch.sh   # 部署脚本
 │   ├── download_model_resources.sh # 离线资源下载脚本
-│   └── test_download.sh    # 下载测试脚本
+│   ├── start_all_services.sh # 启动所有服务脚本
+│   └── stop_all_services.sh # 停止所有服务脚本
 ├── src/                    # 源代码目录
 │   ├── api/                # API服务层
-│   │   └── main.py         # FastAPI主应用
+│   │   ├── __init__.py
+│   │   ├── main.py         # FastAPI主应用
+│   │   ├── routes/         # API路由
+│   │   │   ├── __init__.py
+│   │   │   ├── search.py   # 检索API
+│   │   │   ├── config.py   # 配置API
+│   │   │   ├── tasks.py    # 任务控制API
+│   │   │   └── status.py   # 状态查询API
+│   │   ├── models/         # API数据模型
+│   │   │   ├── __init__.py
+│   │   │   ├── search_models.py # 检索请求/响应模型
+│   │   │   ├── config_models.py # 配置模型
+│   │   │   └── common_models.py # 通用模型
+│   │   └── middleware/     # 中间件
+│   │       ├── __init__.py
+│   │       ├── cors.py     # CORS中间件
+│   │       └── error_handler.py # 错误处理中间件
 │   ├── core/               # 核心组件
+│   │   ├── __init__.py
 │   │   ├── config_manager.py     # 配置管理器
 │   │   ├── config.py             # 配置类定义
-│   │   ├── database.py           # 数据库连接
-│   │   ├── db_adapter.py         # 数据库适配器
 │   │   ├── file_type_detector.py # 文件类型检测器
-│   │   ├── infinity_manager.py   # Infinity服务管理器
-│   │   ├── load_balancer.py      # 负载均衡器
+│   │   ├── logger_manager.py     # 日志管理器
 │   │   ├── logging_config.py     # 日志配置
-│   │   ├── multimodal_fusion_engine.py # 多模态融合引擎
-│   │   ├── processing_orchestrator.py  # 处理编排器
-│   │   ├── smart_retrieval.py    # 智能检索引擎
-│   │   └── temporal_localization_engine.py # 时序定位引擎
-│   ├── gui/                # 桌面GUI应用
-│   │   ├── api_client.py   # API客户端
-│   │   ├── app.py          # GUI应用
-│   │   ├── main_window.py  # 主窗口
-│   │   ├── search_worker.py # 搜索工作器
-│   │   └── widgets/        # 界面组件
-│   ├── models/             # 模型相关组件
-│   │   ├── face_database.py      # 人脸数据库
-│   │   ├── face_model_manager.py # 人脸模型管理器
-│   │   ├── model_manager.py      # 模型管理器
-│   │   └── vector_store.py       # 向量存储
-│   └── services/           # 服务层组件
-│       ├── file_monitor.py       # 文件监控服务
-│       └── media_processor.py    # 媒体预处理器
+│   │   └── infinity_manager.py   # Infinity服务管理器
+│   ├── business/           # 业务逻辑层
+│   │   ├── __init__.py
+│   │   ├── processing_orchestrator.py # ProcessingOrchestrator处理编排器
+│   │   ├── smart_retrieval.py    # SmartRetrievalEngine智能检索
+│   │   ├── multimodal_fusion_engine.py # MultiModalFusionEngine融合引擎
+│   │   ├── temporal_localization_engine.py # 时序定位引擎
+│   │   ├── model_manager.py      # EmbeddingEngine向量化引擎
+│   │   ├── face_model_manager.py # FaceManager人脸管理器
+│   │   ├── file_monitor.py       # FileMonitor文件监控服务
+│   │   └── load_balancer.py      # LoadBalancer负载均衡器
+│   ├── processors/         # 专业处理器
+│   │   ├── __init__.py
+│   │   └── media_processor.py    # MediaProcessor媒体预处理器
+│   ├── storage/            # 存储层
+│   │   ├── __init__.py
+│   │   ├── vector_store.py       # Qdrant向量数据库客户端
+│   │   ├── face_database.py      # 人脸数据库管理
+│   │   ├── db_adapter.py         # 数据库适配器
+│   │   └── database.py           # 数据库连接
+│   ├── utils/              # 工具函数
+│   │   ├── __init__.py
+│   │   ├── file_utils.py         # 文件操作工具
+│   │   ├── image_utils.py        # 图像处理工具
+│   │   ├── video_utils.py        # 视频处理工具
+│   │   ├── audio_utils.py        # 音频处理工具
+│   │   └── vector_utils.py       # 向量操作工具
+│   └── gui/                # 桌面GUI应用
+│       ├── __init__.py     # Python包初始化文件
+│       ├── api_client.py   # API客户端
+│       ├── app.py          # GUI应用主类
+│       ├── gui_main.py     # GUI入口点
+│       ├── main_window.py  # 主窗口
+│       ├── main.py         # GUI启动脚本
+│       ├── search_worker.py # 搜索工作器
+│       └── widgets/        # 界面组件
+│           └── search_widget.py # 搜索组件
 ├── tests/                  # 测试目录
-│   ├── unit/               # 单元测试
-│   │   ├── test_file_type_detector.py
-│   │   ├── test_load_balancer.py
-│   │   └── test_processing_orchestrator.py
 │   ├── conftest.py         # 测试配置
 │   ├── run_tests.py        # 测试运行脚本
-│   └── README.md           # 测试说明
-├── testdata/               # 测试数据目录
+│   ├── integration/        # 集成测试
+│   │   ├── __init__.py     # Python包初始化文件
+│   │   └── test_integration.py # 集成测试
+│   └── unit/               # 单元测试
+│       ├── test_file_type_detector.py # 文件类型检测器测试
+│       ├── test_load_balancer.py # 负载均衡器测试
+│       └── test_processing_orchestrator.py # 处理编排器测试
 └── webui/                  # Web用户界面
     ├── index.html          # 主页面
     ├── package.json        # 前端依赖
+    ├── README.md           # WebUI说明
     ├── vite.config.js      # Vite配置
     └── src/                # Vue.js源码
         ├── App.vue         # 根组件
         ├── main.js         # 入口文件
-        ├── assets/         # 静态资源
         ├── components/     # 组件目录
+        │   ├── ResultDetailDialog.vue # 结果详情对话框
+        │   └── TimelinePlayer.vue # 时间线播放器
         ├── router/         # 路由配置
-        ├── store/          # 状态管理
+        │   └── index.js    # 路由配置文件
         ├── utils/          # 工具函数
+        │   └── api.js      # API工具函数
         └── views/          # 页面视图
+            ├── ConfigView.vue # 配置视图
+            ├── FaceRecognitionView.vue # 人脸识别视图
+            ├── FileManagerView.vue # 文件管理视图
+            ├── SearchView.vue # 搜索视图
+            └── TimelineView.vue # 时间线视图
 ```
 
 ## 核心组件
@@ -355,6 +400,7 @@ msearch/
 - requests>=2.31.0, httpx>=0.25.0 - HTTP客户端
 - pyyaml>=6.0.0 - YAML配置解析
 - tqdm>=4.65.0 - 进度条显示
+- colorama>=0.4.0 - 彩色终端输出
 
 ## 启动和运行
 
@@ -381,9 +427,8 @@ bash scripts/download_model_resources.sh
 # 启动API服务（主项目）
 python src/api/main.py
 
-# 启动部署测试环境
-cd deploy_test
-bash start_services.sh
+# 启动所有服务
+bash scripts/start_all_services.sh
 
 # 运行测试
 python tests/run_tests.py
@@ -394,7 +439,7 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 
 ### 服务端口配置
 
-- **API服务**: 127.0.0.1:8001 (主项目) / 127.0.0.1:8002 (部署测试)
+- **API服务**: 127.0.0.1:8000
 - **Qdrant数据库**: 127.0.0.1:6333
 - **Infinity服务**: 7997-7999 (CLIP/CLAP/Whisper)
 
@@ -506,4 +551,4 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 
 ---
 
-*最后更新: 2025-10-13*
+*最后更新: 2025-10-17*
