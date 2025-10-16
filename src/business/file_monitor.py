@@ -1,105 +1,56 @@
 """
-文件监控服务模块
-基于Watchdog实现文件系统监控，自动发现并处理新增的媒体文件
+文件监控服务 - 实时监控指定目录的文件变化，触发索引处理流程
 """
-
 import os
 import time
+from typing import Dict, Any, List, Callable
 from pathlib import Path
-from typing import List, Callable, Dict, Any
 import logging
 from watchdog.observers import Observer
-from watchdog.events import FileSystemEventHandler, FileSystemEvent
+from watchdog.events import FileSystemEventHandler
 
-from src.core.config import get_config
-from src.core.logging_config import get_logger
-from src.core.db_adapter import get_db_adapter
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class FileMonitorHandler(FileSystemEventHandler):
     """文件监控事件处理器"""
     
-    def __init__(self, callback: Callable[[str, str], None]):
+    def __init__(self, callback: Callable[[str, str], None], config: Dict[str, Any]):
         """
-        初始化文件监控事件处理器
+        初始化事件处理器
         
         Args:
-            callback: 文件事件回调函数，参数为(文件路径, 事件类型)
+            callback: 文件变化回调函数
+            config: 配置字典
         """
         self.callback = callback
-        super().__init__()
+        self.config = config
+        self.file_extensions = config.get('file_monitoring.file_extensions', {
+            'image': ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'],
+            'video': ['.mp4', '.avi', '.mov', '.mkv', '.webm'],
+            'audio': ['.mp3', '.wav', '.ogg', '.flac', '.aac'],
+            'text': ['.txt', '.md', '.csv', '.json', '.xml']
+        })
+        
+        # 所有支持的扩展名
+        self.supported_extensions = set()
+        for extensions in self.file_extensions.values():
+            self.supported_extensions.update(extensions)
     
-    def on_created(self, event: FileSystemEvent):
+    def on_created(self, event):
         """处理文件创建事件"""
         if not event.is_directory:
-            logger.info(f"检测到新文件: {event.src_path}")
-            self.callback(event.src_path, "created")
+            self._handle_file_event(event.src_path, "created")
     
-    def on_modified(self, event: FileSystemEvent):
+    def on_modified(self, event):
         """处理文件修改事件"""
         if not event.is_directory:
-            logger.info(f"检测到文件修改: {event.src_path}")
-            self.callback(event.src_path, "modified")
+            self._handle_file_event(event.src_path, "modified")
     
-    def on_moved(self, event: FileSystemEvent):
+    def on_moved(self, event):
         """处理文件移动事件"""
         if not event.is_directory:
-            logger.info(f"检测到文件移动: {event.src_path} -> {event.dest_path}")
-            self.callback(event.dest_path, "moved")
-    
-    def on_deleted(self, event: FileSystemEvent):
-        """处理文件删除事件"""
-        if not event.is_directory:
-            logger.info(f"检测到文件删除: {event.src_path}")
-            self.callback(event.src_path, "deleted")
-
-
-class FileSystemMonitor:
-    """文件系统监控器"""
-    
-    def __init__(self):
-        """初始化文件系统监控器"""
-        self.config = get_config()
-        self.watch_directories = self.config.get("paths", {}).get("watch_directories", ["./testdata"])
-        self.observer = Observer()
-        self.db_adapter = get_db_adapter()
-        self.is_running = False
-        logger.info("文件系统监控器初始化完成")
-    
-    def start_monitoring(self):
-        """开始监控"""
-        if self.is_running:
-            logger.warning("文件监控器已在运行中")
-            return
-        
-        # 创建事件处理器
-        handler = FileMonitorHandler(self._handle_file_event)
-        
-        # 为每个监控目录添加观察者
-        for directory in self.watch_directories:
-            if os.path.exists(directory):
-                self.observer.schedule(handler, directory, recursive=True)
-                logger.info(f"开始监控目录: {directory}")
-            else:
-                logger.warning(f"监控目录不存在: {directory}")
-        
-        # 启动观察者
-        self.observer.start()
-        self.is_running = True
-        logger.info("文件监控器已启动")
-    
-    def stop_monitoring(self):
-        """停止监控"""
-        if not self.is_running:
-            logger.warning("文件监控器未在运行")
-            return
-        
-        self.observer.stop()
-        self.observer.join()
-        self.is_running = False
-        logger.info("文件监控器已停止")
+            self._handle_file_event(event.dest_path, "moved")
     
     def _handle_file_event(self, file_path: str, event_type: str):
         """
@@ -107,119 +58,217 @@ class FileSystemMonitor:
         
         Args:
             file_path: 文件路径
-            event_type: 事件类型 (created, modified, moved, deleted)
+            event_type: 事件类型
         """
         try:
-            # 检查文件扩展名是否支持
-            if self._is_supported_file(file_path):
-                logger.info(f"处理文件事件: {file_path} ({event_type})")
-                
-                # 将文件添加到处理队列
-                if event_type in ["created", "modified", "moved"]:
-                    self._add_to_processing_queue(file_path)
-                elif event_type == "deleted":
-                    self._remove_from_processing_queue(file_path)
-        except Exception as e:
-            logger.error(f"处理文件事件失败: {e}")
-    
-    def _is_supported_file(self, file_path: str) -> bool:
-        """
-        检查文件是否为支持的格式
-        
-        Args:
-            file_path: 文件路径
-            
-        Returns:
-            是否为支持的文件格式
-        """
-        supported_formats = self.config.get("system", {}).get("supported_formats", {})
-        
-        # 获取文件扩展名
-        file_extension = Path(file_path).suffix.lower().lstrip('.')
-        
-        # 检查是否在支持的格式列表中
-        for format_list in supported_formats.values():
-            if file_extension in format_list:
-                return True
-        
-        return False
-    
-    async def _add_to_processing_queue(self, file_path: str):
-        """
-        将文件添加到处理队列
-        
-        Args:
-            file_path: 文件路径
-        """
-        try:
-            # 检查文件是否已经在队列中
-            existing_files = await self._get_files_in_queue()
-            if file_path in existing_files:
-                logger.info(f"文件已在处理队列中: {file_path}")
+            # 检查文件扩展名是否受支持
+            extension = Path(file_path).suffix.lower()
+            if extension not in self.supported_extensions:
                 return
             
-            # 添加到处理队列
-            queue_id = await self.db_adapter.add_file_to_queue(file_path)
-            logger.info(f"文件已添加到处理队列: {file_path} (队列ID: {queue_id})")
+            # 检查文件是否完全写入
+            if not self._is_file_ready(file_path):
+                # 等待文件准备就绪
+                time.sleep(1)
+                if not self._is_file_ready(file_path):
+                    logger.warning(f"文件未准备就绪，跳过处理: {file_path}")
+                    return
+            
+            logger.debug(f"检测到文件变化: {file_path}, 事件类型: {event_type}")
+            
+            # 调用回调函数
+            if self.callback:
+                self.callback(file_path, event_type)
+                
         except Exception as e:
-            logger.error(f"添加文件到处理队列失败: {e}")
+            logger.error(f"处理文件事件失败: {file_path}, 错误: {e}")
     
-    async def _remove_from_processing_queue(self, file_path: str):
+    def _is_file_ready(self, file_path: str) -> bool:
         """
-        从处理队列中移除文件
+        检查文件是否准备就绪（完全写入）
         
         Args:
             file_path: 文件路径
+            
+        Returns:
+            文件是否准备就绪
         """
         try:
-            # 这里应该从数据库中删除相关的队列记录
-            # 暂时只记录日志
-            logger.info(f"文件已从处理队列中移除: {file_path}")
-        except Exception as e:
-            logger.error(f"从处理队列移除文件失败: {e}")
+            # 尝试打开文件进行读取，如果成功则文件已准备就绪
+            with open(file_path, 'rb') as f:
+                f.read(1)
+            return True
+        except:
+            return False
+
+
+class FileMonitor:
+    """文件监控服务"""
     
-    async def _get_files_in_queue(self) -> List[str]:
+    def __init__(self, config: Dict[str, Any]):
         """
-        获取处理队列中的所有文件
+        初始化文件监控服务
         
-        Returns:
-            文件路径列表
+        Args:
+            config: 配置字典
+        """
+        self.config = config
+        self.directories = config.get('general.watch_directories', [])
+        self.observer = Observer()
+        self.handlers = {}
+        self.callbacks = []
+        
+        logger.info("文件监控服务初始化完成")
+    
+    def add_callback(self, callback: Callable[[str, str], None]):
+        """
+        添加文件变化回调函数
+        
+        Args:
+            callback: 回调函数，接收文件路径和事件类型作为参数
+        """
+        self.callbacks.append(callback)
+    
+    def start_monitoring(self):
+        """开始监控"""
+        try:
+            if not self.directories:
+                logger.warning("未配置监控目录")
+                return
+            
+            # 为每个目录创建事件处理器
+            for directory in self.directories:
+                if not os.path.exists(directory):
+                    logger.warning(f"监控目录不存在: {directory}")
+                    continue
+                
+                # 创建事件处理器
+                handler = FileMonitorHandler(self._handle_file_change, self.config)
+                self.handlers[directory] = handler
+                
+                # 添加监控
+                self.observer.schedule(handler, directory, recursive=True)
+                logger.info(f"开始监控目录: {directory}")
+            
+            # 启动监控
+            self.observer.start()
+            logger.info("文件监控服务已启动")
+            
+        except Exception as e:
+            logger.error(f"启动文件监控失败: {e}")
+            raise
+    
+    def stop_monitoring(self):
+        """停止监控"""
+        try:
+            self.observer.stop()
+            self.observer.join()
+            logger.info("文件监控服务已停止")
+        except Exception as e:
+            logger.error(f"停止文件监控失败: {e}")
+    
+    def _handle_file_change(self, file_path: str, event_type: str):
+        """
+        处理文件变化
+        
+        Args:
+            file_path: 文件路径
+            event_type: 事件类型
         """
         try:
-            # 查询数据库获取处理队列中的文件
-            query = "SELECT file_path FROM processing_queue WHERE status IN ('queued', 'processing')"
-            results = self.db_adapter.db_manager.execute_query(query)
-            return [row["file_path"] for row in results]
+            logger.debug(f"处理文件变化: {file_path}, 事件类型: {event_type}")
+            
+            # 调用所有回调函数
+            for callback in self.callbacks:
+                try:
+                    callback(file_path, event_type)
+                except Exception as e:
+                    logger.error(f"回调函数执行失败: {e}")
+                    
         except Exception as e:
-            logger.error(f"获取处理队列文件列表失败: {e}")
-            return []
+            logger.error(f"处理文件变化失败: {file_path}, 错误: {e}")
     
-    def get_monitoring_status(self) -> Dict[str, Any]:
+    def get_monitored_directories(self) -> List[str]:
         """
-        获取监控状态
+        获取监控的目录列表
         
         Returns:
-            监控状态信息
+            监控目录列表
         """
-        return {
-            "is_running": self.is_running,
-            "watched_directories": self.watch_directories,
-            "supported_formats": self.config.get("system", {}).get("supported_formats", {})
+        return self.directories.copy()
+    
+    def add_directory(self, directory: str):
+        """
+        添加监控目录
+        
+        Args:
+            directory: 要监控的目录路径
+        """
+        if directory not in self.directories:
+            self.directories.append(directory)
+            
+            # 如果监控已启动，添加新的监控
+            if self.observer.is_alive():
+                handler = FileMonitorHandler(self._handle_file_change, self.config)
+                self.handlers[directory] = handler
+                self.observer.schedule(handler, directory, recursive=True)
+                logger.info(f"添加监控目录: {directory}")
+    
+    def remove_directory(self, directory: str):
+        """
+        移除监控目录
+        
+        Args:
+            directory: 要移除的目录路径
+        """
+        if directory in self.directories:
+            self.directories.remove(directory)
+            
+            # 如果监控已启动，移除监控
+            if directory in self.handlers:
+                # watchdog不直接支持移除监控，需要重启监控服务
+                logger.warning("Watchdog不支持动态移除监控，如需移除目录请重启监控服务")
+    
+    def is_monitoring(self) -> bool:
+        """
+        检查监控是否正在运行
+        
+        Returns:
+            监控是否正在运行
+        """
+        return self.observer.is_alive()
+
+
+# 示例使用
+if __name__ == "__main__":
+    # 配置示例
+    config = {
+        'general': {
+            'watch_directories': ['~/Documents', '~/Pictures', '~/Videos']
+        },
+        'file_monitoring.file_extensions': {
+            'image': ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'],
+            'video': ['.mp4', '.avi', '.mov', '.mkv', '.webm'],
+            'audio': ['.mp3', '.wav', '.ogg', '.flac', '.aac'],
+            'text': ['.txt', '.md', '.csv', '.json', '.xml']
         }
-
-
-# 全局文件监控器实例
-_file_monitor = None
-
-
-def get_file_monitor() -> FileSystemMonitor:
-    """
-    获取全局文件监控器实例
+    }
     
-    Returns:
-        文件监控器实例
-    """
-    global _file_monitor
-    if _file_monitor is None:
-        _file_monitor = FileSystemMonitor()
-    return _file_monitor
+    # 文件变化回调函数
+    def file_change_callback(file_path: str, event_type: str):
+        print(f"文件变化: {file_path}, 事件类型: {event_type}")
+    
+    # 创建文件监控服务
+    # monitor = FileMonitor(config)
+    # monitor.add_callback(file_change_callback)
+    # 
+    # # 启动监控
+    # monitor.start_monitoring()
+    # 
+    # try:
+    #     # 保持程序运行
+    #     while True:
+    #         time.sleep(1)
+    # except KeyboardInterrupt:
+    #     # 停止监控
+    #     monitor.stop_monitoring()

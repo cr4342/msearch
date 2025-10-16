@@ -1,228 +1,365 @@
 """
-智能检索策略引擎
-负责查询类型识别、文件白名单生成和动态权重分配
+智能检索引擎 - 融合多模态向量搜索结果，提供统一的排序和重排机制
 """
-
-from typing import Dict, List, Any, Optional
 import re
+from typing import Dict, Any, List
 import logging
+from src.business.search_engine import SearchEngine
+from src.business.multimodal_fusion_engine import MultiModalFusionEngine
+from src.business.face_manager import FaceManager
+from src.storage.face_database import FaceDatabase
 
-from src.core.config_manager import get_config_manager
-from src.core.logging_config import get_logger
-from src.models.face_database import get_face_database
-
-logger = get_logger(__name__)
+logger = logging.getLogger(__name__)
 
 
 class SmartRetrievalEngine:
-    """智能检索引擎 - 集成人脸检索"""
+    """智能检索引擎"""
     
-    def __init__(self):
-        self.config_manager = get_config_manager()
-        self.config = self.config_manager.config
-        self.face_db = get_face_database()
+    def __init__(self, config: Dict[str, Any]):
+        """
+        初始化智能检索引擎
         
-        # 监听配置变更
-        self.config_manager.watch('smart_retrieval', self._reload_config)
-        self.config_manager.watch('face_recognition', self._reload_config)
+        Args:
+            config: 配置字典
+        """
+        self.config = config
+        
+        # 初始化组件
+        # 注意：这里需要传入实际的vector_store实例，暂时用None占位
+        self.search_engine = SearchEngine(config, None)
+        self.fusion_engine = MultiModalFusionEngine(config)
+        self.face_database = FaceDatabase(config)
+        self.face_manager = FaceManager(config, self.face_database, None)
+        
+        # 从配置加载关键词
+        self.audio_keywords = config.get('retrieval.audio_keywords', [
+            '音乐', '歌曲', '旋律', '节奏', '节拍', '乐器', '演奏', '演唱',
+            'audio', 'music', 'song', 'melody', 'rhythm', 'instrument'
+        ])
+        
+        self.visual_keywords = config.get('retrieval.visual_keywords', [
+            '图片', '照片', '图像', '画面', '视觉', '颜色', '场景',
+            'image', 'photo', 'picture', 'visual', 'color', 'scene'
+        ])
+        
+        logger.info("智能检索引擎初始化完成")
     
-    def _reload_config(self, key: str, value: Any) -> None:
-        """重新加载配置"""
-        logger.info(f"智能检索引擎配置已更新: {key}")
-    
-    def detect_query_type(self, query: str) -> str:
-        """检测查询类型"""
-        # 1. 人名识别
-        person_name = self._detect_person_name(query)
-        if person_name:
-            return "person_name"
+    async def search(self, query: str, search_type: str = "smart") -> Dict[str, Any]:
+        """
+        智能搜索
         
-        # 2. 音频关键词检测
-        if self._detect_audio_keywords(query):
-            return "audio"
-        
-        # 3. 视觉关键词检测
-        if self._detect_visual_keywords(query):
-            return "visual"
-        
-        # 4. 默认综合检索
-        return "mixed"
-    
-    def _detect_person_name(self, query: str) -> Optional[str]:
-        """检测查询中的人名"""
+        Args:
+            query: 查询字符串
+            search_type: 搜索类型
+            
+        Returns:
+            搜索结果字典
+        """
         try:
-            # 获取所有人名
-            person_names = self._get_all_person_names()
+            logger.info(f"执行智能搜索: 查询='{query}', 类型={search_type}")
             
-            # 在查询中查找匹配的人名
-            query_lower = query.lower()
-            for name in person_names:
-                # 直接匹配
-                if name.lower() in query_lower:
-                    return name
-                
-                # 别名匹配
-                aliases = self._get_person_aliases(name)
-                for alias in aliases:
-                    if alias.lower() in query_lower:
-                        return name
+            # 1. 识别查询类型
+            query_type = self._identify_query_type(query)
+            logger.debug(f"查询类型识别: {query_type}")
             
-            return None
-        except Exception as e:
-            logger.error(f"人名检测失败: {e}")
-            return None
-    
-    def _get_all_person_names(self) -> List[str]:
-        """获取所有人名"""
-        try:
-            import sqlite3
-            with sqlite3.connect(self.face_db.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT name FROM persons")
-                names = [row[0] for row in cursor.fetchall()]
-                return names
-        except Exception as e:
-            logger.error(f"获取人名列表失败: {e}")
-            return []
-    
-    def _get_person_aliases(self, person_name: str) -> List[str]:
-        """获取人名的别名"""
-        try:
-            import sqlite3
-            import json
-            with sqlite3.connect(self.face_db.db_path) as conn:
-                cursor = conn.cursor()
-                cursor.execute("SELECT aliases FROM persons WHERE name = ?", (person_name,))
-                row = cursor.fetchone()
-                if row and row[0]:
-                    return json.loads(row[0])
-                return []
-        except Exception as e:
-            logger.error(f"获取人名别名失败: {e}")
-            return []
-    
-    def _detect_audio_keywords(self, query: str) -> bool:
-        """检测音频相关关键词"""
-        music_keywords = self.config_manager.get('smart_retrieval.keywords.music', [])
-        speech_keywords = self.config_manager.get('smart_retrieval.keywords.speech', [])
-        
-        # 检查查询中是否包含音频关键词
-        cleaned_query = self._preprocess_query(query)
-        
-        for keyword in music_keywords + speech_keywords:
-            if keyword in cleaned_query:
-                return True
-        
-        return False
-    
-    def _detect_visual_keywords(self, query: str) -> bool:
-        """检测视觉相关关键词"""
-        visual_keywords = self.config_manager.get('smart_retrieval.keywords.visual', [])
-        
-        # 检查查询中是否包含视觉关键词
-        cleaned_query = self._preprocess_query(query)
-        
-        for keyword in visual_keywords:
-            if keyword in cleaned_query:
-                return True
-        
-        return False
-    
-    def _preprocess_query(self, query: str) -> str:
-        """预处理查询文本"""
-        # 清理标点符号和多余空格
-        cleaned = re.sub(r'[^\w\s]', '', query)
-        # 转换为小写
-        cleaned = cleaned.lower()
-        # 去除多余空格
-        cleaned = ' '.join(cleaned.split())
-        return cleaned
-    
-    def calculate_weights(self, query_type: str, query: str) -> Dict[str, float]:
-        """计算动态权重"""
-        if query_type == "person_name":
-            # 人名查询：视觉模态主导，音频模态辅助
-            return self.config_manager.get('smart_retrieval.person_weights', {
-                "clip": 0.5, "clap": 0.25, "whisper": 0.25
-            })
-        
-        elif query_type == "audio":
-            # 音频查询：根据关键词类型动态调整音频内部权重
-            music_keywords = self.config_manager.get('smart_retrieval.keywords.music', [])
-            speech_keywords = self.config_manager.get('smart_retrieval.keywords.speech', [])
-            
-            cleaned_query = self._preprocess_query(query)
-            
-            if any(keyword in cleaned_query for keyword in music_keywords):
-                # 音乐类查询：CLAP主导
-                return self.config_manager.get('smart_retrieval.audio_weights.music', {
-                    "clip": 0.2, "clap": 0.7, "whisper": 0.1
-                })
-            elif any(keyword in cleaned_query for keyword in speech_keywords):
-                # 语音类查询：Whisper主导
-                return self.config_manager.get('smart_retrieval.audio_weights.speech', {
-                    "clip": 0.2, "clap": 0.1, "whisper": 0.7
-                })
+            # 2. 根据查询类型执行相应的搜索策略
+            if query_type == "person":
+                results = await self._person_search(query)
+            elif query_type == "audio":
+                results = await self._audio_search(query)
+            elif query_type == "visual":
+                results = await self._visual_search(query)
             else:
-                # 通用音频查询：保持相对均衡
-                return {
-                    "clip": 0.2, "clap": 0.5, "whisper": 0.3
-                }
-        
-        elif query_type == "visual":
-            # 视觉查询：视觉模态绝对主导
-            return self.config_manager.get('smart_retrieval.visual_weights', {
-                "clip": 0.7, "clap": 0.15, "whisper": 0.15
-            })
-        
-        else:  # mixed
-            # 默认综合检索权重
-            return self.config_manager.get('smart_retrieval.default_weights', {
-                "clip": 0.4, "clap": 0.3, "whisper": 0.3
-            })
+                results = await self._generic_search(query)
+            
+            logger.info(f"智能搜索完成: 查询='{query}', 找到{len(results.get('results', []))}个结果")
+            
+            return results
+            
+        except Exception as e:
+            logger.error(f"智能搜索失败: 查询='{query}', 错误={e}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'query': query
+            }
     
-    def generate_file_whitelist(self, query: str) -> Optional[List[str]]:
-        """生成文件白名单"""
-        # 1. 人名识别
-        person_name = self._detect_person_name(query)
+    def _identify_query_type(self, query: str) -> str:
+        """
+        识别查询类型
         
-        if person_name:
-            # 2. 人脸预检索 - 生成文件白名单
-            file_whitelist = self.face_db.get_person_files(person_name)
-            return file_whitelist
+        Args:
+            query: 查询字符串
+            
+        Returns:
+            查询类型 ("person", "audio", "visual", "generic")
+        """
+        # 检查是否包含人名（从数据库中获取）
+        # 这里简化处理，实际应该查询数据库中的所有人名
+        person_names = self._get_person_names()
+        for name in person_names:
+            if name in query:
+                return "person"
         
-        # 对于其他查询类型，不使用白名单
+        # 检查是否包含音频相关关键词
+        for keyword in self.audio_keywords:
+            if keyword in query:
+                return "audio"
+        
+        # 检查是否包含视觉相关关键词
+        for keyword in self.visual_keywords:
+            if keyword in query:
+                return "visual"
+        
+        # 默认通用查询
+        return "generic"
+    
+    def _get_person_names(self) -> List[str]:
+        """
+        获取所有人名列表
+        
+        Returns:
+            人名列表
+        """
+        try:
+            # 从人脸数据库获取所有人名
+            persons = self.face_database.get_all_persons()
+            names = []
+            for person in persons:
+                names.append(person['name'])
+                # 添加别名
+                if person.get('aliases'):
+                    names.extend(person['aliases'])
+            return names
+        except Exception as e:
+            logger.warning(f"获取人名列表失败: {e}")
+            return []
+    
+    async def _person_search(self, query: str) -> Dict[str, Any]:
+        """
+        人名搜索（人脸预检索）
+        
+        Args:
+            query: 查询字符串
+            
+        Returns:
+            搜索结果
+        """
+        try:
+            logger.debug(f"执行人名搜索: {query}")
+            
+            # 1. 识别人名
+            person_name = self._extract_person_name(query)
+            if not person_name:
+                return await self._generic_search(query)
+            
+            # 2. 人脸预检索生成文件白名单
+            face_search_result = await self.face_manager.search_by_person_name(person_name)
+            if face_search_result['status'] != 'success' or not face_search_result.get('files'):
+                # 如果没有人脸搜索结果，回退到通用搜索
+                return await self._generic_search(query)
+            
+            # 3. 获取白名单文件ID
+            whitelist_file_ids = [f['file_id'] for f in face_search_result['files']]
+            
+            # 4. 在白名单内进行多模态检索
+            # 这里简化处理，实际应该调用搜索引擎在指定文件范围内搜索
+            # 暂时返回人脸搜索结果
+            return {
+                'status': 'success',
+                'query': query,
+                'query_type': 'person',
+                'results': face_search_result['files'],
+                'whitelist_used': True,
+                'whitelist_size': len(whitelist_file_ids)
+            }
+            
+        except Exception as e:
+            logger.error(f"人名搜索失败: {query}, 错误={e}")
+            return await self._generic_search(query)
+    
+    def _extract_person_name(self, query: str) -> str:
+        """
+        从查询中提取人名
+        
+        Args:
+            query: 查询字符串
+            
+        Returns:
+            人名或None
+        """
+        person_names = self._get_person_names()
+        for name in person_names:
+            if name in query:
+                return name
         return None
     
-    def search(self, query: str) -> Dict[str, Any]:
-        """执行智能检索"""
-        # 1. 检测查询类型
-        query_type = self.detect_query_type(query)
-        logger.info(f"查询类型识别: {query_type}")
+    async def _audio_search(self, query: str) -> Dict[str, Any]:
+        """
+        音频搜索（提升音频权重）
         
-        # 2. 计算动态权重
-        weights = self.calculate_weights(query_type, query)
-        logger.info(f"动态权重分配: {weights}")
+        Args:
+            query: 查询字符串
+            
+        Returns:
+            搜索结果
+        """
+        try:
+            logger.debug(f"执行音频搜索: {query}")
+            
+            # 1. 执行多模态搜索
+            search_data = {'text': query}
+            search_result = await self.search_engine.multimodal_search(search_data)
+            
+            if search_result['status'] != 'success':
+                return search_result
+            
+            # 2. 动态调整权重（提升音频相关权重）
+            # 这里简化处理，实际应该在融合引擎中调整权重
+            weights = {
+                'text': 0.3,
+                'image': 0.2,
+                'audio_music': 0.3,
+                'audio_speech': 0.2
+            }
+            
+            # 3. 融合结果
+            fused_results = self.fusion_engine.fuse_results(
+                search_result['modality_results'], 
+                weights
+            )
+            
+            return {
+                'status': 'success',
+                'query': query,
+                'query_type': 'audio',
+                'results': fused_results,
+                'weights_used': weights
+            }
+            
+        except Exception as e:
+            logger.error(f"音频搜索失败: {query}, 错误={e}")
+            return await self._generic_search(query)
+    
+    async def _visual_search(self, query: str) -> Dict[str, Any]:
+        """
+        视觉搜索（提升视觉权重）
         
-        # 3. 生成文件白名单（如果需要）
-        file_whitelist = self.generate_file_whitelist(query)
-        logger.info(f"文件白名单生成: {len(file_whitelist) if file_whitelist else 0} 个文件")
+        Args:
+            query: 查询字符串
+            
+        Returns:
+            搜索结果
+        """
+        try:
+            logger.debug(f"执行视觉搜索: {query}")
+            
+            # 1. 执行多模态搜索
+            search_data = {'text': query}
+            search_result = await self.search_engine.multimodal_search(search_data)
+            
+            if search_result['status'] != 'success':
+                return search_result
+            
+            # 2. 动态调整权重（提升视觉相关权重）
+            # 这里简化处理，实际应该在融合引擎中调整权重
+            weights = {
+                'text': 0.2,
+                'image': 0.5,
+                'audio_music': 0.15,
+                'audio_speech': 0.15
+            }
+            
+            # 3. 融合结果
+            fused_results = self.fusion_engine.fuse_results(
+                search_result['modality_results'], 
+                weights
+            )
+            
+            return {
+                'status': 'success',
+                'query': query,
+                'query_type': 'visual',
+                'results': fused_results,
+                'weights_used': weights
+            }
+            
+        except Exception as e:
+            logger.error(f"视觉搜索失败: {query}, 错误={e}")
+            return await self._generic_search(query)
+    
+    async def _generic_search(self, query: str) -> Dict[str, Any]:
+        """
+        通用搜索（默认权重分配）
         
-        # 4. 返回检索配置
-        return {
-            "query_type": query_type,
-            "weights": weights,
-            "file_whitelist": file_whitelist
+        Args:
+            query: 查询字符串
+            
+        Returns:
+            搜索结果
+        """
+        try:
+            logger.debug(f"执行通用搜索: {query}")
+            
+            # 1. 执行多模态搜索
+            search_data = {'text': query}
+            search_result = await self.search_engine.multimodal_search(search_data)
+            
+            if search_result['status'] != 'success':
+                return search_result
+            
+            # 2. 使用默认权重
+            weights = {
+                'text': 0.25,
+                'image': 0.25,
+                'audio_music': 0.25,
+                'audio_speech': 0.25
+            }
+            
+            # 3. 融合结果
+            fused_results = self.fusion_engine.fuse_results(
+                search_result['modality_results'], 
+                weights
+            )
+            
+            return {
+                'status': 'success',
+                'query': query,
+                'query_type': 'generic',
+                'results': fused_results,
+                'weights_used': weights
+            }
+            
+        except Exception as e:
+            logger.error(f"通用搜索失败: {query}, 错误={e}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'query': query
+            }
+
+
+# 示例使用
+if __name__ == "__main__":
+    import asyncio
+    
+    # 配置示例
+    config = {
+        'retrieval': {
+            'audio_keywords': [
+                '音乐', '歌曲', '旋律', '节奏', '节拍', '乐器', '演奏', '演唱',
+                'audio', 'music', 'song', 'melody', 'rhythm', 'instrument'
+            ],
+            'visual_keywords': [
+                '图片', '照片', '图像', '画面', '视觉', '颜色', '场景',
+                'image', 'photo', 'picture', 'visual', 'color', 'scene'
+            ]
         }
-
-
-# 全局智能检索引擎实例
-_smart_retrieval_engine = None
-
-
-def get_smart_retrieval_engine() -> SmartRetrievalEngine:
-    """获取全局智能检索引擎实例"""
-    global _smart_retrieval_engine
-    if _smart_retrieval_engine is None:
-        _smart_retrieval_engine = SmartRetrievalEngine()
-    return _smart_retrieval_engine
+    }
+    
+    # 创建引擎实例
+    # engine = SmartRetrievalEngine(config)
+    
+    # 执行搜索
+    # result = asyncio.run(engine.search("包含张三的会议照片"))
+    # print(result)
