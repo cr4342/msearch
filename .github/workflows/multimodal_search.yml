@@ -1,0 +1,100 @@
+name: Multimodal Search Integration Tests
+
+on:
+  push:
+    branches: [ main, master ]
+    paths:
+      - 'src/core/**'
+      - 'src/business/media_processing/**'
+      - 'src/api/**'
+      - 'tests/integration/**'
+  pull_request:
+    branches: [ main, master ]
+    paths:
+      - 'src/core/**'
+      - 'src/business/media_processing/**'
+      - 'src/api/**'
+      - 'tests/integration/**'
+  workflow_dispatch:
+    inputs:
+      test_type:
+        description: 'Test Type'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - image
+          - video
+          - audio
+          - face
+
+jobs:
+  multimodal-tests:
+    name: Multimodal Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libmagic1
+    
+    - name: Install Python dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-mock
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+    
+    - name: Run image processing tests
+      if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'image' || github.event_name != 'workflow_dispatch'
+      run: |
+        pytest -xvs tests/integration/test_image_processing.py
+    
+    - name: Run video processing tests
+      if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'video' || github.event_name != 'workflow_dispatch'
+      run: |
+        pytest -xvs tests/integration/test_video_processing.py
+    
+    - name: Run audio processing tests
+      if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'audio' || github.event_name != 'workflow_dispatch'
+      run: |
+        pytest -xvs tests/integration/test_audio_processing.py
+    
+    - name: Run face recognition tests
+      if: github.event.inputs.test_type == 'all' || github.event.inputs.test_type == 'face' || github.event_name != 'workflow_dispatch'
+      run: |
+        pytest -xvs tests/integration/test_face_recognition.py
+
+  smart-retrieval-tests:
+    name: Smart Retrieval Tests
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        cache: 'pip'
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pytest pytest-cov pytest-mock
+        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+    
+    - name: Run smart retrieval tests
+      run: |
+        pytest -xvs tests/integration/test_smart_retrieval.py
+        pytest -xvs tests/integration/test_multi_modal_fusion.py
