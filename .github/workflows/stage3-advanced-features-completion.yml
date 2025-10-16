@@ -1,0 +1,256 @@
+name: Stage 3 - Advanced Features Completion
+
+on:
+  push:
+    branches: [ main, develop ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+  pull_request:
+    branches: [ main ]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11]
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v4
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libgl1-mesa-glx libglib2.0-0
+    
+    - name: Cache pip packages
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-asyncio pytest-cov pytest-html
+    
+    - name: Run unit tests
+      run: |
+        pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=html
+    
+    - name: Run integration tests
+      run: |
+        pytest tests/integration/ -v --cov=src --cov-report=xml --cov-report=html --cov-append
+    
+    - name: Upload coverage reports to Codecov
+      uses: codecov/codecov-action@v3
+      with:
+        file: ./coverage.xml
+        flags: advanced-features
+        name: codecov-advanced
+        fail_ci_if_error: true
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: htmlcov/
+
+  video-processing-test:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libgl1-mesa-glx libglib2.0-0
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+    
+    - name: Download test video files
+      run: |
+        mkdir -p test_data/videos
+        curl -L -o test_data/videos/test_video1.mp4 https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4
+        curl -L -o test_data/videos/test_video2.mp4 https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_2mb.mp4
+    
+    - name: Run video processing tests
+      run: |
+        pytest tests/video_processing/ -v
+    
+    - name: Upload video processing test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: video-processing-test-results
+        path: test_reports/
+
+  gui-test:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y xvfb libxcb-xinerama0 libxcb-cursor0
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-qt
+    
+    - name: Run GUI tests
+      run: |
+        pytest tests/gui/ -v --tb=short
+    
+    - name: Upload GUI test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: gui-test-results
+        path: test_reports/
+
+  batch-processing-test:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+    
+    - name: Create test data
+      run: |
+        mkdir -p test_data/batch
+        # Create test files for batch processing
+        echo "Test document content" > test_data/batch/doc1.txt
+        echo "Another test document" > test_data/batch/doc2.txt
+        curl -L -o test_data/batch/img1.jpg https://sample-videos.com/img/SampleJPGImage_50kbmb.jpg
+        curl -L -o test_data/batch/img2.jpg https://sample-videos.com/img/SampleJPGImage_100kbmb.jpg
+    
+    - name: Run batch processing tests
+      run: |
+        pytest tests/batch_processing/ -v
+    
+    - name: Upload batch processing test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: batch-processing-test-results
+        path: test_reports/
+
+  advanced-retrieval-test:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest
+    
+    - name: Download test data
+      run: |
+        mkdir -p test_data/advanced
+        curl -L -o test_data/advanced/test_video.mp4 https://sample-videos.com/video123/mp4/720/big_buck_bunny_720p_1mb.mp4
+        curl -L -o test_data/advanced/test_image.jpg https://sample-videos.com/img/SampleJPGImage_50kbmb.jpg
+        echo "Test document with face recognition content" > test_data/advanced/test_doc.txt
+    
+    - name: Run advanced retrieval tests
+      run: |
+        pytest tests/advanced_retrieval/ -v
+    
+    - name: Upload advanced retrieval test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: advanced-retrieval-test-results
+        path: test_reports/
+
+  performance-test:
+    needs: test
+    runs-on: ubuntu-latest
+    
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: 3.10
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg
+    
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest-benchmark
+    
+    - name: Run performance tests
+      run: |
+        pytest tests/performance/ -v --benchmark-only
+    
+    - name: Upload performance test results
+      uses: actions/upload-artifact@v3
+      with:
+        name: performance-test-results
+        path: benchmark_results/
