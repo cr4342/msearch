@@ -20,6 +20,7 @@ from typing import List, Dict, Optional
 from src.core.config import load_config
 from src.core.logging_config import setup_logging, get_logger
 from src.core.processing_orchestrator import get_processing_orchestrator
+from src.business.embedding_engine import get_embedding_engine
 
 # 创建FastAPI应用实例
 app = FastAPI(
@@ -389,25 +390,22 @@ async def search_text(query: str, limit: int = 20):
     - limit: 返回结果数量限制
     """
     try:
-        from src.models.model_manager import get_model_manager
-        from src.models.vector_store import get_vector_store
-        from src.core.db_adapter import get_db_adapter
+        from src.storage.vector_store import get_vector_store
+        from src.storage.db_adapter import get_db_adapter
         
-        # 获取模型管理器、向量存储和数据库适配器实例
-        model_manager = get_model_manager()
+        # 获取嵌入引擎、向量存储和数据库适配器实例
+        embedding_engine = get_embedding_engine()
         vector_store = get_vector_store()
         db_adapter = get_db_adapter()
         
-        # 检查模型状态
-        model_status = model_manager.get_model_status()
-        if not model_status["infinity_available"]:
-            raise HTTPException(503, "Infinity服务不可用，请检查服务状态")
-        if not model_status["qdrant_available"]:
-            raise HTTPException(503, "Qdrant向量数据库不可用，请检查服务状态")
-        
         # 文本向量化
         logger.info(f"开始文本检索: {query}")
-        text_vectors = await model_manager.embed_text_for_search(query)
+        
+        # 使用嵌入引擎进行文本向量化
+        text_vectors = await embedding_engine.get_embedding(
+            content_type="text",
+            content_text=query
+        )
         
         # 在不同模态的向量数据库中搜索
         results = []
@@ -481,11 +479,10 @@ async def search_image(file: UploadFile = File(...), limit: int = 20):
     try:
         import tempfile
         import os
-        from src.models.model_manager import get_model_manager
-        from src.models.vector_store import get_vector_store
+        from src.storage.vector_store import get_vector_store
         
-        # 获取模型管理器和向量存储实例
-        model_manager = get_model_manager()
+        # 获取嵌入引擎和向量存储实例
+        embedding_engine = get_embedding_engine()
         vector_store = get_vector_store()
         
         # 保存上传的文件到临时位置
@@ -496,7 +493,12 @@ async def search_image(file: UploadFile = File(...), limit: int = 20):
         try:
             # 图像向量化
             logger.info(f"开始图像检索: {file.filename}")
-            image_vector = await model_manager.embed_image(tmp_file_path)
+            
+            # 使用嵌入引擎进行图像向量化
+            image_vector = await embedding_engine.get_embedding(
+                content_type="image",
+                content_path=tmp_file_path
+            )
             
             # 在CLIP向量数据库中搜索（图像/视频）
             results = await vector_store.search(
@@ -547,11 +549,11 @@ async def search_audio(file: UploadFile = File(...), limit: int = 20):
     try:
         import tempfile
         import os
-        from src.models.model_manager import get_model_manager
-        from src.models.vector_store import get_vector_store
+        from src.business.embedding_engine import get_embedding_engine
+        from src.storage.vector_store import get_vector_store
         
-        # 获取模型管理器和向量存储实例
-        model_manager = get_model_manager()
+        # 获取嵌入引擎和向量存储实例
+        embedding_engine = get_embedding_engine()
         vector_store = get_vector_store()
         
         # 保存上传的文件到临时位置
@@ -563,36 +565,25 @@ async def search_audio(file: UploadFile = File(...), limit: int = 20):
             # 音频处理和向量化
             logger.info(f"开始音频检索: {file.filename}")
             
-            # 智能处理音频（区分音乐和语音）
-            audio_results = await model_manager.process_video_audio_intelligently(tmp_file_path)
+            # 使用嵌入引擎进行音频向量化
+            audio_vector = await embedding_engine.get_embedding(
+                content_type="audio_music",
+                content_path=tmp_file_path
+            )
+            
+            # 在CLAP向量数据库中搜索（音频）
+            results = await vector_store.search(
+                collection_name="msearch_clap_v1",
+                query_vector=audio_vector,
+                limit=limit
+            )
             
             # 合并所有音频片段的向量进行搜索
             all_results = []
-            for audio_result in audio_results:
-                if audio_result['segment_type'] == 'audio_music':
-                    # 音乐片段使用CLAP向量数据库搜索
-                    results = await vector_store.search(
-                        collection_name="msearch_clap_v1",
-                        query_vector=audio_result['vector'],
-                        limit=limit
-                    )
-                    # 为每个结果添加音频类型信息
-                    for result in results:
-                        result["segment_type"] = "audio_music"
-                        result["transcribed_text"] = None
-                    all_results.extend(results)
-                elif audio_result['segment_type'] == 'audio_speech':
-                    # 语音片段使用CLIP向量数据库搜索（通过转录文本）
-                    results = await vector_store.search(
-                        collection_name="msearch_clip_v1",
-                        query_vector=audio_result['vector'],
-                        limit=limit
-                    )
-                    # 为每个结果添加音频类型信息和转录文本
-                    for result in results:
-                        result["segment_type"] = "audio_speech"
-                        result["transcribed_text"] = audio_result.get('transcribed_text', '')
-                    all_results.extend(results)
+            for result in results:
+                result["segment_type"] = "audio_music"
+                result["transcribed_text"] = None
+                all_results.append(result)
             
             # 按相似度排序并限制数量
             all_results.sort(key=lambda x: x["score"], reverse=True)

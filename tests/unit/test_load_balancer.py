@@ -8,7 +8,7 @@ from unittest.mock import Mock, patch, AsyncMock
 from aiohttp import ClientResponse, ClientError
 from aiohttp.test_utils import make_mocked_coro
 
-from src.core.load_balancer import LoadBalancer, ServiceUnavailableError
+from src.business.load_balancer import LoadBalancer, ServiceUnavailableError
 from src.core.infinity_manager import InfinityService
 
 

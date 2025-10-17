@@ -4,7 +4,7 @@
 import unittest
 import asyncio
 import sys
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, AsyncMock, patch, MagicMock
 import numpy as np
 
 # 添加项目根目录到Python路径
@@ -13,7 +13,7 @@ sys.path.insert(0, '..')
 from src.business.processing_orchestrator import ProcessingOrchestrator
 
 
-class TestProcessingOrchestrator(unittest.TestCase):
+class TestProcessingOrchestrator(unittest.IsolatedAsyncioTestCase):
     """处理编排器单元测试"""
     
     def setUp(self):
@@ -146,9 +146,9 @@ class TestProcessingOrchestrator(unittest.TestCase):
     @patch('src.business.processing_orchestrator.EmbeddingEngine')
     @patch('src.business.processing_orchestrator.TaskManager')
     @patch('src.business.processing_orchestrator.VectorStore')
-    def test_image_processing_flow(self, mock_vector_store, mock_task_manager, 
-                                 mock_embedding_engine, mock_media_processor, 
-                                 mock_file_type_detector):
+    async def test_image_processing_flow(self, mock_vector_store, mock_task_manager, 
+                                       mock_embedding_engine, mock_media_processor, 
+                                       mock_file_type_detector):
         """测试图片处理流程"""
         # 创建模拟对象
         mock_detector_instance = Mock()
@@ -162,10 +162,10 @@ class TestProcessingOrchestrator(unittest.TestCase):
             'confidence': 0.9
         }
         
-        mock_media_processor_instance = Mock()
+        mock_media_processor_instance = AsyncMock()
         mock_media_processor.return_value = mock_media_processor_instance
         
-        # 模拟媒体处理结果
+        # 模拟媒体处理结果（异步方法）
         mock_media_processor_instance.process_file.return_value = {
             'status': 'success',
             'result': {
@@ -174,36 +174,31 @@ class TestProcessingOrchestrator(unittest.TestCase):
             }
         }
         
-        mock_embedding_engine_instance = Mock()
+        mock_embedding_engine_instance = AsyncMock()
         mock_embedding_engine.return_value = mock_embedding_engine_instance
         
-        # 模拟向量化结果
+        # 模拟向量化结果（异步方法）
         mock_embedding_engine_instance.embed_image.return_value = np.random.rand(512).astype(np.float32)
         
-        mock_task_manager_instance = Mock()
+        mock_task_manager_instance = AsyncMock()
         mock_task_manager.return_value = mock_task_manager_instance
         
-        # 模拟任务管理
+        # 模拟任务管理（异步方法）
         mock_task_manager_instance.add_task.return_value = "task_123"
         mock_task_manager_instance.update_task_progress.return_value = True
         mock_task_manager_instance.complete_task.return_value = True
         
-        mock_vector_store_instance = Mock()
+        mock_vector_store_instance = AsyncMock()
         mock_vector_store.return_value = mock_vector_store_instance
         
-        # 模拟向量存储
+        # 模拟向量存储（异步方法）
         mock_vector_store_instance.store_vector.return_value = True
         
         # 创建处理编排器实例
         orchestrator = ProcessingOrchestrator(self.config)
         
-        # 运行异步处理函数
-        async def run_test():
-            result = await orchestrator.process_file("test.jpg")
-            return result
-        
-        # 执行测试
-        result = asyncio.run(run_test())
+        # 直接调用异步方法
+        result = await orchestrator.process_file("test.jpg")
         
         # 验证结果
         self.assertEqual(result['status'], 'success')

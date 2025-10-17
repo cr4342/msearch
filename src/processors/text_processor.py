@@ -1,7 +1,9 @@
+"""
 文本处理器 - 处理文本文件的编码检测、内容清理和结构化提取
-
+"""
 import os
 import chardet
+import re
 from typing import Dict, Any
 import logging
 
@@ -140,7 +142,6 @@ class TextProcessor:
         cleaned = content.strip()
         
         # 标准化空白字符
-        import re
         cleaned = re.sub(r'\s+', ' ', cleaned)
         
         # 移除控制字符

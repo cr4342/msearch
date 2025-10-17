@@ -171,6 +171,28 @@ class EmbeddingEngine:
         return await self.embed_content(audio, 'audio_speech')
 
 
+# 全局嵌入引擎实例
+_embedding_engine = None
+
+
+def get_embedding_engine(config: Dict[str, Any] = None) -> EmbeddingEngine:
+    """
+    获取全局嵌入引擎实例
+    
+    Args:
+        config: 配置字典，首次调用时需要提供
+        
+    Returns:
+        嵌入引擎实例
+    """
+    global _embedding_engine
+    if _embedding_engine is None:
+        if config is None:
+            raise ValueError("首次调用get_embedding_engine时必须提供config参数")
+        _embedding_engine = EmbeddingEngine(config)
+    return _embedding_engine
+
+
 # 示例使用
 if __name__ == "__main__":
     import asyncio
@@ -192,7 +214,7 @@ if __name__ == "__main__":
     
     # 创建引擎实例
     async def main():
-        engine = EmbeddingEngine(config)
+        engine = get_embedding_engine(config)
         
         # 模拟图片向量化
         # image_data = np.random.rand(224, 224, 3).astype(np.float32)

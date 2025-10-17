@@ -53,7 +53,7 @@ class ProcessingOrchestrator:
             task_id = await self.task_manager.add_task(file_path)
             
             # 2. 更新任务状态为处理中
-            self.task_manager.update_task_progress(task_id, 10, status="processing")
+            await self.task_manager.update_task_progress(task_id, 10, status="processing")
             
             # 3. 检测文件类型
             file_type_info = self.file_type_detector.detect_file_type(file_path)
@@ -65,7 +65,7 @@ class ProcessingOrchestrator:
             logger.debug(f"文件类型检测完成: {file_path} -> {file_type}")
             
             # 4. 更新任务进度
-            self.task_manager.update_task_progress(task_id, 20)
+            await self.task_manager.update_task_progress(task_id, 20)
             
             # 5. 媒体预处理
             preprocessing_result = await self.media_processor.process_file(file_path, file_type)
@@ -76,7 +76,7 @@ class ProcessingOrchestrator:
             logger.debug(f"媒体预处理完成: {file_path}")
             
             # 6. 更新任务进度
-            self.task_manager.update_task_progress(task_id, 50)
+            await self.task_manager.update_task_progress(task_id, 50)
             
             # 7. 向量化处理
             vectorization_result = await self._vectorize_content(preprocessing_result, file_type)
@@ -87,7 +87,7 @@ class ProcessingOrchestrator:
             logger.debug(f"向量化处理完成: {file_path}")
             
             # 8. 更新任务进度
-            self.task_manager.update_task_progress(task_id, 80)
+            await self.task_manager.update_task_progress(task_id, 80)
             
             # 9. 存储向量和元数据
             storage_result = await self._store_results(
@@ -101,8 +101,8 @@ class ProcessingOrchestrator:
             logger.debug(f"结果存储完成: {file_path}")
             
             # 10. 完成任务
-            self.task_manager.update_task_progress(task_id, 100)
-            self.task_manager.complete_task(task_id, success=True)
+            await self.task_manager.update_task_progress(task_id, 100)
+            await self.task_manager.complete_task(task_id, success=True)
             
             logger.info(f"文件处理完成: {file_path}, file_id: {file_id}")
             
@@ -120,7 +120,7 @@ class ProcessingOrchestrator:
             # 更新任务状态为失败
             task_id = self._find_task_id_by_file(file_path)
             if task_id:
-                self.task_manager.complete_task(task_id, success=False, error_message=str(e))
+                await self.task_manager.complete_task(task_id, success=False, error_message=str(e))
             
             return {
                 'status': 'error',

@@ -62,7 +62,7 @@ graph TB
         ProcessingOrchestrator[处理编排器]
         FileMonitor[文件监控服务]
         MediaProcessor[媒体预处理器]
-        ModelManager[模型管理器]
+        EmbeddingEngine[向量化引擎]
         FaceModelManager[人脸模型管理器]
         VectorStore[向量存储]
         SmartRetrieval[智能检索引擎]
@@ -94,23 +94,23 @@ graph TB
     API --> ProcessingOrchestrator
     API --> FileMonitor
     API --> MediaProcessor
-    API --> ModelManager
+    API --> EmbeddingEngine
     API --> SmartRetrieval
     API --> DBAdapter
     API --> FaceModelManager
     
     ProcessingOrchestrator --> MediaProcessor
-    ProcessingOrchestrator --> ModelManager
+    ProcessingOrchestrator --> EmbeddingEngine
     ProcessingOrchestrator --> FaceModelManager
     ProcessingOrchestrator --> VectorStore
     ProcessingOrchestrator --> DBAdapter
     ProcessingOrchestrator --> LoadBalancer
     
-    ModelManager --> Infinity
+    EmbeddingEngine --> Infinity
     FaceModelManager --> FaceNet
     FaceModelManager --> MTCNN
     FaceModelManager --> InsightFace
-    ModelManager --> inaSpeechSegmenter
+    EmbeddingEngine --> inaSpeechSegmenter
     SmartRetrieval --> DBAdapter
     SmartRetrieval --> TemporalLocalizer
     SmartRetrieval --> MultimodalFusion
@@ -178,11 +178,10 @@ msearch/
 │   │   ├── smart_retrieval.py    # 智能检索引擎
 │   │   ├── multimodal_fusion_engine.py # 多模态融合引擎
 │   │   ├── temporal_localization_engine.py # 时序定位引擎
-│   │   ├── model_manager.py      # 模型管理器
+│   │   ├── embedding_engine.py   # 向量化引擎
 │   │   ├── face_model_manager.py # 人脸模型管理器
 │   │   ├── file_monitor.py       # 文件监控服务
 │   │   ├── load_balancer.py      # 负载均衡器
-│   │   ├── embedding_engine.py   # 向量化引擎
 │   │   ├── face_manager.py       # 人脸管理器
 │   │   ├── media_processor.py    # 媒体处理器
 │   │   ├── search_engine.py      # 搜索引擎
@@ -257,15 +256,16 @@ msearch/
 - **资源协调**: 协调CPU/GPU资源分配
 - **批处理编排**: 智能组织批处理任务
 
-### 2. 模型管理器 (ModelManager)
+### 2. 向量化引擎 (EmbeddingEngine)
 
-专业化多模态向量化引擎：
+专业化多模态向量化引擎，使用Infinity Python-native模式：
 
 - **CLIP模型**: 文本-图像/视频检索
-- **CLAP模型**: 文本-音乐检索
+- **CLAP模型**: 文本-音乐检索  
 - **Whisper模型**: 语音转文本检索
 - **智能模型选择**: 根据硬件环境自动选择最优模型
 - **批处理优化**: 提升GPU利用率
+- **Python-native模式**: 直接内存调用，避免HTTP序列化开销
 - **音频智能处理**: 使用inaSpeechSegmenter自动分类音频内容并进行质量过滤
 
 ### 3. 人脸模型管理器 (FaceModelManager)
