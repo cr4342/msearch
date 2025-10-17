@@ -377,3 +377,25 @@ if __name__ == "__main__":
     # 处理文件 (需要实际的文件路径)
     # result = asyncio.run(orchestrator.process_file("path/to/file.jpg"))
     # print(result)
+
+
+# 全局处理编排器实例
+_processing_orchestrator = None
+
+
+def get_processing_orchestrator(config: Dict[str, Any] = None) -> ProcessingOrchestrator:
+    """
+    获取全局处理编排器实例
+    
+    Args:
+        config: 配置字典，首次调用时需要提供
+        
+    Returns:
+        处理编排器实例
+    """
+    global _processing_orchestrator
+    if _processing_orchestrator is None:
+        if config is None:
+            raise ValueError("首次调用get_processing_orchestrator时必须提供config参数")
+        _processing_orchestrator = ProcessingOrchestrator(config)
+    return _processing_orchestrator

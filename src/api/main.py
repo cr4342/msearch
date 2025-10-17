@@ -19,6 +19,7 @@ from typing import List, Dict, Optional
 
 from src.core.config import load_config
 from src.core.logging_config import setup_logging, get_logger
+from src.core.config_manager import get_config_manager
 from src.business.processing_orchestrator import ProcessingOrchestrator
 from src.business.embedding_engine import get_embedding_engine
 
@@ -60,8 +61,11 @@ async def http_exception_handler(request, exc):
 # 获取日志记录器
 logger = get_logger(__name__)
 
+# 获取配置
+config = get_config_manager().config
+
 # 获取处理编排器实例
-processing_orchestrator = get_processing_orchestrator()
+processing_orchestrator = ProcessingOrchestrator(config)
 
 # 健康检查端点
 @app.get("/health", summary="健康检查")

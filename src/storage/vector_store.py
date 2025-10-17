@@ -5,6 +5,7 @@
 
 from typing import List, Dict, Any, Optional
 import logging
+import numpy as np
 from qdrant_client import QdrantClient
 from qdrant_client.models import Distance, VectorParams, PointStruct, SearchRequest
 import hashlib
