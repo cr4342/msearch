@@ -13,7 +13,7 @@ router = APIRouter(prefix="/api/v1/search", tags=["search"])
 
 # 初始化检索引擎
 config_manager = get_config_manager()
-config = config_manager.get_config()
+config = config_manager.config
 retrieval_engine = SmartRetrievalEngine(config)
 
 @router.post("/text")

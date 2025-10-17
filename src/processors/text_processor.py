@@ -37,22 +37,26 @@ class TextProcessor:
         try:
             logger.debug(f"开始处理文本: {text_path}")
             
-            # 1. 检查文件大小
-            file_size = os.path.getsize(text_path)
+            # 使用异步执行器处理CPU密集型操作
+            import asyncio
+            loop = asyncio.get_event_loop()
+            
+            # 1. 检查文件大小（异步执行）
+            file_size = await loop.run_in_executor(None, os.path.getsize, text_path)
             if file_size > self.max_file_size:
                 raise ValueError(f"文件过大: {file_size} bytes > {self.max_file_size} bytes")
             
-            # 2. 检测文件编码
-            detected_encoding = self._detect_encoding(text_path)
+            # 2. 检测文件编码（异步执行）
+            detected_encoding = await loop.run_in_executor(None, self._detect_encoding, text_path)
             
-            # 3. 读取文本内容
-            text_content = self._read_text_file(text_path, detected_encoding)
+            # 3. 读取文本内容（异步执行）
+            text_content = await loop.run_in_executor(None, self._read_text_file, text_path, detected_encoding)
             
-            # 4. 内容清理
-            cleaned_content = self._clean_content(text_content)
+            # 4. 内容清理（异步执行）
+            cleaned_content = await loop.run_in_executor(None, self._clean_content, text_content)
             
-            # 5. 结构化提取
-            structured_content = self._extract_structured_content(cleaned_content)
+            # 5. 结构化提取（异步执行）
+            structured_content = await loop.run_in_executor(None, self._extract_structured_content, cleaned_content)
             
             logger.debug(f"文本处理完成: {text_path}, 原始长度={len(text_content)}, "
                         f"清理后长度={len(cleaned_content)}")

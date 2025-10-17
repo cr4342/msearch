@@ -44,23 +44,39 @@ class EmbeddingEngine:
         try:
             engine_args = []
             
-            if self.config.get('features.enable_clip', True):
-                engine_args.append(EngineArgs(
-                    model_name_or_path=self.config.get('models.clip_model', 'openai/clip-vit-base-patch32'),
-                    device=self.config.get('device', 'cpu')
-                ))
+            # 从配置中获取模型设置
+            infinity_config = self.config.get('infinity', {})
+            services_config = infinity_config.get('services', {})
             
-            if self.config.get('features.enable_clap', True):
-                engine_args.append(EngineArgs(
-                    model_name_or_path=self.config.get('models.clap_model', 'laion/clap-htsat-fused'),
-                    device=self.config.get('device', 'cpu')
-                ))
+            # CLIP模型配置
+            clip_config = services_config.get('clip', {})
+            engine_args.append(EngineArgs(
+                model_name_or_path=clip_config.get('model_id', 'openai/clip-vit-base-patch32'),
+                device=clip_config.get('device', 'cpu'),
+                model_warmup=True,
+                batch_size=clip_config.get('max_batch_size', 32),
+                dtype=clip_config.get('dtype', 'float16')
+            ))
             
-            if self.config.get('features.enable_whisper', True):
-                engine_args.append(EngineArgs(
-                    model_name_or_path=self.config.get('models.whisper_model', 'openai/whisper-base'),
-                    device=self.config.get('device', 'cpu')
-                ))
+            # CLAP模型配置
+            clap_config = services_config.get('clap', {})
+            engine_args.append(EngineArgs(
+                model_name_or_path=clap_config.get('model_id', 'laion/clap-htsat-fused'),
+                device=clap_config.get('device', 'cpu'),
+                model_warmup=True,
+                batch_size=clap_config.get('max_batch_size', 16),
+                dtype=clap_config.get('dtype', 'float16')
+            ))
+            
+            # Whisper模型配置
+            whisper_config = services_config.get('whisper', {})
+            engine_args.append(EngineArgs(
+                model_name_or_path=whisper_config.get('model_id', 'openai/whisper-base'),
+                device=whisper_config.get('device', 'cpu'),
+                model_warmup=True,
+                batch_size=whisper_config.get('max_batch_size', 8),
+                dtype=whisper_config.get('dtype', 'float16')
+            ))
             
             self.engine_array = AsyncEngineArray.from_args(engine_args)
             logger.info("Infinity模型初始化完成")
@@ -89,9 +105,20 @@ class EmbeddingEngine:
                 logger.debug(f"使用{model.upper()}模型生成向量: 内容类型={content_type}")
                 
                 # 调用Infinity生成向量
-                embeddings = await self.engine_array.embed(content, model)
+                # Infinity的embed方法返回的是EmbeddingReturnType对象
+                embedding_result = await self.engine_array.embed(content, model)
                 
-                logger.debug(f"向量生成完成: 形状={embeddings.shape if hasattr(embeddings, 'shape') else len(embeddings)}")
+                # 提取向量数据
+                if hasattr(embedding_result, 'embeddings'):
+                    embeddings = embedding_result.embeddings
+                else:
+                    embeddings = embedding_result
+                
+                # 确保返回的是numpy数组
+                if not isinstance(embeddings, np.ndarray):
+                    embeddings = np.array(embeddings)
+                
+                logger.debug(f"向量生成完成: 形状={embeddings.shape}")
                 return embeddings
             except Exception as e:
                 logger.error(f"使用Infinity生成向量失败: {e}")

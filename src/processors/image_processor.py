@@ -39,20 +39,24 @@ class ImageProcessor:
         try:
             logger.debug(f"开始处理图片: {image_path}")
             
-            # 1. 读取图片
-            image_data = self._read_image(image_path)
+            # 使用异步执行器处理CPU密集型操作
+            import asyncio
             
-            # 2. 格式验证和转换
-            validated_image = self._validate_and_convert(image_data)
+            # 1. 读取图片（异步执行）
+            loop = asyncio.get_event_loop()
+            image_data = await loop.run_in_executor(None, self._read_image, image_path)
             
-            # 3. 尺寸调整
-            resized_image = self._resize_image(validated_image)
+            # 2. 格式验证和转换（异步执行）
+            validated_image = await loop.run_in_executor(None, self._validate_and_convert, image_data)
             
-            # 4. 质量评估
-            quality_score = self._assess_quality(resized_image)
+            # 3. 尺寸调整（异步执行）
+            resized_image = await loop.run_in_executor(None, self._resize_image, validated_image)
             
-            # 5. 标准化处理
-            normalized_image = self._normalize_image(resized_image)
+            # 4. 质量评估（异步执行）
+            quality_score = await loop.run_in_executor(None, self._assess_quality, resized_image)
+            
+            # 5. 标准化处理（异步执行）
+            normalized_image = await loop.run_in_executor(None, self._normalize_image, resized_image)
             
             logger.debug(f"图片处理完成: {image_path}, 质量评分: {quality_score}")
             

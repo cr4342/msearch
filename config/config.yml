@@ -312,6 +312,8 @@ database:
     
   # Qdrant向量数据库配置
   qdrant:
+    host: "localhost"
+    port: 6333
     # 部署模式: embedded(嵌入式) 或 server(服务器模式)
     mode: "embedded"
     # 嵌入式模式配置
@@ -336,6 +338,21 @@ database:
       host: "localhost"
       port: 6333
       api_key: null
+
+# ============================================================================
+# Infinity服务配置
+# ============================================================================
+infinity:
+  services:
+    clip:
+      host: "localhost"
+      port: 7997
+    clap:
+      host: "localhost"
+      port: 7998
+    whisper:
+      host: "localhost"
+      port: 7999
 
 # ============================================================================
 # API服务配置

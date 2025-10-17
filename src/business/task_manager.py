@@ -215,7 +215,7 @@ class TaskManager:
             logger.error(f"更新任务进度失败: ID={task_id}, 错误={e}")
             return False
     
-    def complete_task(self, task_id: str, success: bool = True, 
+    async def complete_task(self, task_id: str, success: bool = True, 
                      error_message: str = None) -> bool:
         """
         完成任务

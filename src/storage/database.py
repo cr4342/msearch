@@ -27,7 +27,8 @@ class DatabaseManager:
         """
         if db_path is None:
             config = get_config()
-            db_path = config["paths"]["sqlite_db_path"]
+            # 从配置中获取数据库路径
+            db_path = config.get("database", {}).get("sqlite", {}).get("path", "./data/database/msearch.db")
         
         self.db_path = Path(db_path)
         self.db_path.parent.mkdir(parents=True, exist_ok=True)

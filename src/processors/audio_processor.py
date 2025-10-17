@@ -39,20 +39,27 @@ class AudioProcessor:
         try:
             logger.debug(f"开始处理音频: {audio_path}")
             
-            # 1. 提取音频元数据
-            metadata = self._extract_metadata(audio_path)
+            # 使用异步执行器处理CPU密集型操作
+            import asyncio
+            loop = asyncio.get_event_loop()
             
-            # 2. 音频内容分类
-            classification = self._classify_audio_content(audio_path, metadata)
+            # 1. 提取音频元数据（异步执行）
+            metadata = await loop.run_in_executor(None, self._extract_metadata, audio_path)
             
-            # 3. 格式标准化
-            standardized_audio = self._standardize_format(audio_path)
+            # 2. 音频内容分类（异步执行）
+            classification = await loop.run_in_executor(None, self._classify_audio_content, audio_path, metadata)
             
-            # 4. 音频分段
-            segments = self._segment_audio(standardized_audio, metadata)
+            # 3. 格式标准化（异步执行）
+            standardized_audio = await loop.run_in_executor(None, self._standardize_format, audio_path)
             
-            # 5. 质量评估
-            quality_scores = [self._assess_quality(segment['audio_data']) for segment in segments]
+            # 4. 音频分段（异步执行）
+            segments = await loop.run_in_executor(None, self._segment_audio, standardized_audio, metadata)
+            
+            # 5. 质量评估（异步执行）
+            quality_scores = []
+            for segment in segments:
+                quality_score = await loop.run_in_executor(None, self._assess_quality, segment['audio_data'])
+                quality_scores.append(quality_score)
             
             logger.debug(f"音频处理完成: {audio_path}, 分段数: {len(segments)}")
             

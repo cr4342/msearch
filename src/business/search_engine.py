@@ -10,18 +10,20 @@ logger = logging.getLogger(__name__)
 
 
 class SearchEngine:
-    """搜索引起"""
+    """搜索引擎"""
     
-    def __init__(self, config: Dict[str, Any], vector_store):
+    def __init__(self, config: Dict[str, Any], vector_store, embedding_engine):
         """
         初始化搜索引擎
         
         Args:
             config: 配置字典
             vector_store: 向量存储实例
+            embedding_engine: 嵌入引擎实例
         """
         self.config = config
         self.vector_store = vector_store
+        self.embedding_engine = embedding_engine
         self.top_k = config.get('search.top_k', 50)
         self.similarity_threshold = config.get('search.similarity_threshold', 0.5)
     
@@ -125,10 +127,21 @@ class SearchEngine:
         Returns:
             搜索结果
         """
-        # 这里应该调用嵌入引擎将文本转换为向量
-        # 暂时返回空列表
-        logger.debug(f"执行文本搜索: {text}")
-        return []
+        try:
+            logger.debug(f"执行文本搜索: {text}")
+            
+            # 使用嵌入引擎将文本转换为向量
+            query_vector = await self.embedding_engine.embed_content(text, 'text')
+            
+            # 执行向量搜索
+            results = await self.search_by_vector(query_vector, 'text_collection')
+            
+            logger.debug(f"文本搜索完成: 找到{len(results)}个结果")
+            return results
+            
+        except Exception as e:
+            logger.error(f"文本搜索失败: {e}")
+            return []
     
     async def _search_image(self, image_data: np.ndarray) -> List[Dict[str, Any]]:
         """
@@ -140,10 +153,21 @@ class SearchEngine:
         Returns:
             搜索结果
         """
-        # 这里应该调用嵌入引擎将图片转换为向量
-        # 暂时返回空列表
-        logger.debug("执行图片搜索")
-        return []
+        try:
+            logger.debug("执行图片搜索")
+            
+            # 使用嵌入引擎将图片转换为向量
+            query_vector = await self.embedding_engine.embed_content(image_data, 'image')
+            
+            # 执行向量搜索
+            results = await self.search_by_vector(query_vector, 'image_collection')
+            
+            logger.debug(f"图片搜索完成: 找到{len(results)}个结果")
+            return results
+            
+        except Exception as e:
+            logger.error(f"图片搜索失败: {e}")
+            return []
     
     async def _search_audio(self, audio_data: np.ndarray) -> List[Dict[str, Any]]:
         """
@@ -155,10 +179,26 @@ class SearchEngine:
         Returns:
             搜索结果
         """
-        # 这里应该调用嵌入引擎将音频转换为向量
-        # 暂时返回空列表
-        logger.debug("执行音频搜索")
-        return []
+        try:
+            logger.debug("执行音频搜索")
+            
+            # 使用嵌入引擎将音频转换为向量
+            # 根据音频类型选择适当的模型
+            audio_type = 'audio_music'  # 默认使用音乐模型
+            if hasattr(audio_data, 'sample_rate') and audio_data.sample_rate < 16000:
+                audio_type = 'audio_speech'  # 低采样率更适合语音
+                
+            query_vector = await self.embedding_engine.embed_content(audio_data, audio_type)
+            
+            # 执行向量搜索
+            results = await self.search_by_vector(query_vector, 'audio_collection')
+            
+            logger.debug(f"音频搜索完成: 找到{len(results)}个结果")
+            return results
+            
+        except Exception as e:
+            logger.error(f"音频搜索失败: {e}")
+            return []
     
     def _fuse_results(self, modality_results: Dict[str, List[Dict[str, Any]]]) -> List[Dict[str, Any]]:
         """

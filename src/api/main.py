@@ -19,7 +19,7 @@ from typing import List, Dict, Optional
 
 from src.core.config import load_config
 from src.core.logging_config import setup_logging, get_logger
-from src.core.processing_orchestrator import get_processing_orchestrator
+from src.business.processing_orchestrator import ProcessingOrchestrator
 from src.business.embedding_engine import get_embedding_engine
 
 # 创建FastAPI应用实例
@@ -402,10 +402,8 @@ async def search_text(query: str, limit: int = 20):
         logger.info(f"开始文本检索: {query}")
         
         # 使用嵌入引擎进行文本向量化
-        text_vectors = await embedding_engine.get_embedding(
-            content_type="text",
-            content_text=query
-        )
+        text_vector = await embedding_engine.embed_text(query)
+        text_vectors = {"clip_vector": text_vector, "clap_vector": text_vector}
         
         # 在不同模态的向量数据库中搜索
         results = []
@@ -495,10 +493,9 @@ async def search_image(file: UploadFile = File(...), limit: int = 20):
             logger.info(f"开始图像检索: {file.filename}")
             
             # 使用嵌入引擎进行图像向量化
-            image_vector = await embedding_engine.get_embedding(
-                content_type="image",
-                content_path=tmp_file_path
-            )
+            import cv2
+            image = cv2.imread(tmp_file_path)
+            image_vector = await embedding_engine.embed_image(image)
             
             # 在CLIP向量数据库中搜索（图像/视频）
             results = await vector_store.search(
@@ -566,10 +563,9 @@ async def search_audio(file: UploadFile = File(...), limit: int = 20):
             logger.info(f"开始音频检索: {file.filename}")
             
             # 使用嵌入引擎进行音频向量化
-            audio_vector = await embedding_engine.get_embedding(
-                content_type="audio_music",
-                content_path=tmp_file_path
-            )
+            import librosa
+            audio_data, sr = librosa.load(tmp_file_path, sr=16000)
+            audio_vector = await embedding_engine.embed_audio_music(audio_data)
             
             # 在CLAP向量数据库中搜索（音频）
             results = await vector_store.search(

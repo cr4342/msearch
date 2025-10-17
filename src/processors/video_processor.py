@@ -41,14 +41,18 @@ class VideoProcessor:
         try:
             logger.debug(f"开始处理视频: {video_path}")
             
-            # 1. 提取视频元数据
-            metadata = self._extract_metadata(video_path)
+            # 使用异步执行器处理CPU密集型操作
+            import asyncio
+            loop = asyncio.get_event_loop()
             
-            # 2. 场景检测
-            scenes = self._detect_scenes(video_path, metadata)
+            # 1. 提取视频元数据（异步执行）
+            metadata = await loop.run_in_executor(None, self._extract_metadata, video_path)
             
-            # 3. 关键帧提取
-            keyframes = self._extract_keyframes(video_path, scenes, metadata)
+            # 2. 场景检测（异步执行）
+            scenes = await loop.run_in_executor(None, self._detect_scenes, video_path, metadata)
+            
+            # 3. 关键帧提取（异步执行）
+            keyframes = await loop.run_in_executor(None, self._extract_keyframes, video_path, scenes, metadata)
             
             # 4. 音频流分离（如果需要）
             # audio_segments = self._extract_audio(video_path)

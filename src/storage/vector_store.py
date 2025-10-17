@@ -116,6 +116,30 @@ class VectorStore:
             # 返回模拟结果作为降级方案
             return self._get_mock_search_results(limit)
     
+    async def search_similar(self, query_vector: np.ndarray, collection_name: str, top_k: int = None) -> List[Dict[str, Any]]:
+        """
+        相似向量搜索（兼容SearchEngine接口）
+        
+        Args:
+            query_vector: 查询向量（numpy数组）
+            collection_name: 集合名称
+            top_k: 返回结果数量
+            
+        Returns:
+            搜索结果列表
+        """
+        if top_k is None:
+            top_k = 50
+        
+        # 将numpy数组转换为列表
+        if isinstance(query_vector, np.ndarray):
+            query_vector = query_vector.tolist()
+        
+        # 调用search方法
+        results = await self.search(collection_name, query_vector, limit=top_k)
+        
+        return results
+    
     def _generate_cache_key(self, collection_name: str, query_vector: List[float], limit: int, filters: Dict = None) -> str:
         """
         生成缓存键
