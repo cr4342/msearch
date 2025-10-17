@@ -1,26 +1,96 @@
 # 实施计划
 
-> **文档导航**: [文档索引](README.md) | [需求文档](requirements.md) | [设计文档](design.md) | [测试策略](test_strategy.md) | [部署指南](deployment_guide.md)
-
 ## 实施策略概述
 
-根据功能导向的迭代开发原则，本开发计划将按照九个主要阶段组织，每个阶段围绕具体功能展开，从API优先到逐步引入用户界面：
+根据功能导向的迭代开发原则，本开发计划将按照十个主要阶段组织，每个阶段围绕具体功能展开，从基础架构到完整的多模态搜索系统：
 
-1. **阶段1（MVP - 基础文本搜索API）**：实现核心基础功能，建立可工作的最小可行产品
-2. **阶段2（文件预处理系统）**：围绕文件监控、媒体预处理和基础文件处理功能
-3. **阶段3（文图对齐与基础多模态）**：实现CLIP集成、文搜图、图搜图等核心多模态功能
-4. **阶段4（音视频处理）**：视频场景检测、音频处理、时间戳定位等高级媒体功能
-5. **阶段5（人脸识别与智能检索）**：实现人脸识别、智能检索策略、动态权重分配
-6. **阶段6（高级搜索与融合）**：多模态融合、时间线搜索、高级配置管理
-7. **阶段7（Web用户界面）**：引入Web界面，提供基础用户交互界面
-8. **阶段8（系统优化与部署）**：Infinity服务管理、性能优化、系统稳定性、生产环境部署
-9. **阶段9（PySide6桌面应用 - 可选）**：开发PySide6桌面应用，提供原生用户体验（可选阶段）
+1. **阶段1（基础架构与存储）**：建立系统基础架构，实现配置管理、日志系统、存储层和AI模型集成
+2. **阶段2（图片处理与基础多模态）**：实现图片处理和向量化，建立第一个多模态搜索能力（文搜图、图搜图）
+3. **阶段3（媒体预处理系统）**：实现媒体文件预处理框架，建立时间戳处理机制
+4. **阶段4（视频处理与搜索）**：实现视频处理器和视频搜索，支持场景检测和时间定位
+5. **阶段5（音频处理与搜索）**：实现音频处理器和音频搜索，支持语音转录和音频特征检索
+6. **阶段6（人脸识别与智能检索）**：实现人脸识别、智能检索策略、动态权重分配
+7. **阶段7（高级搜索与融合）**：多模态融合、时间线搜索、高级配置管理
+8. **阶段8（Web用户界面）**：引入Web界面，提供基础用户交互界面
+9. **阶段9（系统优化与部署）**：Python-native优化、性能调优、系统稳定性、生产环境部署
+10. **阶段10（PySide6桌面应用 ）**：开发PySide6桌面应用，提供原生用户体验
 
-## 阶段1（MVP - 基础文本搜索API）
+## 阶段1（MVP - 基础架构与存储）
 
-### 1.1 核心功能：文本文件搜索
+### 1.1 核心功能：基础架构搭建
 
-**目标**：实现最基本的文本内容搜索功能，用户可以通过关键词搜索文本文件
+**目标**：建立完整的系统基础架构，为后续功能开发奠定基础
+
+**技术实现**：
+- [x] [p0] 项目基础搭建
+  - 创建项目结构：按照设计文档8.2节的目录结构组织代码
+  - 实现核心组件：ConfigManager、LoggerManager、FileTypeDetector
+  - 建立基础的错误处理和日志记录机制
+  - _需求：系统架构基础_
+
+- [x] [p0] 配置驱动架构实现
+  - 实现ConfigManager统一配置管理器（src/core/config_manager.py）
+  - 支持单一配置文件config/config.yml管理所有系统参数
+  - 实现LoggerManager多级别日志系统（src/core/logger_manager.py）
+  - 支持环境变量覆盖配置文件参数，便于容器化部署
+  - 实现配置验证和默认配置生成，确保配置完整性和类型安全
+  - 配置修改后重启生效，简化维护复杂度
+  - _需求：系统架构要求_
+
+- [x] [p0] 存储层基础实现
+  - 实现SQLiteManager元数据管理器（src/storage/sqlite_manager.py）
+  - 实现QdrantClient向量数据库客户端（src/storage/qdrant_client.py）
+  - 建立基础的数据模型和表结构
+  - 实现数据库初始化和迁移机制
+  - _需求：存储层设计_
+
+**验证方式**：
+```bash
+# 验证配置系统
+python -c "from src.core.config_manager import ConfigManager; print('配置系统正常')"
+
+# 验证数据库连接
+python scripts/database_init.py
+
+# 验证日志系统
+python -c "from src.core.logger_manager import LoggerManager; LoggerManager().get_logger('test').info('日志系统正常')"
+```
+
+**用户价值**：✅ 建立稳定的系统基础，为后续功能开发提供可靠支撑
+
+### 1.2 核心功能：Python-native EmbeddingEngine
+
+**目标**：实现高性能的AI模型集成，为多模态搜索提供核心能力
+
+**技术实现**：
+- [x] [p0] Python-native EmbeddingEngine
+  - 实现EmbeddingEngine集成 michaelfeil/infinity Python-native模式
+  - 直接在Python中管理CLIP、CLAP、Whisper模型
+  - 消除HTTP通信开销，提升20-30%性能
+  - 统一GPU内存管理和批处理优化
+  - _需求：AI推理层设计_
+
+- [x] [p0] 模型管理与健康检查
+  - 实现模型加载和初始化机制
+  - 支持模型健康检查和性能监控
+  - 实现错误处理和自动重试机制
+  - 支持硬件自适应配置（CPU/GPU）
+  - _需求：模型管理_
+
+**验证方式**：
+```python
+# 验证模型加载
+from src.business.embedding_engine import EmbeddingEngine
+engine = EmbeddingEngine()
+result = await engine.embed_content("test text", "text")
+print(f"向量维度: {len(result)}")  # 应该输出512
+```
+
+**用户价值**：✅ 提供高性能的AI模型服务，为多模态搜索奠定技术基础
+
+### 1.3 核心功能：基础文本搜索API
+
+**目标**：实现最基本的文本内容搜索功能，验证整个技术栈
 
 **功能演示**：
 ```bash
@@ -39,27 +109,11 @@ curl -X POST "http://localhost:8000/search" \
 ```
 
 **技术实现**：
-- [x] [p0] 项目基础搭建
-  - 创建项目结构：按照设计文档8.2节的目录结构组织代码
-  - 实现核心组件：ConfigManager、LoggerManager、FileTypeDetector
-  - 集成Python-native Infinity模式，直接集成CLIP模型
-  - _需求：1.1, 1.2, 6.1_
-
-- [x] [p0] 配置驱动架构实现
-  - 实现ConfigManager统一配置管理器（src/core/config_manager.py）
-  - 支持单一配置文件config/config.yml管理所有系统参数
-  - 实现LoggerManager多级别日志系统（src/core/logger_manager.py）
-  - 支持环境变量覆盖配置文件参数，便于容器化部署
-  - 实现配置验证和默认配置生成，确保配置完整性和类型安全
-  - 配置修改后重启生效，简化维护复杂度
-  - _需求：系统架构要求_
-
-- [x] [p0] Python-native EmbeddingEngine
-  - 实现EmbeddingEngine集成Infinity Python-native模式
-  - 直接在Python中管理CLIP、CLAP、Whisper模型
-  - 消除HTTP通信开销，提升20-30%性能
-  - 统一GPU内存管理和批处理优化
-  - _需求：AI推理层设计_
+- [x] [p0] FastAPI基础框架
+  - 实现FastAPI应用入口（src/api/main.py）
+  - 创建基础路由和中间件
+  - 实现统一的错误处理和响应格式
+  - _需求：API服务层_
 
 - [x] [p0] 基础搜索API
   - 实现 `/search` 端点，支持文本查询
@@ -67,11 +121,68 @@ curl -X POST "http://localhost:8000/search" \
   - 返回匹配的文件列表和相似度分数
   - _需求：1.3, 6.2_
 
-**用户价值**：✅ 可以搜索文本文件内容，解决最基础的文件查找需求
+**用户价值**：✅ 可以搜索文本文件内容，验证系统核心功能正常
 
-## 阶段2（文件预处理系统）
+## 阶段2（图片处理与基础多模态）
 
-### 2.1 核心功能：文件监控与自动处理
+### 2.1 核心功能：图片处理与向量化
+
+**目标**：实现图片文件的处理和向量化，建立第一个多模态搜索能力
+
+**功能演示**：
+```bash
+# 文搜图 - 用文字搜索图片
+curl -X POST "http://localhost:8000/search" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "夕阳下的海滩", "type": "text_to_image"}'
+
+# 图搜图 - 用图片搜索相似图片  
+curl -X POST "http://localhost:8000/search" \
+  -F "image=@vacation.jpg" \
+  -F 'type=image_to_image'
+```
+
+**技术实现**：
+- [x] [p0] 图片处理器实现
+  - 实现ImageProcessor（src/processors/image_processor.py）
+  - 支持多格式图片处理（JPEG、PNG、WEBP、TIFF等）
+  - 实现格式标准化：4K→1080p降采样，减少显存压力
+  - 集成EXIF元数据提取和处理
+  - _需求：图片处理策略_
+
+- [x] [p0] 图片向量化与存储
+  - 集成Python-native CLIP模型处理图片内容
+  - 实现批处理优化，批处理大小32（根据GPU显存动态调整）
+  - 实现图片特征提取和Qdrant向量存储
+  - 建立image_vectors集合和相关索引
+  - _需求：2.1, 2.2, 2.3_
+
+- [x] [p0] 图片搜索API
+  - 扩展 `/search` 端点支持跨模态图片查询
+  - 实现文搜图（CLIP文本→图像）和图搜图功能
+  - 支持多图片格式上传和实时处理
+  - 集成向量相似度搜索和结果排序
+  - _需求：2.4, 6.3_
+
+**验证方式**：
+```bash
+# 验证图片处理
+python -c "
+from src.processors.image_processor import ImageProcessor
+processor = ImageProcessor()
+result = processor.process_image('test.jpg')
+print(f'处理结果: {result}')
+"
+
+# 验证图片搜索
+curl -X POST "http://localhost:8000/search" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "测试图片", "type": "text_to_image"}'
+```
+
+**用户价值**：✅ 可以通过文字或图片搜索图片库，解决图片管理和查找问题
+
+### 2.2 核心功能：文件监控与自动处理
 
 **目标**：实现智能文件监控系统，自动发现并处理新增的媒体文件
 
@@ -84,20 +195,22 @@ curl -X GET "http://localhost:8000/files/status"
 {
   "queue_size": 5,
   "processing_files": [
-    {"file": "vacation.mp4", "status": "processing", "progress": 45},
-    {"file": "meeting.wav", "status": "queued", "progress": 0}
+    {"file": "vacation.jpg", "status": "processing", "progress": 45},
+    {"file": "meeting.png", "status": "queued", "progress": 0}
   ]
 }
 ```
 
 **技术实现**：
 - [x] [p0] 文件系统监控服务
+  - 实现FileMonitor（src/business/file_monitor.py）
   - 创建基于watchdog的文件监控器，支持多目录监控
   - 实现文件事件处理：创建、删除、修改、移动
   - 创建文件过滤机制，支持扩展名和模式匹配
   - _需求：3.1, 3.2, 3.3, 3.4, 3.5_
 
 - [x] [p0] 异步处理队列系统
+  - 实现TaskManager（src/business/task_manager.py）
   - 创建优先级任务队列，支持文件处理任务调度
   - 实现任务重试机制和错误处理策略
   - 创建任务状态跟踪和进度报告
@@ -154,104 +267,158 @@ curl -X POST "http://localhost:8000/files/preprocess" \
 
 **用户价值**：✅ 智能媒体预处理，为高质量搜索奠定基础
 
-## 阶段3（文图对齐与基础多模态）
+## 阶段3（媒体预处理系统）
 
-### 3.1 核心功能：文搜图与图搜图
+### 3.1 核心功能：媒体文件预处理框架
 
-**目标**：实现"文搜图"和"图搜图"功能，用户可以用文字描述或上传图片来搜索相似图片
+**目标**：实现智能媒体预处理，为后续向量化做准备
 
 **功能演示**：
 ```bash
-# 文搜图 - 用文字搜索图片
-curl -X POST "http://localhost:8000/search" \
+# 手动触发文件预处理
+curl -X POST "http://localhost:8000/files/preprocess" \
   -H "Content-Type: application/json" \
-  -d '{"query": "夕阳下的海滩", "type": "text_to_image"}'
+  -d '{"file_path": "video.mp4"}'
 
-# 图搜图 - 用图片搜索相似图片  
-curl -X POST "http://localhost:8000/search" \
-  -F "image=@vacation.jpg" \
-  -F 'type=image_to_image'
-
-# 系统返回相似图片列表
+# 系统返回预处理结果
 {
-  "results": [
-    {"file": "beach_sunset_1.jpg", "score": 0.92},
-    {"file": "ocean_view_3.jpg", "score": 0.85}
-  ]
+  "file": "video.mp4",
+  "preprocessing_status": "completed",
+  "extracted_features": {
+    "duration": 120.5,
+    "scenes": 8,
+    "keyframes": 24,
+    "audio_segments": 3
+  }
 }
 ```
 
 **技术实现**：
-- [x] [p1] 图片处理与向量化
-  - 集成Python-native CLIP模型处理图片内容
-  - 实现格式标准化：4K→1080p降采样，减少显存压力
-  - 支持批处理优化，批处理大小32（根据GPU显存动态调整）
-  - 实现图片特征提取和Qdrant向量存储
-  - _需求：2.1, 2.2, 2.3, 图片处理策略_
+- [x] [p0] 配置驱动的MediaProcessor框架
+  - 实现MediaProcessor（src/business/media_processor.py）
+  - 实现完全配置驱动的媒体预处理器，所有参数从config.yml读取
+  - 支持格式标准化：4K→720p降采样，减少60-80%显存占用
+  - 创建多阶段预处理流水线：格式转换→尺寸标准化→向量化
+  - 实现配置验证机制，确保处理参数在合理范围内
+  - _需求：媒体处理策略设计_
 
-- [x] [p1] 图片搜索API
-  - 扩展 `/search` 端点支持跨模态图片查询
-  - 实现文搜图（CLIP文本→图像）和图搜图功能
-  - 支持多图片格式上传和实时处理
-  - 集成向量相似度搜索和结果排序
-  - _需求：2.4, 6.3_
+- [x] [p0] FileTypeDetector组件实现
+  - 实现FileTypeDetector（src/core/file_type_detector.py）
+  - 实现多层次文件类型检测（扩展名、MIME类型、文件头分析）
+  - 支持配置驱动的文件类型映射和处理策略路由
+  - 集成libmagic库进行精确的文件内容分析
+  - 提供置信度评分机制，处理类型冲突
+  - _需求：文件处理基础功能_
 
-**用户价值**：✅ 可以通过文字或图片搜索图片库，解决图片管理和查找问题
+- [x] [p0] ProcessingOrchestrator处理编排器
+  - 实现ProcessingOrchestrator（src/business/orchestrator.py）
+  - 实现策略路由：根据文件类型和内容特征选择处理策略
+  - 实现流程编排：管理预处理→向量化→存储的调用顺序
+  - 支持状态管理：跟踪处理进度、状态转换和错误恢复
+  - 实现资源协调：协调CPU/GPU资源分配，避免资源竞争
+  - _需求：ProcessingOrchestrator设计_
 
-### 3.2 辅助功能：基础文件监控集成
-
-**目标**：将文件监控与文图搜索功能集成，实现自动索引更新
-
-**功能演示**：
+**验证方式**：
 ```bash
-# 查看监控状态
-curl -X GET "http://localhost:8000/monitoring/status"
+# 验证文件类型检测
+python -c "
+from src.core.file_type_detector import FileTypeDetector
+detector = FileTypeDetector()
+result = detector.detect_file_type('test.mp4')
+print(f'文件类型: {result}')
+"
 
-# 系统返回监控状态
-{
-  "watched_directories": ["~/Pictures", "~/Documents"],
-  "total_files": 1250,
-  "indexed_files": 1180,
-  "pending_files": 70
-}
+# 验证媒体预处理
+python -c "
+from src.business.media_processor import MediaProcessor
+processor = MediaProcessor()
+result = processor.preprocess_file('test.mp4')
+print(f'预处理结果: {result}')
+"
 ```
 
+**用户价值**：✅ 智能媒体预处理，为高质量搜索奠定基础
+
+### 3.2 核心功能：时间戳处理机制
+
+**目标**：实现±2秒精度的时间戳处理，支持多模态时间同步
+
 **技术实现**：
-- [x] [p1] 文件监控与搜索集成
-  - 实现文件监控触发自动索引更新
-  - 支持图片文件自动向量化
-  - 创建索引状态同步机制
-  - _需求：3.1, 3.2, 3.5_
+- [x] [p0] TimestampProcessor时间戳处理器
+  - 实现TimestampProcessor（src/processors/timestamp_processor.py）
+  - 实现帧级时间戳计算：基于帧率的精确时间计算（±0.033s@30fps）
+  - 实现多模态时间同步验证：视觉、音频、语音统一时间基准
+  - 支持±2秒精度保证：重叠时间窗口+精确边界检测
+  - 实现场景感知切片：避免在场景中间进行时间切分
+  - _需求：时间戳处理机制设计_
 
-**用户价值**：✅ 文件变动自动同步到搜索索引
+- [x] [p0] 时间戳数据库设计
+  - 实现video_timestamps表：存储文件ID、向量ID、时间戳、模态类型
+  - 创建时间范围查询索引：优化时间戳查询性能
+  - 支持多模态时间戳存储：视觉、音频、语音分别记录
+  - 实现时间戳漂移校正：确保多模态时间同步
+  - _需求：时间戳数据库设计_
 
-### 3.3 辅助功能：基础配置管理
+**验证方式**：
+```python
+# 验证时间戳计算精度
+from src.processors.timestamp_processor import TimestampProcessor
+processor = TimestampProcessor(fps=30.0)
+timestamp = processor.calculate_frame_timestamp(60)
+print(f"帧60的时间戳: {timestamp}s")  # 应该是2.0s
 
-**目标**：实现基础配置管理，支持模型参数和搜索设置
-
-**功能演示**：
-```bash
-# 获取当前配置
-curl -X GET "http://localhost:8000/config/search"
-
-# 更新搜索配置
-curl -X PUT "http://localhost:8000/config/search" \
-  -H "Content-Type: application/json" \
-  -d '{"similarity_threshold": 0.7, "max_results": 50}'
+# 验证精度要求
+accuracy = processor.validate_timestamp_accuracy(10.0, 3.0)
+print(f"精度验证: {accuracy}")  # 应该是True（3s < 4s）
 ```
 
+**用户价值**：✅ 为视频和音频搜索提供精确的时间定位能力
+
+## 阶段4（视频处理与搜索）
+
+### 4.1 核心功能：视频处理器实现
+
+**目标**：实现视频文件的智能处理，支持场景检测和关键帧提取
+
 **技术实现**：
-- [x] [p1] 配置管理系统
-  - 实现配置存储和读取
-  - 支持搜索参数动态调整
-  - 创建配置验证机制
-  - _需求：8.1, 8.2, 8.3_
+- [x] [p0] VideoProcessor视频处理器
+  - 实现VideoProcessor（src/processors/video_processor.py）
+  - 实现智能视频预处理：4K/HD→720p转换，减少70-80%显存占用
+  - 集成FFmpeg进行格式转换和场景检测
+  - 实现动态抽帧策略：短视频2秒间隔，长视频场景感知切片
+  - 支持多种视频格式的精确识别和差异化处理
+  - _需求：视频处理策略设计_
 
-**用户价值**：✅ 灵活配置搜索行为，优化搜索结果
+- [x] [p0] 视频时间戳处理集成
+  - 集成TimestampProcessor进行帧级时间戳计算
+  - 支持多模态时间同步：视觉、音频、语音统一时间基准
+  - 实现±2秒精度保证：重叠时间窗口+精确边界检测
+  - 创建时间戳数据库索引，支持毫秒级时间查询
+  - _需求：视频时间戳处理机制_
 
-## 阶段4（音视频处理）
+- [x] [p0] 视频向量化与存储
+  - 集成Python-native CLIP模型处理视频帧
+  - 实现批处理优化，批处理大小16（720p预处理后可增加批处理大小）
+  - 建立video_vectors集合，存储帧向量和时间戳
+  - 实现MaxSim聚合算法，优化显存占用
+  - _需求：视频向量化策略_
 
-### 4.1 核心功能：视频场景检测与搜索
+**验证方式**：
+```python
+# 验证视频处理
+from src.processors.video_processor import VideoProcessor
+processor = VideoProcessor()
+result = processor.process_video('test.mp4')
+print(f"处理结果: 提取{len(result['frames'])}帧")
+
+# 验证时间戳精度
+for frame in result['frames'][:3]:
+    print(f"帧{frame['index']}: {frame['timestamp']:.3f}s")
+```
+
+**用户价值**：✅ 智能视频预处理，为视频搜索提供高质量的特征数据
+
+### 4.2 核心功能：视频搜索与时间定位
 
 **目标**：实现视频场景检测与内容搜索，用户可以用文字描述搜索视频片段并定位时间戳
 
@@ -272,30 +439,88 @@ curl -X POST "http://localhost:8000/search" \
 ```
 
 **技术实现**：
-- [x] [p0] 视频处理策略实现
-  - 实现智能视频预处理：4K/HD→720p转换，减少70-80%显存占用
-  - 集成FFmpeg进行格式转换和场景检测
-  - 实现动态抽帧策略：短视频2秒间隔，长视频场景感知切片
-  - 支持多种视频格式的精确识别和差异化处理
-  - _需求：视频处理策略设计_
+- [x] [p0] TimeAccurateRetrieval精确时间检索
+  - 实现TimeAccurateRetrieval（src/business/search_engine.py）
+  - 实现时间戳索引查询：向量相似度检索→时间戳查询→精度验证
+  - 支持时间段合并与去重：重叠时间段智能合并
+  - 实现连续性检测：判断时间段是否连续（考虑±2秒精度）
+  - 优化查询性能：时间戳查询延迟<10ms，批量查询<50ms
+  - _需求：精确时间检索算法_
 
-- [x] [p0] 视频时间戳处理机制
-  - 实现帧级时间戳计算：基于帧率的精确时间计算
-  - 支持多模态时间同步：视觉、音频、语音统一时间基准
-  - 实现±2秒精度保证：重叠时间窗口+精确边界检测
-  - 创建时间戳数据库索引，支持毫秒级时间查询
-  - _需求：视频时间戳处理机制_
-
-- [x] [p1] 视频搜索API
+- [x] [p0] 视频搜索API
   - 扩展 `/search` 端点支持视频内容查询
   - 实现基于CLIP的视频帧检索和时间戳定位
   - 返回精确的时间戳信息（±2秒精度）
   - 支持场景边界感知的结果合并
   - _需求：2.5, 2.6, 2.7, 2.8_
 
+**验证方式**：
+```bash
+# 验证视频搜索
+curl -X POST "http://localhost:8000/search" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "测试场景", "type": "text_to_video"}'
+
+# 验证时间戳精度
+python -c "
+from src.business.search_engine import TimeAccurateRetrieval
+retrieval = TimeAccurateRetrieval()
+# 测试时间戳精度验证
+result = retrieval.validate_time_accuracy({'duration': 3.0})
+print(f'时间戳精度验证: {result}')  # 应该是True
+"
+```
+
 **用户价值**：✅ 可以搜索视频内容并定位到具体场景和时间点，大幅提升视频查找效率
 
-### 4.2 核心功能：音频内容转录与搜索
+## 阶段5（音频处理与搜索）
+
+### 5.1 核心功能：音频处理器实现
+
+**目标**：实现音频文件的智能处理，支持内容分类和特征提取
+
+**技术实现**：
+- [x] [p0] AudioProcessor音频处理器
+  - 实现AudioProcessor（src/processors/audio_processor.py）
+  - 实现格式标准化：统一转换为16kHz单声道，减少60-70%数据量
+  - 集成FFmpeg进行音频格式转换和质量优化
+  - 实现质量过滤：过滤低质量、过短或纯噪音片段
+  - 支持多种音频格式的精确识别和差异化处理
+  - _需求：音频处理策略设计_
+
+- [x] [p0] AudioClassifier音频分类器
+  - 实现AudioClassifier（src/processors/audio_classifier.py）
+  - 集成inaSpeechSegmenter进行智能音频分类（音乐、语音、噪音）
+  - 实现分段处理：音乐30秒片段，语音3-10秒片段
+  - 支持音频内容类型的自动识别和路由
+  - _需求：音频内容分类_
+
+- [x] [p0] 音频向量化与存储
+  - 集成Python-native Whisper模型进行语音转文字
+  - 集成Python-native CLAP模型提取音频特征
+  - 建立audio_vectors集合，存储音频特征和时间戳
+  - 支持批处理优化，批处理大小8
+  - _需求：3.1, 3.2, 3.3, 3.4_
+
+**验证方式**：
+```python
+# 验证音频处理
+from src.processors.audio_processor import AudioProcessor
+processor = AudioProcessor()
+result = processor.process_audio('test.wav')
+print(f"音频处理结果: {result}")
+
+# 验证音频分类
+from src.processors.audio_classifier import AudioClassifier
+classifier = AudioClassifier()
+segments = classifier.classify_audio('test.wav')
+for seg in segments:
+    print(f"{seg['type']}: {seg['start_time']:.1f}s - {seg['end_time']:.1f}s")
+```
+
+**用户价值**：✅ 智能音频预处理，为音频搜索提供高质量的特征数据
+
+### 5.2 核心功能：音频内容转录与搜索
 
 **目标**：实现音频内容转录与搜索，支持语音转文字和音频相似度匹配
 
@@ -316,32 +541,41 @@ curl -X POST "http://localhost:8000/search" \
 ```
 
 **技术实现**：
-- [x] [p1] 音频处理策略实现
-  - 实现格式标准化：统一转换为16kHz单声道，减少60-70%数据量
-  - 集成inaSpeechSegmenter进行智能音频分类（音乐、语音、噪音）
-  - 实现质量过滤：过滤低质量、过短或纯噪音片段
-  - 支持多种音频格式的精确识别和差异化处理
-  - _需求：音频处理策略设计_
-
-- [x] [p1] 多模型音频处理
-  - 集成Python-native Whisper模型进行语音转文字
-  - 集成Python-native CLAP模型提取音频特征
-  - 实现分段处理：音乐30秒片段，语音3-10秒片段
-  - 支持批处理优化，批处理大小8
-  - _需求：3.1, 3.2, 3.3, 3.4_
-
-- [x] [p1] 音频搜索API
+- [x] [p0] 音频搜索API
   - 扩展 `/search` 端点支持音频内容查询
   - 实现基于转录文本的语音搜索（Whisper→CLIP）
   - 实现基于音频特征的音乐搜索（CLAP）
   - 支持时间戳精确定位（±0.1秒音频精度）
   - _需求：3.5, 6.4_
 
+- [x] [p0] 多模态音频处理集成
+  - 实现音频内容的多模态向量化（CLAP + Whisper）
+  - 支持语音内容的文本检索能力
+  - 实现音乐内容的音频特征检索
+  - 集成时间戳处理，支持音频片段精确定位
+  - _需求：多模态音频处理_
+
+**验证方式**：
+```bash
+# 验证音频搜索
+curl -X POST "http://localhost:8000/search" \
+  -H "Content-Type: application/json" \
+  -d '{"query": "测试语音", "type": "text_to_audio"}'
+
+# 验证语音转录
+python -c "
+from src.business.embedding_engine import EmbeddingEngine
+engine = EmbeddingEngine()
+result = engine.transcribe_audio('test_speech.wav')
+print(f'转录结果: {result}')
+"
+```
+
 **用户价值**：✅ 可以搜索音频文件中的语音内容，解决录音文件难以查找的问题
 
-## 阶段5（人脸识别与智能检索）
+## 阶段6（人脸识别与智能检索）
 
-### 5.1 核心功能：人脸识别系统
+### 6.1 核心功能：人脸识别系统
 
 **目标**：实现需求2中的人脸识别功能，支持预定义人脸照片+名字的关联检索
 
@@ -399,7 +633,7 @@ curl -X POST "http://localhost:8000/search" \
 
 **用户价值**：✅ 可以通过人名精确检索包含特定人物的图片和视频
 
-### 5.2 核心功能：智能检索策略
+### 6.2 核心功能：智能检索策略
 
 **目标**：实现SmartRetrievalEngine，支持查询类型识别和动态权重分配
 
@@ -440,9 +674,9 @@ curl -X POST "http://localhost:8000/search" \
 
 **用户价值**：✅ 智能识别查询意图，自动优化检索策略，提升检索精度
 
-## 阶段6（高级搜索与融合）
+## 阶段7（高级搜索与融合）
 
-### 6.1 核心功能：多模态融合搜索
+### 7.1 核心功能：多模态融合搜索
 
 **目标**：实现跨模态融合搜索，用户可以同时使用文字、图片、音频进行组合查询
 
@@ -475,7 +709,7 @@ curl -X POST "http://localhost:8000/search/fusion" \
 
 **用户价值**：✅ 提供更智能、更精准的跨模态搜索体验
 
-### 6.2 核心功能：时间线搜索与定位
+### 7.2 核心功能：时间线搜索与定位
 
 **目标**：实现基于时间线的搜索和定位功能，支持媒体文件的时间维度检索
 
@@ -510,7 +744,7 @@ curl -X POST "http://localhost:8000/search/timeline" \
 
 **用户价值**：✅ 可以按时间维度搜索媒体内容，适合会议记录、监控录像等场景
 
-### 6.3 辅助功能：高级配置管理
+### 7.3 辅助功能：高级配置管理
 
 **目标**：实现高级配置管理，支持模型参数调优和搜索策略配置
 
@@ -539,9 +773,9 @@ curl -X PUT "http://localhost:8000/config/models" \
 
 **用户价值**：✅ 支持高级用户进行模型调优和性能优化
 
-## 阶段7（Web用户界面）
+## 阶段8（Web用户界面）
 
-### 7.1 核心功能：Web前端界面开发
+### 8.1 核心功能：Web前端界面开发
 
 **目标**：实现现代化的Web用户界面，提供直观的多模态搜索体验
 
@@ -566,7 +800,7 @@ curl -X PUT "http://localhost:8000/config/models" \
 
 **用户价值**：✅ 提供直观友好的图形界面，降低使用门槛
 
-### 7.2 辅助功能：视频处理与向量化优化
+### 8.2 辅助功能：视频处理与向量化优化
 
 **技术实现**：
 - [x] [p2] 实现视频处理和向量化
@@ -581,14 +815,14 @@ curl -X PUT "http://localhost:8000/config/models" \
   - 实现结果排序算法，优先考虑多模态匹配
   - _需求：4.4, 4.5_
 
-## 阶段8（系统优化与部署）
+## 阶段9（系统优化与部署）
 
-### 8.1 核心功能：Python-native Infinity集成优化
+### 9.1 核心功能：Python-native michaelfeil/infinity 集成优化
 
-**目标**：优化Python-native Infinity模式，实现生产级性能和稳定性
+**目标**：优化 Python-native michaelfeil/infinity 模式，实现生产级性能和稳定性
 
 **技术实现**：
-- [x] [p0] Python-native EmbeddingEngine优化
+- [x] [p0] Python-native EmbeddingEngine优化（基于 michaelfeil/infinity）
   - 优化AsyncEngineArray统一管理CLIP、CLAP、Whisper模型
   - 实现统一GPU内存池管理，提升资源利用率
   - 集成智能批处理优化，提升GPU利用率
@@ -611,7 +845,7 @@ curl -X PUT "http://localhost:8000/config/models" \
 
 **用户价值**：✅ 提供高性能、稳定可靠的AI模型服务，简化部署和维护
 
-### 8.2 核心功能：系统性能优化
+### 9.2 核心功能：系统性能优化
 
 **目标**：实现系统性能优化、稳定性提升和生产环境部署
 
@@ -636,7 +870,7 @@ curl -X PUT "http://localhost:8000/config/models" \
 
 **用户价值**：✅ 提供稳定、高效、可扩展的生产级多模态搜索系统
 
-### 8.3 核心功能：时间戳处理系统
+### 9.3 核心功能：时间戳处理系统
 
 **目标**：实现±2秒精度的时间戳处理，支持多模态时间同步和精确检索
 
@@ -662,7 +896,7 @@ curl -X PUT "http://localhost:8000/config/models" \
   - 实现时间戳漂移校正：确保多模态时间同步
   - _需求：时间戳数据库设计_
 
-### 8.4 核心功能：ProcessingOrchestrator处理编排
+### 9.4 核心功能：ProcessingOrchestrator处理编排
 
 **目标**：实现统一的处理流程编排，协调各专业处理模块的调用顺序和数据流转
 
@@ -688,7 +922,7 @@ curl -X PUT "http://localhost:8000/config/models" \
   - 集成防抖处理，避免频繁文件操作导致的重复触发
   - _需求：4.1, 4.2, 4.3, 4.4, 4.5, 4.6_
 
-### 8.5 系统稳定性与部署优化
+### 9.5 系统稳定性与部署优化
 
 **技术实现**：
 - [x] [p2] 系统稳定性与部署优化
@@ -712,7 +946,7 @@ curl -X PUT "http://localhost:8000/config/models" \
   - 实现统一向量操作接口，支持不同部署模式
   - _需求：单机版vs微服务架构权衡_
 
-### 8.6 测试与质量保证
+### 9.6 测试与质量保证
 
 **技术实现**：
 - [x] [p2] Python-native模式测试套件
@@ -736,7 +970,7 @@ curl -X PUT "http://localhost:8000/config/models" \
   - 创建离线部署测试：本地模型加载、零网络依赖验证
   - _需求：7.1, 7.2, 9.1, 9.2, 9.3, 10.1_
 
-### 8.7 文档与部署准备
+### 9.7 文档与部署准备
 
 **技术实现**：
 - [x] [p2] 创建用户文档和部署指南
@@ -758,9 +992,9 @@ curl -X PUT "http://localhost:8000/config/models" \
   - 创建容器化部署配置（Docker/Kubernetes）
   - _需求：9.6, 11.7_
 
-## 阶段9（PySide6桌面应用）
+## 阶段10（PySide6桌面应用 ）
 
-### 9.1 核心功能：PySide6桌面应用开发
+### 10.1 核心功能：PySide6桌面应用开发
 
 **目标**：实现桌面应用程序，提供本地化的多模态搜索体验
 
@@ -785,7 +1019,7 @@ curl -X PUT "http://localhost:8000/config/models" \
 
 **用户价值**：✅ 提供本地化、高性能的桌面搜索体验，支持离线使用
 
-### 9.2 辅助功能：桌面应用界面组件
+### 10.2 辅助功能：桌面应用界面组件
 
 **技术实现**：
 - [x] [p3] 实现PySide6桌面应用框架
@@ -807,7 +1041,7 @@ curl -X PUT "http://localhost:8000/config/models" \
   - 实现可点击的时间戳注释，跳转到特定视频位置
   - _需求：4.1, 4.2, 4.3, 4.4, 4.5, 10.3, 10.4, 1.5_
 
-### 9.3 辅助功能：配置管理界面
+### 10.3 辅助功能：配置管理界面
 
 **技术实现**：
 - [x] [p2] 实现配置管理界面
@@ -826,11 +1060,13 @@ curl -X PUT "http://localhost:8000/config/models" \
 
 ### 开发建议
 
-1. **优先顺序**：按照阶段1→2→3→4→5→6→7→8的顺序实施
-2. **核心功能优先**：阶段5的人脸识别和智能检索是核心差异化功能，必须实现
-3. **Web优先**：建议优先完成Web用户界面（阶段7），提供完整的用户体验
-4. **桌面UI**：PySide6桌面应用（阶段9）将在所有功能正常运行后开始开发
-5. **AI辅助**：Web前端开发在AI辅助下效率更高、质量更好，建议充分利用AI工具
+1. **优先顺序**：按照阶段1→2→3→4→5→6→7→8→9的顺序实施
+2. **基础优先**：阶段1-3建立系统基础架构，必须稳固实现
+3. **核心功能优先**：阶段6的人脸识别和智能检索是核心差异化功能，必须实现
+4. **Web优先**：建议优先完成Web用户界面（阶段8），提供完整的用户体验
+5. **桌面UI**：PySide6桌面应用（阶段10）将在所有功能正常运行后开始开发
+6. **AI辅助**：Web前端开发在AI辅助下效率更高、质量更好，建议充分利用AI工具
+7. **测试驱动**：每个阶段都包含验证方式，确保功能正确性后再进入下一阶段
 
 ### 技术选型理由
 

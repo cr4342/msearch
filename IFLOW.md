@@ -14,6 +14,7 @@ msearch 是一款跨平台的多模态桌面搜索软件，旨在成为用户的
 - **松耦合架构**: 数据库与业务逻辑分离，支持未来技术栈更换
 - **国内网络优化**: 自动配置国内镜像源，解决网络访问问题
 - **人脸识别增强**: 集成先进的人脸检测和识别能力
+- **智能音频处理**: 使用inaSpeechSegmenter自动分类音频内容（音乐/语音），基于质量检测过滤低质量片段
 
 ## 技术架构
 
@@ -25,7 +26,8 @@ msearch 是一款跨平台的多模态桌面搜索软件，旨在成为用户的
 | **API网关** | **FastAPI** | 异步高性能，自动生成OpenAPI文档 |
 | **向量引擎** | **Infinity Python-native** | 零HTTP开销推理，直接内存调用 |
 | **多模态模型** | **CLIP/CLAP/Whisper** | 专业化模型架构，针对不同模态优化 |
-| **人脸识别** | **FaceNet + MTCNN** | 高精度人脸检测和特征提取 |
+| **人脸识别** | **FaceNet + MTCNN + InsightFace** | 高精度人脸检测和特征提取 |
+| **音频分类** | **inaSpeechSegmenter** | 智能音频内容分类（音乐/语音） |
 | **向量数据库** | **Qdrant** | Rust高性能存储，本地部署，毫秒级检索 |
 | **元数据存储** | **SQLite** | ACID事务支持，零配置，文件级便携 |
 | **媒体处理** | **FFmpeg + OpenCV + Librosa** | 专业级预处理，场景检测+智能切片 |
@@ -77,6 +79,8 @@ graph TB
         Whisper[Whisper 模型]
         FaceNet[FaceNet 模型]
         MTCNN[MTCNN 检测器]
+        InsightFace[InsightFace 模型]
+        inaSpeechSegmenter[inaSpeechSegmenter 分类器]
     end
     
     subgraph "存储层"
@@ -105,6 +109,8 @@ graph TB
     ModelManager --> Infinity
     FaceModelManager --> FaceNet
     FaceModelManager --> MTCNN
+    FaceModelManager --> InsightFace
+    ModelManager --> inaSpeechSegmenter
     SmartRetrieval --> DBAdapter
     SmartRetrieval --> TemporalLocalizer
     SmartRetrieval --> MultimodalFusion
@@ -131,52 +137,36 @@ msearch/
 ├── requirements.txt        # Python依赖清单
 ├── config/                 # 配置文件目录
 │   └── config.yml          # 主配置文件
-├── data/                   # 数据目录
-│   ├── database/           # 数据库文件
-│   ├── logs/               # 日志文件
-│   ├── temp/               # 临时文件目录
-│   └── thumbnails/         # 缩略图目录
-├── docs/                   # 文档目录
-│   ├── api_documentation.md # API文档
-│   ├── deployment_and_operations.md # 部署和运维文档
-│   ├── deployment_guide.md # 部署指南
-│   ├── design.md           # 系统设计文档
-│   ├── development_plan.md # 开发计划文档
-│   ├── processing_orchestrator.md # 处理编排器文档
-│   ├── README.md           # 文档目录说明
-│   ├── requirements.md     # 需求文档
-│   ├── technical_implementation.md # 技术实现文档
-│   ├── test_strategy.md    # 测试策略文档
-│   ├── troubleshooting.md  # 故障排除文档
-│   └── user_manual.md      # 用户手册
-├── examples/               # 示例代码目录
-│   └── logging_examples.py # 日志使用示例
+├── offline/                # 离线资源目录
+│   ├── bin/                # 二进制文件（Qdrant等）
+│   ├── github/             # GitHub相关资源（FFmpeg等）
+│   ├── models/             # AI模型文件
+│   └── packages/           # Python依赖包
 ├── scripts/                # 脚本目录
-│   ├── deploy_msearch.sh   # 部署脚本
+│   ├── deploy_msearch.sh   # 一键部署脚本
 │   ├── download_model_resources.sh # 离线资源下载脚本
 │   ├── start_all_services.sh # 启动所有服务脚本
-│   └── stop_all_services.sh # 停止所有服务脚本
+│   ├── stop_all_services.sh # 停止所有服务脚本
+│   ├── start_qdrant.sh     # 启动Qdrant服务脚本
+│   ├── stop_qdrant.sh      # 停止Qdrant服务脚本
+│   ├── start_infinity_services.sh # 启动Infinity服务脚本
+│   └── stop_infinity_services.sh # 停止Infinity服务脚本
 ├── src/                    # 源代码目录
 │   ├── api/                # API服务层
-│   │   ├── __init__.py
 │   │   ├── main.py         # FastAPI主应用
 │   │   ├── routes/         # API路由
-│   │   │   ├── __init__.py
 │   │   │   ├── search.py   # 检索API
 │   │   │   ├── config.py   # 配置API
 │   │   │   ├── tasks.py    # 任务控制API
 │   │   │   └── status.py   # 状态查询API
 │   │   ├── models/         # API数据模型
-│   │   │   ├── __init__.py
 │   │   │   ├── search_models.py # 检索请求/响应模型
 │   │   │   ├── config_models.py # 配置模型
 │   │   │   └── common_models.py # 通用模型
 │   │   └── middleware/     # 中间件
-│   │       ├── __init__.py
 │   │       ├── cors.py     # CORS中间件
 │   │       └── error_handler.py # 错误处理中间件
 │   ├── core/               # 核心组件
-│   │   ├── __init__.py
 │   │   ├── config_manager.py     # 配置管理器
 │   │   ├── config.py             # 配置类定义
 │   │   ├── file_type_detector.py # 文件类型检测器
@@ -184,33 +174,34 @@ msearch/
 │   │   ├── logging_config.py     # 日志配置
 │   │   └── infinity_manager.py   # Infinity服务管理器
 │   ├── business/           # 业务逻辑层
-│   │   ├── __init__.py
-│   │   ├── processing_orchestrator.py # ProcessingOrchestrator处理编排器
-│   │   ├── smart_retrieval.py    # SmartRetrievalEngine智能检索
-│   │   ├── multimodal_fusion_engine.py # MultiModalFusionEngine融合引擎
+│   │   ├── processing_orchestrator.py # 处理编排器
+│   │   ├── smart_retrieval.py    # 智能检索引擎
+│   │   ├── multimodal_fusion_engine.py # 多模态融合引擎
 │   │   ├── temporal_localization_engine.py # 时序定位引擎
-│   │   ├── model_manager.py      # EmbeddingEngine向量化引擎
-│   │   ├── face_model_manager.py # FaceManager人脸管理器
-│   │   ├── file_monitor.py       # FileMonitor文件监控服务
-│   │   └── load_balancer.py      # LoadBalancer负载均衡器
+│   │   ├── model_manager.py      # 模型管理器
+│   │   ├── face_model_manager.py # 人脸模型管理器
+│   │   ├── file_monitor.py       # 文件监控服务
+│   │   ├── load_balancer.py      # 负载均衡器
+│   │   ├── embedding_engine.py   # 向量化引擎
+│   │   ├── face_manager.py       # 人脸管理器
+│   │   ├── media_processor.py    # 媒体处理器
+│   │   ├── search_engine.py      # 搜索引擎
+│   │   └── task_manager.py       # 任务管理器
 │   ├── processors/         # 专业处理器
-│   │   ├── __init__.py
-│   │   └── media_processor.py    # MediaProcessor媒体预处理器
+│   │   ├── audio_classifier.py   # 音频分类器
+│   │   ├── audio_processor.py    # 音频处理器
+│   │   ├── image_processor.py    # 图像处理器
+│   │   ├── media_processor.py    # 媒体处理器
+│   │   ├── text_processor.py     # 文本处理器
+│   │   ├── timestamp_processor.py # 时间戳处理器
+│   │   └── video_processor.py    # 视频处理器
 │   ├── storage/            # 存储层
-│   │   ├── __init__.py
 │   │   ├── vector_store.py       # Qdrant向量数据库客户端
 │   │   ├── face_database.py      # 人脸数据库管理
 │   │   ├── db_adapter.py         # 数据库适配器
 │   │   └── database.py           # 数据库连接
 │   ├── utils/              # 工具函数
-│   │   ├── __init__.py
-│   │   ├── file_utils.py         # 文件操作工具
-│   │   ├── image_utils.py        # 图像处理工具
-│   │   ├── video_utils.py        # 视频处理工具
-│   │   ├── audio_utils.py        # 音频处理工具
-│   │   └── vector_utils.py       # 向量操作工具
 │   └── gui/                # 桌面GUI应用
-│       ├── __init__.py     # Python包初始化文件
 │       ├── api_client.py   # API客户端
 │       ├── app.py          # GUI应用主类
 │       ├── gui_main.py     # GUI入口点
@@ -222,12 +213,14 @@ msearch/
 ├── tests/                  # 测试目录
 │   ├── conftest.py         # 测试配置
 │   ├── run_tests.py        # 测试运行脚本
+│   ├── test_basic_structure.py # 基本结构测试
 │   ├── integration/        # 集成测试
-│   │   ├── __init__.py     # Python包初始化文件
 │   │   └── test_integration.py # 集成测试
 │   └── unit/               # 单元测试
+│       ├── test_api_modules.py # API模块测试
 │       ├── test_file_type_detector.py # 文件类型检测器测试
 │       ├── test_load_balancer.py # 负载均衡器测试
+│       ├── test_media_processor.py # 媒体处理器测试
 │       └── test_processing_orchestrator.py # 处理编排器测试
 └── webui/                  # Web用户界面
     ├── index.html          # 主页面
@@ -273,6 +266,7 @@ msearch/
 - **Whisper模型**: 语音转文本检索
 - **智能模型选择**: 根据硬件环境自动选择最优模型
 - **批处理优化**: 提升GPU利用率
+- **音频智能处理**: 使用inaSpeechSegmenter自动分类音频内容并进行质量过滤
 
 ### 3. 人脸模型管理器 (FaceModelManager)
 
@@ -280,6 +274,7 @@ msearch/
 
 - **MTCNN检测器**: 高精度人脸检测
 - **FaceNet模型**: 人脸特征向量提取
+- **InsightFace模型**: 增强的人脸识别能力
 - **人脸数据库**: 人脸特征向量存储
 - **相似度匹配**: 人脸特征对比和识别
 - **批量处理**: 支持批量人脸检测和特征提取
@@ -288,10 +283,11 @@ msearch/
 
 智能检索和结果融合：
 
-- **查询类型识别**: 自动识别查询意图
+- **查询类型识别**: 自动识别查询意图（人名、音频、视觉、通用）
 - **动态权重分配**: 根据查询类型调整模型权重
 - **多模态融合**: 融合不同模型的检索结果
 - **时序定位**: 精确定位视频/音频中的相关片段
+- **人脸预检索**: 针对人名查询启用人脸预检索生成文件白名单
 
 ### 5. 负载均衡器 (LoadBalancer)
 
@@ -331,7 +327,7 @@ msearch/
 
 1. 媒体处理过程中检测到人脸
 2. MTCNN检测器定位人脸区域
-3. FaceNet模型提取人脸特征向量
+3. FaceNet/InsightFace模型提取人脸特征向量
 4. 人脸特征向量存储到人脸数据库
 5. 与已知人名档案进行比对
 6. 将分类结果存入数据库
@@ -345,6 +341,16 @@ msearch/
 4. 向量存储服务在 Qdrant 中搜索相似人脸向量
 5. 根据向量ID查询 SQLite 获取文件和片段信息
 6. 结果聚合后返回给用户
+
+### 智能音频处理流程
+
+1. 媒体处理过程中检测到音频内容
+2. inaSpeechSegmenter自动分类音频片段（音乐/语音）
+3. 计算音频质量分数并过滤低质量片段
+4. 音乐片段使用CLAP模型向量化
+5. 语音片段使用Whisper转录后向量化
+6. 向量存储服务将向量存入 Qdrant
+7. 支持基于音频内容的跨模态检索
 
 ## 智能检索策略
 
@@ -388,6 +394,7 @@ msearch/
 - facenet-pytorch>=2.5.0 - 人脸识别
 - mtcnn>=0.1.1 - 人脸检测
 - insightface>=0.7.0 - 人脸分析
+- sentence-transformers>=2.2.0 - 多语言文本嵌入
 
 ### 媒体处理
 - pillow>=10.0.0 - 图像处理
@@ -424,11 +431,11 @@ bash scripts/download_model_resources.sh
 ### 启动服务
 
 ```bash
+# 启动所有服务（包括Qdrant和Infinity）
+bash scripts/start_all_services.sh
+
 # 启动API服务（主项目）
 python src/api/main.py
-
-# 启动所有服务
-bash scripts/start_all_services.sh
 
 # 运行测试
 python tests/run_tests.py
@@ -441,7 +448,23 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 
 - **API服务**: 127.0.0.1:8000
 - **Qdrant数据库**: 127.0.0.1:6333
-- **Infinity服务**: 7997-7999 (CLIP/CLAP/Whisper)
+- **Infinity服务**: 
+  - CLIP: 7997
+  - CLAP: 7998  
+  - Whisper: 7999
+
+### 一键部署
+
+```bash
+# 在线部署
+bash scripts/deploy_msearch.sh
+
+# 离线部署（需要先下载离线资源）
+bash scripts/deploy_msearch.sh --offline
+
+# 强制重新部署
+bash scripts/deploy_msearch.sh --force
+```
 
 ## 开发实践
 
@@ -471,6 +494,7 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 - **媒体处理**: 视频/音频处理参数
 - **人脸识别**: 检测和匹配参数
 - **智能检索**: 权重配置和关键词识别
+- **音频处理**: inaSpeechSegmenter配置和质量检测参数
 
 ### 日志系统
 
@@ -480,6 +504,7 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 - 性能指标日志帮助优化系统性能
 - 可配置的日志级别和格式
 - 自动日志轮转防止日志文件过大
+- 多级别日志配置（DEBUG/INFO/WARNING/ERROR/CRITICAL）
 
 ## 硬件自适应
 
@@ -495,19 +520,22 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 项目支持国内镜像优化部署：
 - 使用 https://pypi.tuna.tsinghua.edu.cn/simple 作为PyPI镜像
 - 使用 https://hf-mirror.com 作为HuggingFace镜像
-- 使用 https://gitclone.com 作为GitHub镜像
+- 使用 https://kkgithub.com/ 作为GitHub镜像
+
+### 离线部署
+
+项目支持完整的离线部署：
+- 离线资源下载脚本（`scripts/download_model_resources.sh`）
+- 一键部署脚本（`scripts/deploy_msearch.sh`）
+- 预下载模型文件和依赖包
+- 本地Qdrant二进制文件包含
 
 ### 绿色安装部署
 
 项目支持绿色安装部署：
-- 离线资源下载脚本
-- 预编译依赖包
-
-### 离线部署
-
-项目支持离线部署：
-- 预下载模型文件
-- 离线依赖包
+- 所有依赖和模型可离线下载
+- 无需网络连接即可完成部署
+- 支持断点续传和增量下载
 
 ## 测试和质量保证
 
@@ -516,7 +544,7 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 1. **环境变量注入**：支持环境变量一次性注入，简化部署
 2. **跨平台兼容性**：确保软件能在不同系统间迁移和部署
 3. **真实大模型测试**：完成文本和图片检索的真实大模型测试
-4. **测试目录**：测试时在test目录下进行，包含创建的虚拟环境等尽可能还原真实安装场景。
+4. **测试目录**：测试时在test目录下进行，包含创建的虚拟环境等尽可能还原真实安装场景
 
 ### 测试基础设施
 
@@ -524,6 +552,7 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 - **集成测试**: 验证组件间协作
 - **覆盖率报告**: 确保代码质量
 - **持续集成**: GitHub Actions自动化测试
+- **基本结构测试**: 验证模块导入和基本实例化
 
 ### 部署和迁移测试
 
@@ -548,6 +577,7 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 11. 支持多语言界面
 12. 增加数据备份和恢复功能
 13. 完善WebUI功能和用户体验
+14. 集成更多AI模型和功能
 
 ---
 

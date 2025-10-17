@@ -1,5 +1,7 @@
 # 智能多模态检索系统设计文档
 
+> **重要技术说明**：本项目采用 **michaelfeil/infinity** (https://github.com/michaelfeil/infinity) 作为核心AI推理引擎。Infinity 是一个专为文本嵌入、重排序模型、CLIP、CLAP 和 ColPali 设计的高吞吐量、低延迟服务引擎，支持多种后端（CUDA、OpenVINO、CPU）和 Python-native 集成模式。
+
 ## 1. 项目概述
 
 ### 1.1 项目愿景
@@ -30,7 +32,7 @@
 |---------|---------|---------|---------|
 | **用户界面层** | PySide6 | 跨平台原生UI | 系统深度集成，严格前后端分离 |
 | **API服务层** | FastAPI | 异步高性能 | 自动文档生成，完整RESTful支持 |
-| **AI推理层** | Infinity | 多模型服务引擎 | 零配置部署，GPU自动调度 |
+| **AI推理层** | michaelfeil/infinity | 多模型服务引擎 | 零配置部署，GPU自动调度 |
 | **向量存储层** | Qdrant | 高性能向量数据库 | 本地部署，毫秒级检索响应 |
 | **元数据层** | SQLite | 轻量级关系数据库 | 零配置，文件级数据便携性 |
 
@@ -65,7 +67,9 @@
 - **核心能力**：智能音频内容分类，精准区分音乐、语音、噪音
 - **应用场景**：音频预处理、处理策略路由
 
-#### 1.3.4 Infinity引擎优势
+#### 1.3.4 michaelfeil/infinity 引擎优势
+
+> **重要说明**：本项目采用 **michaelfeil/infinity** (https://github.com/michaelfeil/infinity) 作为多模型服务引擎。Infinity 是一个专为文本嵌入、重排序模型、CLIP、CLAP 和 ColPali 设计的高吞吐量、低延迟服务引擎。
 
 | 特性 | 技术优势 | 业务价值 |
 |------|---------|---------|
@@ -116,7 +120,7 @@
 | **用户界面层** | 用户交互、结果展示、进度监控 | 主界面、检索界面、进度面板 |
 | **API服务层** | 请求处理、路由分发 | FastAPI服务、路由处理器 |
 | **业务逻辑层** | 业务流程编排、策略决策、结果处理 | ProcessingOrchestrator、MediaProcessor |
-| **AI推理层** | 向量生成、模型调用、结果处理 | EmbeddingEngine、InfinityClient |
+| **AI推理层** | 向量生成、模型调用、结果处理 | EmbeddingEngine、michaelfeil/infinity |
 | **数据存储层** | 向量存储、元数据管理、索引维护 | QdrantClient、SQLiteManager |
 
 #### 2.2.2 各层间数据流转
@@ -515,7 +519,7 @@ graph TB
 
 #### 3.3.4 EmbeddingEngine组件（重新设计）
 
-**核心职责**：使用Infinity Python-native模式统一管理AI模型，生成媒体内容向量。
+**核心职责**：使用 michaelfeil/infinity Python-native模式统一管理AI模型，生成媒体内容向量。
 
 **Python-native向量化架构**：
 
@@ -572,7 +576,7 @@ AI推理层负责向量生成、模型调用和结果处理，是系统智能能
 
 #### 3.4.1 EmbeddingEngine组件（Python-native）
 
-**核心职责**：直接使用Infinity Python-native模式，统一管理多个AI模型。
+**核心职责**：直接使用 michaelfeil/infinity Python-native模式，统一管理多个AI模型。
 
 **简化Python-native架构**：
 
@@ -3625,7 +3629,7 @@ msearch/
   - 支持并发处理控制，避免资源过度占用
   - 集成错误恢复和重试机制
 
-- `embedding_engine.py`: 向量化引擎，集成Infinity Python-native模式
+- `embedding_engine.py`: 向量化引擎，集成 michaelfeil/infinity Python-native模式
   - 实现多模型统一管理（CLIP、CLAP、Whisper）
   - 提供批处理优化，提升GPU利用率
   - 支持动态模型切换和热加载
@@ -3879,13 +3883,15 @@ graph TB
 
 这个优化后的架构设计更加合理，既保证了系统的高性能，又确保了良好的可维护性和扩展性。通过严格的编码规范和测试要求，确保代码质量和系统稳定性。
 
-## 8. Infinity部署与离线部署方案
+## 8. michaelfeil/infinity 部署与离线部署方案
 
-### 8.1 Infinity部署方案
+### 8.1 michaelfeil/infinity 部署方案
 
 #### 8.1.1 Python-native模式部署
 
-采用Infinity的Python-native模式，直接集成到应用中：
+采用 **michaelfeil/infinity** 的Python-native模式，直接集成到应用中：
+
+> **项目说明**：michaelfeil/infinity 是一个专为文本嵌入、重排序模型、CLIP、CLAP 和 ColPali 设计的高吞吐量、低延迟服务引擎。项目地址：https://github.com/michaelfeil/infinity
 
 ```python
 # 直接在Python代码中使用，无需独立服务
@@ -3970,7 +3976,7 @@ graph LR
 
 #### 8.2.2 非Docker模式下使用本地指定目录模型
 
-Infinity支持直接使用本地指定目录下的模型文件，无需从HuggingFace下载：
+**michaelfeil/infinity** 支持直接使用本地指定目录下的模型文件，无需从HuggingFace下载：
 
 **环境变量配置**：
 ```bash
@@ -4046,7 +4052,7 @@ engine_array = AsyncEngineArray.from_args(engine_args)
 **配置注意事项**：
 - 确保本地模型目录结构与HuggingFace缓存结构一致
 - 模型文件需要预先下载到指定目录
-- 路径权限需要正确设置，确保Infinity服务可访问
+- 路径权限需要正确设置，确保 michaelfeil/infinity 服务可访问
 
 **性能优化建议**：
 - 根据硬件配置调整设备参数（CPU/GPU）
@@ -4107,10 +4113,10 @@ monitoring:
 
 ### 9.1 关键技术决策
 
-#### 9.1.1 Python-native Infinity集成
+#### 9.1.1 Python-native michaelfeil/infinity 集成
 
 **决策理由**：
-- **性能优势**：Python-native模式比HTTP服务模式性能更高
+- **性能优势**：michaelfeil/infinity Python-native模式比HTTP服务模式性能更高
 - **开发简化**：无需管理独立服务进程，降低开发和部署复杂度
 - **资源优化**：统一的GPU内存管理和批处理优化
 - **架构简化**：直接集成到EmbeddingEngine，减少组件层次
@@ -4160,7 +4166,7 @@ class EmbeddingEngine:
 graph TB
     A[PySide6 UI] --> B[FastAPI]
     B --> C[业务逻辑层]
-    C --> D[EmbeddingEngine<br/>Python-native Infinity]
+    C --> D[EmbeddingEngine<br/>Python-native michaelfeil/infinity]
     C --> E[本地Qdrant]
     C --> F[SQLite]
 ```
@@ -4172,7 +4178,7 @@ graph TB
     B --> C[检索服务]
     B --> D[处理服务]
     C --> E[Qdrant集群]
-    D --> F[Infinity集群]
+    D --> F[michaelfeil/infinity集群]
     C --> G[元数据服务]
     G --> H[PostgreSQL]
 ```
@@ -4212,10 +4218,10 @@ graph LR
     A[原架构] --> A1[EmbeddingEngine]
     A1 --> A2[InfinityClient]
     A2 --> A3[HTTP服务]
-    A3 --> A4[Infinity进程]
+    A3 --> A4[michaelfeil/infinity进程]
     
     B[优化后] --> B1[EmbeddingEngine]
-    B1 --> B2[Python-native Infinity]
+    B1 --> B2[Python-native michaelfeil/infinity]
 ```
 
 **开发复杂度对比**：
@@ -4233,7 +4239,7 @@ graph LR
 **统一的EmbeddingEngine设计**：
 ```python
 class EmbeddingEngine:
-    """统一的向量化引擎，集成Infinity Python-native模式"""
+    """统一的向量化引擎，集成 michaelfeil/infinity Python-native模式"""
     
     def __init__(self, config):
         self.config = config
@@ -4297,5 +4303,25 @@ class EmbeddingEngine:
 
 
 # 10 相关文档及资料参考
-## 10.1 相关文档
- [文档索引](README.md) | [需求文档](requirements.md) | [开发计划](development_plan.md) | [测试策略](test_strategy.md) | [部署指南](deployment_guide.md)
+## 10.1 ## 快速导航
+
+### 🚀 快速开始
+1. 阅读[需求文档](requirements.md)了解系统功能
+2. 查看[设计文档](design.md)了解技术架构和项目结构
+3. 按照[部署指南](deployment_guide.md)安装系统
+4. 参考[用户手册](user_manual.md)开始使用
+
+### 👨‍💻 开发者
+1. 查看[开发计划](development_plan.md)了解开发路线图
+2. 阅读[设计文档](design.md)第8节了解项目结构设计
+3. 参考[测试策略](test_strategy.md)进行测试开发
+4. 使用[API文档](api_documentation.md)进行接口开发
+
+### 🔧 运维人员  
+1. 按照[部署指南](deployment_guide.md)部署系统
+2. 参考[API文档](api_documentation.md)进行系统监控
+3. 查看[测试策略](test_strategy.md)了解质量保证流程
+
+### 👤 最终用户
+1. 阅读[用户手册](user_manual.md)学习使用方法
+2. 参考[需求文档](requirements.md)了解功能特性
