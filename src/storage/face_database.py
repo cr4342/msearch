@@ -211,6 +211,28 @@ class FaceDatabase:
             matches.sort(key=lambda x: x['similarity'], reverse=True)
             return matches[:top_k]
     
+    def get_person_by_name(self, person_name: str) -> Dict[str, Any]:
+        """根据人名获取人物信息"""
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.cursor()
+            
+            # 支持别名匹配
+            cursor.execute("""
+                SELECT id, name, aliases, description
+                FROM persons
+                WHERE name = ? OR aliases LIKE ?
+            """, (person_name, f'%"{person_name}"%'))
+            
+            row = cursor.fetchone()
+            if row:
+                return {
+                    'id': row[0],
+                    'name': row[1],
+                    'aliases': json.loads(row[2] or '[]'),
+                    'description': row[3]
+                }
+            return None
+    
     def get_person_files(self, person_name: str) -> List[str]:
         """获取包含指定人物的所有文件ID"""
         with sqlite3.connect(self.db_path) as conn:

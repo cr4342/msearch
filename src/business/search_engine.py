@@ -5,6 +5,7 @@ import numpy as np
 from typing import Dict, Any, List, Union
 import logging
 import uuid
+import asyncio
 
 logger = logging.getLogger(__name__)
 
@@ -47,9 +48,13 @@ class SearchEngine:
             
             logger.debug(f"执行向量搜索: 集合={collection_name}, top_k={top_k}")
             
+            # 将numpy数组转换为列表
+            if isinstance(query_vector, np.ndarray):
+                query_vector = query_vector.tolist()
+            
             # 调用向量存储进行搜索
-            results = await self.vector_store.search_similar(
-                query_vector, collection_name, top_k
+            results = await self.vector_store.search(
+                collection_name, query_vector, top_k
             )
             
             # 过滤低相似度结果

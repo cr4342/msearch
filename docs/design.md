@@ -120,7 +120,7 @@
 | **用户界面层** | 用户交互、结果展示、进度监控 | 主界面、检索界面、进度面板 |
 | **API服务层** | 请求处理、路由分发 | FastAPI服务、路由处理器 |
 | **业务逻辑层** | 业务流程编排、策略决策、结果处理 | ProcessingOrchestrator、MediaProcessor |
-| **AI推理层** | 向量生成、模型调用、结果处理 | EmbeddingEngine、michaelfeil/infinity |
+| **AI推理层** | 向量生成、模型调用、结果处理 | michaelfeil/infinity集成的EmbeddingEngine |
 | **数据存储层** | 向量存储、元数据管理、索引维护 | QdrantClient、SQLiteManager |
 
 #### 2.2.2 各层间数据流转

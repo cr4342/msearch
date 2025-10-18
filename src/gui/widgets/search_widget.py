@@ -16,7 +16,7 @@ from PySide6.QtWidgets import (
     QSizePolicy, QSpacerItem, QFileDialog, QMessageBox, QTabWidget
 )
 from PySide6.QtCore import (
-    Qt, QTimer, QThread, Signal, QObject, QUrl, QSize, pyqtSignal, QPropertyAnimation
+    Qt, QTimer, QThread, Signal, QObject, QUrl, QSize, QPropertyAnimation
 )
 from PySide6.QtGui import (
     QIcon, QPixmap, QFont, QAction, QPalette, QColor, QDesktopServices, QDragEnterEvent, QDropEvent
@@ -32,9 +32,9 @@ class SearchWorker(QObject):
     """搜索工作线程"""
     
     # 信号定义
-    search_completed = pyqtSignal(list)  # 搜索完成，返回结果列表
-    search_failed = pyqtSignal(str)      # 搜索失败，返回错误信息
-    progress_updated = pyqtSignal(int)   # 进度更新
+    search_completed = Signal(list)  # 搜索完成，返回结果列表
+    search_failed = Signal(str)      # 搜索失败，返回错误信息
+    progress_updated = Signal(int)   # 进度更新
     
     def __init__(self):
         super().__init__()
@@ -309,8 +309,8 @@ class SearchWidget(QWidget):
     """搜索界面组件"""
     
     # 信号定义
-    status_message_changed = pyqtSignal(str)
-    result_selected = pyqtSignal(dict)  # 结果被选中
+    status_message_changed = Signal(str)
+    result_selected = Signal(dict)  # 结果被选中
     
     def __init__(self, api_client=None, parent=None):
         super().__init__(parent)

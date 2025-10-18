@@ -278,6 +278,8 @@ class ProcessingOrchestrator:
                     frame_metadata = metadata.copy()
                     frame_metadata['timestamp'] = frame_vector_data['timestamp']
                     frame_metadata['frame_index'] = frame_vector_data['frame_index']
+                    frame_metadata['start_time'] = frame_vector_data.get('start_time', frame_vector_data['timestamp'])
+                    frame_metadata['end_time'] = frame_vector_data.get('end_time', frame_vector_data['timestamp'])
                     
                     await self.vector_store.store_vector(vector_id, vector, frame_metadata, collection_name)
                     
@@ -291,6 +293,8 @@ class ProcessingOrchestrator:
                     audio_metadata = metadata.copy()
                     audio_metadata['start_time'] = audio_vector_data['start_time']
                     audio_metadata['end_time'] = audio_vector_data['end_time']
+                    # 添加中间时间戳用于检索
+                    audio_metadata['timestamp'] = (audio_vector_data['start_time'] + audio_vector_data['end_time']) / 2
                     
                     await self.vector_store.store_vector(vector_id, vector, audio_metadata, collection_name)
             
@@ -377,25 +381,3 @@ if __name__ == "__main__":
     # 处理文件 (需要实际的文件路径)
     # result = asyncio.run(orchestrator.process_file("path/to/file.jpg"))
     # print(result)
-
-
-# 全局处理编排器实例
-_processing_orchestrator = None
-
-
-def get_processing_orchestrator(config: Dict[str, Any] = None) -> ProcessingOrchestrator:
-    """
-    获取全局处理编排器实例
-    
-    Args:
-        config: 配置字典，首次调用时需要提供
-        
-    Returns:
-        处理编排器实例
-    """
-    global _processing_orchestrator
-    if _processing_orchestrator is None:
-        if config is None:
-            raise ValueError("首次调用get_processing_orchestrator时必须提供config参数")
-        _processing_orchestrator = ProcessingOrchestrator(config)
-    return _processing_orchestrator

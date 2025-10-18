@@ -25,6 +25,7 @@ inaspeechsegmenter>=0.0.9
 facenet-pytorch>=2.5.0
 mtcnn>=0.1.1
 insightface>=0.7.0
+infinity-emb>=0.0.20
 
 # 其他工具
 tqdm>=4.65.0

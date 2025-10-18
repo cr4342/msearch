@@ -51,55 +51,80 @@ class TemporalLocalizationEngine:
         # 时间窗口配置
         self.time_window_size = 5  # 时间窗口大小（秒）
         self.min_confidence = 0.3  # 最小置信度阈值
+        self.max_results = 10      # 最大返回结果数
+        
+        # 精度控制配置
+        self.timestamp_precision = 1  # 时间戳精度（小数位数）
         
         logger.info("时间定位引擎初始化完成")
     
-    async def fuse_temporal_results(self, 
-                                   visual_matches: List[TimestampMatch],
-                                   audio_matches: List[TimestampMatch],
-                                   speech_matches: List[TimestampMatch],
-                                   weights: Optional[Dict[str, float]] = None) -> List[FusedTimestamp]:
+    def set_precision(self, precision: int) -> None:
         """
-        融合多模态的时间戳结果
+        设置时间戳精度
         
         Args:
-            visual_matches: 视觉模态匹配结果
-            audio_matches: 音频模态匹配结果
-            speech_matches: 语音模态匹配结果
-            weights: 各模态权重配置
+            precision: 小数位数，范围1-3
+        """
+        if 1 <= precision <= 3:
+            self.timestamp_precision = precision
+            logger.info(f"时间戳精度设置为: {precision}位小数")
+        else:
+            logger.warning(f"无效的精度值: {precision}，使用默认精度1")
+    
+    def set_window_size(self, window_size: float) -> None:
+        """
+        设置时间窗口大小
+        
+        Args:
+            window_size: 窗口大小（秒），范围0.5-10
+        """
+        if 0.5 <= window_size <= 10:
+            self.time_window_size = window_size
+            logger.info(f"时间窗口大小设置为: {window_size}秒")
+        else:
+            logger.warning(f"无效的窗口大小: {window_size}，使用默认大小5")
+    
+    def _resolve_timestamp_conflicts(self, timestamps: List[FusedTimestamp], min_distance: float = 2.0) -> List[FusedTimestamp]:
+        """
+        解决时间戳冲突，合并距离太近的时间戳
+        
+        Args:
+            timestamps: 时间戳列表
+            min_distance: 最小距离（秒）
             
         Returns:
-            融合后的时间戳结果列表
+            处理后的时间戳列表
         """
-        logger.info(f"开始多模态时间戳融合: visual={len(visual_matches)}, "
-                   f"audio={len(audio_matches)}, speech={len(speech_matches)}")
-        
-        try:
-            # 使用配置权重或默认权重
-            if weights is None:
-                weights = self.default_weights
-            
-            # 收集所有时间戳到时间窗口
-            time_windows = self._create_time_windows(visual_matches, audio_matches, speech_matches)
-            
-            # 计算每个时间窗口的融合得分
-            fused_results = []
-            for window_center, window_data in time_windows.items():
-                fused_timestamp = self._calculate_fused_score(window_data, weights)
-                
-                # 过滤低置信度结果
-                if fused_timestamp.confidence >= self.min_confidence:
-                    fused_results.append(fused_timestamp)
-            
-            # 按融合总分排序
-            fused_results.sort(key=lambda x: x.total_score, reverse=True)
-            
-            logger.info(f"多模态时间戳融合完成，返回 {len(fused_results)} 个融合结果")
-            return fused_results
-            
-        except Exception as e:
-            logger.error(f"多模态时间戳融合失败: {e}")
+        if not timestamps:
             return []
+        
+        # 按时间戳排序
+        sorted_timestamps = sorted(timestamps, key=lambda x: x.timestamp)
+        resolved = [sorted_timestamps[0]]
+        
+        for ts in sorted_timestamps[1:]:
+            last_ts = resolved[-1]
+            if abs(ts.timestamp - last_ts.timestamp) >= min_distance:
+                resolved.append(ts)
+            else:
+                # 合并冲突的时间戳，保留分数更高的
+                if ts.total_score > last_ts.total_score:
+                    resolved[-1] = ts
+                logger.debug(f"合并冲突时间戳: {last_ts.timestamp} 和 {ts.timestamp}")
+        
+        return resolved
+    
+    def _round_timestamp(self, timestamp: float) -> float:
+        """
+        根据精度设置舍入时间戳
+        
+        Args:
+            timestamp: 原始时间戳
+            
+        Returns:
+            舍入后的时间戳
+        """
+        return round(timestamp, self.timestamp_precision)
     
     def _create_time_windows(self, 
                             visual_matches: List[TimestampMatch],
@@ -150,61 +175,185 @@ class TemporalLocalizationEngine:
         """将时间戳舍入到时间窗口中心"""
         return round(timestamp / self.time_window_size) * self.time_window_size
     
+    async def fuse_temporal_results(self, visual_matches, audio_matches, speech_matches, weights=None):
+        """
+        融合多模态时间戳结果
+        
+        Args:
+            visual_matches: 视觉匹配结果列表
+            audio_matches: 音频匹配结果列表
+            speech_matches: 语音匹配结果列表
+            weights: 各模态权重字典（可选）
+            
+        Returns:
+            list[FusedTimestamp]: 融合后的时间戳列表，按分数降序排列
+        """
+        # 使用默认权重如果没有提供
+        if weights is None:
+            weights = self.default_weights.copy()
+        
+        # 组合所有匹配结果
+        all_matches = []
+        if visual_matches:
+            all_matches.extend(visual_matches)
+        if audio_matches:
+            all_matches.extend(audio_matches)
+        if speech_matches:
+            all_matches.extend(speech_matches)
+        
+        # 如果没有匹配结果，返回空列表
+        if not all_matches:
+            return []
+        
+        # 创建时间窗口
+        time_windows = self._create_time_windows(visual_matches, audio_matches, speech_matches)
+        
+        # 计算每个窗口的融合分数
+        fused_timestamps = []
+        for window_data in time_windows.values():
+            fused_timestamp = self._calculate_fused_score(window_data, weights)
+            fused_timestamps.append(fused_timestamp)
+        
+        # 按总分降序排序
+        fused_timestamps.sort(key=lambda x: x.total_score, reverse=True)
+        
+        # 解决时间戳冲突
+        resolved_timestamps = self._resolve_timestamp_conflicts(fused_timestamps)
+        
+        return resolved_timestamps
+    
     def _calculate_fused_score(self, window_data: Dict, weights: Dict[str, float]) -> FusedTimestamp:
         """计算时间窗口的融合得分"""
         window_center = window_data["window_center"]
         
-        # 计算各模态的最高分数
-        visual_max = max([match.similarity for match in window_data["visual_matches"]]) if window_data["visual_matches"] else 0.0
-        audio_max = max([match.similarity for match in window_data["audio_matches"]]) if window_data["audio_matches"] else 0.0
-        speech_max = max([match.similarity for match in window_data["speech_matches"]]) if window_data["speech_matches"] else 0.0
+        # 计算各模态的加权平均分数（改进：使用平均而仅仅是最大值）
+        if window_data["visual_matches"]:
+            visual_scores = [match.similarity for match in window_data["visual_matches"]]
+            visual_score = sum(visual_scores) / len(visual_scores)
+        else:
+            visual_score = 0.0
+            
+        if window_data["audio_matches"]:
+            audio_scores = [match.similarity for match in window_data["audio_matches"]]
+            audio_score = sum(audio_scores) / len(audio_scores)
+        else:
+            audio_score = 0.0
+            
+        if window_data["speech_matches"]:
+            speech_scores = [match.similarity for match in window_data["speech_matches"]]
+            speech_score = sum(speech_scores) / len(speech_scores)
+        else:
+            speech_score = 0.0
         
         # 计算融合总分
         total_score = (
-            visual_max * weights["visual"] +
-            audio_max * weights["audio"] +
-            speech_max * weights["speech"]
+            visual_score * weights["visual"] +
+            audio_score * weights["audio"] +
+            speech_score * weights["speech"]
         )
         
-        # 计算置信度（基于匹配结果数量和分数）
-        match_count = (
-            len(window_data["visual_matches"]) +
-            len(window_data["audio_matches"]) +
-            len(window_data["speech_matches"])
-        )
-        confidence = min(total_score * (1 + match_count * 0.1), 1.0)
+        # 改进的置信度计算：考虑模态数量和分数的综合因素
+        active_modalities = sum(1 for score in [visual_score, audio_score, speech_score] if score > 0)
+        modality_factor = active_modalities / 3.0  # 归一化到0-1范围
+        
+        # 基础置信度来自分数
+        base_confidence = total_score
+        
+        # 多模态匹配会提高置信度
+        confidence = min(base_confidence * (0.7 + modality_factor * 0.3), 1.0)
         
         return FusedTimestamp(
             timestamp=window_center,
             total_score=total_score,
-            visual_score=visual_max,
-            audio_score=audio_max,
-            speech_score=speech_max,
+            visual_score=visual_score,
+            audio_score=audio_score,
+            speech_score=speech_score,
             confidence=confidence
         )
     
-    async def locate_best_timestamp(self, 
-                                   visual_matches: List[TimestampMatch],
-                                   audio_matches: List[TimestampMatch],
-                                   speech_matches: List[TimestampMatch],
-                                   weights: Optional[Dict[str, float]] = None) -> Optional[FusedTimestamp]:
-        """定位最佳时间戳"""
+    def adjust_weights_based_on_query(self, query):
+        """
+        根据查询内容动态调整视觉、音频和语音的权重
+        
+        Args:
+            query: 查询文本内容
+            
+        Returns:
+            dict: 调整后的权重字典
+        """
+        # 创建权重的副本
+        weights = self.default_weights.copy()
+        
+        # 检查是否包含中文字符（可能是语音相关查询）
+        if any('\u4e00' <= char <= '\u9fff' for char in query):
+            # 增加语音权重
+            weights["speech"] = 0.5
+            weights["visual"] = 0.3
+            weights["audio"] = 0.2
+        
+        # 检查视觉相关关键词
+        visual_keywords = ["image", "photo", "picture", "颜色", "形状", "视觉", "image", "photo", "picture", "blue", "sky", "cloud", "red", "green", "yellow"]
+        if any(keyword in query.lower() for keyword in visual_keywords):
+            # 增加视觉权重
+            weights["visual"] = 0.6
+            weights["audio"] = 0.2
+            weights["speech"] = 0.2
+        
+        # 检查音频相关关键词
+        audio_keywords = ["audio", "sound", "music", "voice", "audio", "sound", "music", "voice", "effect", "tone", "旋律", "节奏"]
+        if any(keyword in query.lower() for keyword in audio_keywords):
+            # 增加音频权重
+            weights["audio"] = 0.6
+            weights["visual"] = 0.2
+            weights["speech"] = 0.2
+        
+        return weights
+    
+    async def locate_best_timestamp(self, visual_matches, audio_matches, speech_matches, query=""):
+        """
+        定位最佳匹配的时间戳
+        
+        Args:
+            visual_matches: 视觉匹配结果列表
+            audio_matches: 音频匹配结果列表
+            speech_matches: 语音匹配结果列表
+            query: 查询文本（用于动态调整权重）
+            
+        Returns:
+            FusedTimestamp: 最佳匹配的时间戳
+        """
+        # 根据查询调整权重
+        weights = self.adjust_weights_based_on_query(query)
+        
+        # 融合结果
         fused_results = await self.fuse_temporal_results(visual_matches, audio_matches, speech_matches, weights)
         
+        # 返回最佳结果
         if fused_results:
-            return fused_results[0]  # 返回分数最高的结果
-        
+            return fused_results[0]  # 已经按分数降序排列
         return None
     
-    async def locate_multiple_timestamps(self, 
-                                       visual_matches: List[TimestampMatch],
-                                       audio_matches: List[TimestampMatch],
-                                       speech_matches: List[TimestampMatch],
-                                       top_k: int = 3,
-                                       weights: Optional[Dict[str, float]] = None) -> List[FusedTimestamp]:
-        """定位多个最佳时间戳"""
+    async def locate_multiple_timestamps(self, visual_matches, audio_matches, speech_matches, top_k=3, query=""):
+        """
+        定位多个最佳匹配的时间戳
+        
+        Args:
+            visual_matches: 视觉匹配结果列表
+            audio_matches: 音频匹配结果列表
+            speech_matches: 语音匹配结果列表
+            top_k: 返回的结果数量
+            query: 查询文本（用于动态调整权重）
+            
+        Returns:
+            list[FusedTimestamp]: 最佳匹配的时间戳列表
+        """
+        # 根据查询调整权重
+        weights = self.adjust_weights_based_on_query(query)
+        
+        # 融合结果
         fused_results = await self.fuse_temporal_results(visual_matches, audio_matches, speech_matches, weights)
         
+        # 返回前top_k个结果
         return fused_results[:top_k]
     
     def adjust_weights_based_on_query(self, query: str) -> Dict[str, float]:

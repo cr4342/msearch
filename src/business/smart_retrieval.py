@@ -25,10 +25,13 @@ class SmartRetrievalEngine:
         self.config = config
         
         # 初始化组件
-        # 注意：这里需要传入实际的vector_store实例，暂时用None占位
-        self.search_engine = SearchEngine(config, None)
+        # 注意：这里需要传入实际的vector_store和embedding_engine实例，暂时用None占位
+        self.search_engine = SearchEngine(config, None, None)
         self.fusion_engine = MultiModalFusionEngine(config)
-        self.face_database = FaceDatabase(config)
+        
+        # FaceDatabase需要数据库路径，从配置中获取
+        db_path = config.get('database', {}).get('sqlite', {}).get('path', './data/db/msearch.db')
+        self.face_database = FaceDatabase(db_path)
         self.face_manager = FaceManager(config, self.face_database, None)
         
         # 从配置加载关键词
@@ -322,11 +325,18 @@ class SmartRetrievalEngine:
                 weights
             )
             
+            # 4. 如果结果包含时间戳信息，进行时间戳处理
+            if fused_results:
+                processed_results = await self._process_timestamps(fused_results, query)
+            else:
+                processed_results = fused_results
+            
             return {
                 'status': 'success',
                 'query': query,
                 'query_type': 'generic',
-                'results': fused_results,
+                'results': processed_results,
+                'raw_results': fused_results,  # 保留原始结果
                 'weights_used': weights
             }
             
@@ -337,6 +347,117 @@ class SmartRetrievalEngine:
                 'error': str(e),
                 'query': query
             }
+    
+    async def _process_timestamps(self, results: List[Dict[str, Any]], query: str) -> List[Dict[str, Any]]:
+        """
+        处理时间戳信息，提供精确的时间定位
+        
+        Args:
+            results: 搜索结果列表
+            query: 查询字符串
+            
+        Returns:
+            处理后的时间戳结果
+        """
+        try:
+            # 导入时间定位引擎
+            from src.business.temporal_localization_engine import get_temporal_engine
+            temporal_engine = get_temporal_engine()
+            
+            processed_results = []
+            
+            # 按文件分组处理结果
+            file_groups = {}
+            for result in results:
+                file_id = result.get('file_id', 'unknown')
+                if file_id not in file_groups:
+                    file_groups[file_id] = []
+                file_groups[file_id].append(result)
+            
+            # 为每个文件处理时间戳
+            for file_id, file_results in file_groups.items():
+                # 提取各模态的时间戳信息
+                visual_matches = []
+                audio_matches = []
+                speech_matches = []
+                
+                for result in file_results:
+                    payload = result.get('payload', {})
+                    modality = result.get('modality', '')
+                    score = result.get('score', 0)
+                    
+                    # 提取时间戳信息
+                    start_time = payload.get('start_time', 0)
+                    end_time = payload.get('end_time', 0)
+                    timestamp = (start_time + end_time) / 2  # 使用中间时间点
+                    
+                    # 根据模态类型分类
+                    if modality == 'image' or modality == 'visual':
+                        visual_matches.append({
+                            'timestamp': timestamp,
+                            'similarity': score,
+                            'modality': 'visual'
+                        })
+                    elif modality == 'audio_music':
+                        audio_matches.append({
+                            'timestamp': timestamp,
+                            'similarity': score,
+                            'modality': 'audio'
+                        })
+                    elif modality == 'audio_speech':
+                        speech_matches.append({
+                            'timestamp': timestamp,
+                            'similarity': score,
+                            'modality': 'speech'
+                        })
+                
+                # 使用时间定位引擎融合多模态时间戳
+                if visual_matches or audio_matches or speech_matches:
+                    fused_timestamps = await temporal_engine.fuse_temporal_results(
+                        visual_matches, audio_matches, speech_matches
+                    )
+                    
+                    # 为每个结果添加融合后的时间戳信息
+                    for result in file_results:
+                        # 添加最佳匹配时间戳
+                        if fused_timestamps:
+                            best_timestamp = fused_timestamps[0]
+                            result['best_timestamp'] = {
+                                'timestamp': best_timestamp.timestamp,
+                                'confidence': best_timestamp.confidence,
+                                'total_score': best_timestamp.total_score
+                            }
+                            # 添加所有时间戳信息
+                            result['all_timestamps'] = [
+                                {
+                                    'timestamp': ts.timestamp,
+                                    'confidence': ts.confidence,
+                                    'total_score': ts.total_score,
+                                    'visual_score': ts.visual_score,
+                                    'audio_score': ts.audio_score,
+                                    'speech_score': ts.speech_score
+                                }
+                                for ts in fused_timestamps
+                            ]
+                        processed_results.append(result)
+                else:
+                    # 没有时间戳信息，直接添加结果
+                    for result in file_results:
+                        processed_results.append(result)
+            
+            # 按时间戳置信度排序
+            processed_results.sort(
+                key=lambda x: x.get('best_timestamp', {}).get('confidence', 0), 
+                reverse=True
+            )
+            
+            logger.debug(f"时间戳处理完成: 处理了{len(processed_results)}个结果")
+            return processed_results
+            
+        except Exception as e:
+            logger.error(f"时间戳处理失败: {e}")
+            # 如果时间戳处理失败，返回原始结果
+            return results
 
 
 # 示例使用

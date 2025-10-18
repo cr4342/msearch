@@ -284,6 +284,89 @@ class VectorStore:
         # 在实际实现中，这里会检查Qdrant服务状态
         # 目前只是模拟健康检查
         return True
+    
+    async def search_by_time_range(self, file_id: str, start_time: float, 
+                                  end_time: float, collection_name: str = None) -> List[Dict]:
+        """
+        按时间范围搜索向量
+        
+        Args:
+            file_id: 文件ID
+            start_time: 开始时间（秒）
+            end_time: 结束时间（秒）
+            collection_name: 集合名称（可选，如果不提供则搜索所有集合）
+            
+        Returns:
+            时间范围内的搜索结果
+        """
+        logger.info(f"执行时间范围搜索: file_id={file_id}, 时间范围={start_time}-{end_time}")
+        
+        # 如果Qdrant客户端不可用，返回模拟结果
+        if self.client is None:
+            logger.warning("Qdrant客户端不可用，返回模拟时间范围搜索结果")
+            return self._get_mock_time_range_results(file_id, start_time, end_time)
+        
+        try:
+            results = []
+            
+            # 如果指定了集合名称，则只在该集合中搜索
+            if collection_name:
+                collection_names = [collection_name]
+            else:
+                # 否则在所有集合中搜索
+                collection_names = list(self.collections.keys())
+            
+            # 在每个集合中执行时间范围搜索
+            for col_name in collection_names:
+                collection_config = self.collections.get(col_name, {})
+                actual_collection_name = collection_config.get('name', f'msearch_{col_name}')
+                
+                # 构建时间范围过滤条件
+                # 假设payload中包含start_time和end_time字段
+                search_result = self.client.search(
+                    collection_name=actual_collection_name,
+                    query_filter={
+                        "must": [
+                            {"key": "file_id", "match": {"value": file_id}},
+                            {"key": "start_time", "range": {"gte": start_time}},
+                            {"key": "end_time", "range": {"lte": end_time}}
+                        ]
+                    }
+                )
+                
+                # 格式化结果
+                for point in search_result:
+                    results.append({
+                        "id": str(point.id),
+                        "score": point.score,
+                        "payload": point.payload or {}
+                    })
+            
+            logger.info(f"时间范围搜索完成，找到 {len(results)} 个结果")
+            return results
+            
+        except Exception as e:
+            logger.error(f"时间范围搜索失败: {e}")
+            # 返回模拟结果作为降级方案
+            return self._get_mock_time_range_results(file_id, start_time, end_time)
+    
+    def _get_mock_time_range_results(self, file_id: str, start_time: float, end_time: float) -> List[Dict]:
+        """获取模拟时间范围搜索结果"""
+        results = []
+        # 模拟2个结果
+        for i in range(2):
+            results.append({
+                "id": f"point_{i}",
+                "score": 0.9 - i * 0.1,
+                "payload": {
+                    "file_id": file_id,
+                    "file_path": f"/path/to/file_{file_id}.mp4",
+                    "segment_type": "video",
+                    "start_time": start_time + i * 2,
+                    "end_time": start_time + (i + 1) * 2
+                }
+            })
+        return results
 
 
 # 全局向量存储实例

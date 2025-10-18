@@ -12,10 +12,10 @@ from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QSplitter, QStackedWidget, QMenuBar, QStatusBar,
     QToolBar, QMessageBox, QFileDialog, QSystemTrayIcon,
-    QMenu, QAction, QLabel, QPushButton, QFrame
+    QMenu, QLabel, QPushButton, QFrame
 )
-from PySide6.QtCore import QTimer, Signal, Qt, QThread, pyqtSignal
-from PySide6.QtGui import QIcon, QAction, QPixmap, QKeySequence
+from PySide6.QtCore import QTimer, Signal, Qt, QThread, Signal
+from PySide6.QtGui import QIcon, QPixmap, QKeySequence
 
 from src.core.config import load_config
 from src.core.logging_config import get_logger
@@ -37,8 +37,8 @@ class MSearchApplication(QMainWindow):
     """msearch桌面应用程序主窗口"""
     
     # 信号定义
-    status_message_changed = pyqtSignal(str)
-    connection_status_changed = pyqtSignal(bool)
+    status_message_changed = Signal(str)
+    connection_status_changed = Signal(bool)
     
     def __init__(self, config: Dict[str, Any], settings: Dict[str, Any], parent=None):
         super().__init__(parent)

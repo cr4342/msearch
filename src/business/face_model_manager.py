@@ -59,12 +59,17 @@ class FaceModelManager:
         try:
             # 使用MTCNN进行人脸检测
             self.face_detector = MTCNN(
-                min_face_size=self.detection_config.get('min_face_size', 40),
+                image_size=160,
+                margin=0,
+                min_face_size=self.detection_config.get('min_face_size', 20),
                 thresholds=[
-                    self.detection_config.get('confidence_threshold', 0.9),
-                    0.8,
+                    self.detection_config.get('confidence_threshold', 0.6),
+                    0.7,
                     0.7
-                ]
+                ],
+                factor=0.709,
+                post_process=True,
+                device='cuda' if torch.cuda.is_available() else 'cpu'
             )
             logger.info("人脸检测器初始化完成")
         except Exception as e:

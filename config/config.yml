@@ -44,8 +44,8 @@ features:
 models:
   # CLIP模型配置 - 用于图像处理和图像检索时的文本向量化
   clip:
-    model_name: "openai/clip-vit-base-patch32"
-    # 可选: openai/clip-vit-large-patch14-336 (更高精度，需要更多资源)
+    model_name: "sentence-transformers/clip-ViT-B-32"
+    # 可选: sentence-transformers/clip-ViT-B-16 (更高精度，需要更多资源)
     device: "auto"  # auto, cpu, cuda
     batch_size: 16
     # 文本向量化用途：查询文本 -> 检索图片/视频
@@ -53,7 +53,7 @@ models:
     
   # CLAP模型配置 - 用于音频处理和音频检索时的文本向量化
   clap:
-    model_name: "laion/clap-htsat-fused"
+    model_name: "sentence-transformers/clap-htsat-unfused"
     device: "auto"
     batch_size: 8
     # 文本向量化用途：查询文本 -> 检索音频内容
@@ -61,8 +61,8 @@ models:
     
   # Whisper模型配置 - 用于语音转文本和语音检索时的文本向量化
   whisper:
-    model_name: "openai/whisper-base"
-    # 可选: openai/whisper-medium, openai/whisper-large (更高精度)
+    model_name: "sentence-transformers/all-MiniLM-L6-v2"
+    # 可选: sentence-transformers/all-mpnet-base-v2 (更高精度)
     device: "auto"
     batch_size: 4
     # 文本向量化用途：查询文本 -> 检索语音内容
