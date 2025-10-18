@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# msearch 一键部署脚本
+# msearch 统一部署脚本
 # 支持离线部署和在线部署两种模式
 
 set -e
@@ -37,7 +37,7 @@ log_debug() {
 
 # 显示帮助信息
 show_help() {
-    echo "msearch 一键部署脚本"
+    echo "msearch 统一部署脚本"
     echo ""
     echo "用法: $0 [选项]"
     echo ""
@@ -45,16 +45,21 @@ show_help() {
     echo "  -h, --help     显示此帮助信息"
     echo "  -o, --offline  离线部署模式"
     echo "  -f, --force    强制重新部署（删除现有资源）"
+    echo "  --skip-deps    跳过系统依赖安装"
+    echo "  --auto         自动部署模式（跳过用户确认）"
     echo ""
     echo "示例:"
     echo "  $0              # 在线部署"
     echo "  $0 -o           # 离线部署"
     echo "  $0 -f           # 强制重新部署"
+    echo "  $0 --auto       # 自动部署"
 }
 
 # 解析命令行参数
 OFFLINE_MODE=false
 FORCE_MODE=false
+SKIP_DEPS=false
+AUTO_MODE=false
 
 while [[ $# -gt 0 ]]; do
     case $1 in
@@ -68,6 +73,14 @@ while [[ $# -gt 0 ]]; do
             ;;
         -f|--force)
             FORCE_MODE=true
+            shift
+            ;;
+        --skip-deps)
+            SKIP_DEPS=true
+            shift
+            ;;
+        --auto)
+            AUTO_MODE=true
             shift
             ;;
         *)
@@ -85,20 +98,23 @@ PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 log_info "开始部署 msearch 项目..."
 log_info "部署模式: $([ "$OFFLINE_MODE" = true ] && echo "离线部署" || echo "在线部署")"
 log_info "强制模式: $([ "$FORCE_MODE" = true ] && echo "是" || echo "否")"
+log_info "跳过依赖: $([ "$SKIP_DEPS" = true ] && echo "是" || echo "否")"
+log_info "自动模式: $([ "$AUTO_MODE" = true ] && echo "是" || echo "否")"
 
 # 检查是否需要强制重新部署
 if [ "$FORCE_MODE" = true ]; then
     log_info "强制重新部署模式已启用"
-    #read -p "这将删除现有的离线资源，是否继续？(y/N): " -n 1 -r
-    echo
-    if [[ "y"  =~ ^[Yy]$ ]]; then
-        log_info "删除现有离线资源..."
-        rm -rf "$PROJECT_ROOT/offline/"
-        log_info "现有离线资源已删除"
-    else
-        log_info "取消强制重新部署"
-        exit 0
+    if [ "$AUTO_MODE" = false ]; then
+        read -p "这将删除现有的离线资源，是否继续？(y/N): " -n 1 -r
+        echo
+        if [[ ! $REPLY =~ ^[Yy]$ ]]; then
+            log_info "取消强制重新部署"
+            exit 0
+        fi
     fi
+    log_info "删除现有离线资源..."
+    rm -rf "$PROJECT_ROOT/offline/"
+    log_info "现有离线资源已删除"
 fi
 
 # 创建必要的目录
@@ -221,6 +237,12 @@ setup_china_mirrors() {
 
 # 安装系统依赖（Ubuntu/Debian）
 install_system_dependencies() {
+    # 只在非跳过依赖模式下执行
+    if [ "$SKIP_DEPS" = true ]; then
+        log_info "跳过系统依赖安装"
+        return 0
+    fi
+    
     log_info "安装系统依赖..."
     
     # 检查是否是Ubuntu/Debian系统
@@ -228,10 +250,10 @@ install_system_dependencies() {
         log_info "检测到基于Debian的系统，安装系统依赖..."
         
         # 更新包列表
-        #sudo apt-get update
+        sudo apt-get update
         
         # 安装基础依赖
-        #sudo apt-get install -y \
+        sudo apt-get install -y \
             python3-dev \
             python3-pip \
             python3-venv \
@@ -568,7 +590,7 @@ main() {
     check_environment
     
     # 2. 安装系统依赖（仅在线模式）
-    if [ "$OFFLINE_MODE" = false ]; then
+    if [ "$OFFLINE_MODE" = false ] && [ "$SKIP_DEPS" = false ]; then
         install_system_dependencies
     fi
     
@@ -599,7 +621,7 @@ main() {
     log_info ""
     log_info "离线部署说明:"
     log_info "如需进行离线部署，请将整个项目目录（包括offline文件夹）复制到目标机器，然后运行:"
-    log_info "  ./scripts/deploy_msearch.sh --offline"
+    log_info "  ./scripts/deploy_msearch_unified.sh --offline"
 }
 
 # 执行主流程
