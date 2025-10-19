@@ -61,13 +61,17 @@ API模块导入失败: module 'torch.utils._pytree' has no attribute 'register_p
 **发生时间**: 2025-10-20 升级PyTorch到2.1.0后
 
 **原因分析**:
-- PyTorch 2.1.0与其他库存在兼容性问题
-- torch.utils._pytree模块API变化
+- PyTorch 2.1.0与以下库存在兼容性问题：
+  1. **infinity_emb库**: 使用了已弃用的PyTorch API
+  2. **transformers库**: 某些版本与PyTorch 2.1.0存在API不兼容
+  3. **torch.utils._pytree模块**: API变更，移除了register_pytree_node函数
+- 这些库在PyTorch 2.1.0中使用了新的API结构，但依赖库未及时更新
 
 **解决方案**:
-回退到PyTorch 2.0.1版本，选择更稳定的版本
+1. 回退到PyTorch 2.0.1版本，选择更稳定的版本
+2. 或者升级所有依赖库到兼容PyTorch 2.1.0的版本
 
-**结果**: ✅ 成功解决
+**结果**: ✅ 成功解决，选择PyTorch 2.0.1作为平衡版本
 
 ### 4. PyTorch 2.0.1模型加载错误
 
@@ -192,6 +196,66 @@ operable program or batch file.
 - 配置国内镜像源
 
 **结果**: ✅ 解决
+
+## PyTorch 2.1.0兼容性问题详细分析
+
+### 与infinity_emb库的兼容性问题
+
+**问题描述**: 
+- infinity_emb库使用了PyTorch 2.1.0中已更改或移除的API
+- 特别是torch.utils._pytree模块中的register_pytree_node函数已被移除
+
+**影响范围**:
+- 所有使用infinity_emb进行向量化的功能
+- 嵌入引擎初始化失败
+- 模型加载异常
+
+### 与transformers库的兼容性问题
+
+**问题描述**:
+- transformers库的某些版本未适配PyTorch 2.1.0的API变更
+- CLIPModel等模型类初始化时检测PyTorch环境失败
+
+**影响范围**:
+- 文本和图像处理功能
+- 多模态检索功能
+
+### 与torch.utils._pytree模块的兼容性问题
+
+**问题描述**:
+- PyTorch 2.1.0对torch.utils._pytree模块进行了重构
+- 移除了register_pytree_node函数，改为新的API
+
+**影响范围**:
+- 所有依赖此API的第三方库
+- 自定义PyTorch扩展模块
+
+## PyTorch 2.2.0兼容性测试结果 (2025-10-20)
+
+### 测试概述
+对PyTorch 2.2.0版本进行了全面兼容性测试，包括基本功能测试和项目依赖兼容性测试。
+
+### 测试结果
+1. ✅ PyTorch 2.2.0基本功能正常
+2. ✅ torch.utils._pytree模块功能完整
+3. ✅ register_pytree_node等关键函数可用
+4. ⚠️ infinity_emb库存在兼容性问题
+5. ⚠️ transformers库部分功能受影响
+
+### 具体问题
+**infinity_emb库兼容性问题**:
+- **错误信息**: `cannot import name 'DiagnosticOptions' from 'torch.onnx._internal.exporter'`
+- **原因分析**: infinity_emb库未适配PyTorch 2.2.0的ONNX内部API变更
+- **影响范围**: 所有使用infinity_emb进行向量化的功能
+- **解决方案**: 
+  1. 保持使用PyTorch 2.0.1稳定版本
+  2. 等待infinity_emb库更新适配PyTorch 2.2.0
+  3. 继续使用Mock机制进行测试
+
+### 建议
+1. 项目当前应继续使用PyTorch 2.0.1版本以确保稳定性
+2. 监控infinity_emb库的更新，等待其适配PyTorch 2.2.0
+3. 在requirements.txt中明确指定PyTorch版本要求
 
 ## 总结
 
