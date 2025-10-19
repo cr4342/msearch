@@ -17,10 +17,9 @@ def test_api_app():
         assert hasattr(app, 'routes'), "FastAPI应用缺少routes属性"
         assert hasattr(app, 'openapi'), "FastAPI应用缺少openapi属性"
         print("  ✓ FastAPI应用初始化成功")
-        return True
     except Exception as e:
         print(f"  ✗ FastAPI应用测试失败: {e}")
-        return False
+        raise
 
 def test_config_manager():
     """测试配置管理器"""
@@ -31,10 +30,9 @@ def test_config_manager():
         assert isinstance(config, dict), "配置不是字典类型"
         assert len(config) > 0, "配置为空"
         print(f"  ✓ 配置管理器测试成功，配置项数: {len(config)}")
-        return True
     except Exception as e:
         print(f"  ✗ 配置管理器测试失败: {e}")
-        return False
+        raise
 
 def test_embedding_engine():
     """测试嵌入引擎"""
@@ -73,10 +71,9 @@ def test_embedding_engine():
         assert hasattr(engine, 'embed_text'), "嵌入引擎缺少embed_text方法"
         assert hasattr(engine, 'embed_image'), "嵌入引擎缺少embed_image方法"
         print("  ✓ 嵌入引擎初始化成功")
-        return True
     except Exception as e:
         print(f"  ✗ 嵌入引擎测试失败: {e}")
-        return False
+        raise
 
 def main():
     """主测试函数"""

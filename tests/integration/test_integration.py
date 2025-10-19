@@ -13,14 +13,15 @@ import sys
 import os
 
 # 添加项目根目录到Python路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '../../src'))
+project_root = os.path.join(os.path.dirname(__file__), '..', '..')
+sys.path.insert(0, project_root)
 
-from core.config_manager import ConfigManager
-from business.processing_orchestrator import ProcessingOrchestrator
-from business.multimodal_fusion_engine import MultiModalFusionEngine
-from business.smart_retrieval import SmartRetrievalEngine
-from storage.vector_store import VectorStore
-from storage.face_database import FaceDatabase
+from src.core.config_manager import ConfigManager
+from src.business.processing_orchestrator import ProcessingOrchestrator
+from src.business.multimodal_fusion_engine import MultiModalFusionEngine
+from src.business.smart_retrieval import SmartRetrievalEngine
+from src.storage.vector_store import VectorStore
+from src.storage.face_database import FaceDatabase
 
 
 class TestMultimodalSearchIntegration:

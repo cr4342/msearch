@@ -9,7 +9,8 @@ import time
 from pathlib import Path
 
 # 添加项目根目录到Python路径
-sys.path.insert(0, str(Path(__file__).parent.parent.parent))
+project_root = Path(__file__).parent.parent.parent
+sys.path.insert(0, str(project_root))
 
 def test_config_to_database():
     """测试配置到数据库的集成"""
@@ -38,11 +39,13 @@ def test_config_to_database():
         print(f"数据库表数量: {len(tables)}")
         
         print("✓ 配置到数据库集成测试通过")
-        return True
+        # 使用assert代替return
+        assert config_manager is not None
+        assert db_manager is not None
         
     except Exception as e:
         print(f"✗ 配置到数据库集成测试失败: {e}")
-        return False
+        raise
 
 def test_database_to_vector_store():
     """测试数据库到向量存储的集成"""
@@ -77,11 +80,14 @@ def test_database_to_vector_store():
         print(f"向量存储健康状态: {health_status}")
         
         print("✓ 数据库到向量存储集成测试通过")
-        return True
+        # 使用assert代替return
+        assert db_manager is not None
+        assert vector_store is not None
+        assert file_id is not None
         
     except Exception as e:
         print(f"✗ 数据库到向量存储集成测试失败: {e}")
-        return False
+        raise
 
 def test_config_to_file_detector():
     """测试配置到文件检测器的集成"""
@@ -111,11 +117,13 @@ def test_config_to_file_detector():
             print(f"  - {filename}: 检测类型={detected_type}")
         
         print("✓ 配置到文件检测器集成测试通过")
-        return True
+        # 使用assert代替return
+        assert config_manager is not None
+        assert detector is not None
         
     except Exception as e:
         print(f"✗ 配置到文件检测器集成测试失败: {e}")
-        return False
+        raise
 
 def test_module_dependencies():
     """测试模块依赖关系"""
@@ -135,13 +143,13 @@ def test_module_dependencies():
         for name, module_path in modules_to_test:
             module = __import__(module_path, fromlist=[''])
             print(f"✓ {name} 导入成功")
+            assert module is not None
         
         print("✓ 模块依赖关系测试通过")
-        return True
         
     except Exception as e:
         print(f"✗ 模块依赖关系测试失败: {e}")
-        return False
+        raise
 
 def main():
     """主函数"""
