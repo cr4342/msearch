@@ -53,6 +53,15 @@ python -m pip download -r "%PROJECT_ROOT%\requirements.txt" ^
     --timeout 60 ^
     --retries 3
 
+:: 额外下载python-magic库
+echo [INFO] 额外下载python-magic库...
+python -m pip download python-magic python-magic-bin ^
+    --dest "%PROJECT_ROOT%\offline\packages\requirements" ^
+    --disable-pip-version-check ^
+    -i https://pypi.tuna.tsinghua.edu.cn/simple ^
+    --timeout 60 ^
+    --retries 3
+
 if %errorlevel% neq 0 (
     echo [ERROR] 依赖包下载失败
     pause
@@ -280,6 +289,9 @@ echo [INFO]
 echo [INFO] 8. 后续操作指南：
 echo 1. 安装依赖包：
 echo    python -m pip install --no-index --find-links=offline\packages -r requirements.txt
+
+echo 2. 安装python-magic（文件类型检测必需）：
+echo    python -m pip install --no-index --find-links=offline\packages python-magic python-magic-bin
 echo 
 echo 2. 安装PySide6：
 echo    python -m pip install --no-index --find-links=offline\packages\pyside6 PySide6

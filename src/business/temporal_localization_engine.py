@@ -117,6 +117,7 @@ class TemporalLocalizationEngine:
     def _round_timestamp(self, timestamp: float) -> float:
         """
         根据精度设置舍入时间戳
+        使用银行家舍入（四舍六入五成偶）以保持一致性
         
         Args:
             timestamp: 原始时间戳
@@ -124,7 +125,13 @@ class TemporalLocalizationEngine:
         Returns:
             舍入后的时间戳
         """
-        return round(timestamp, self.timestamp_precision)
+        # 使用decimal模块实现银行家舍入，确保测试兼容性
+        import decimal
+        decimal.getcontext().rounding = decimal.ROUND_HALF_EVEN  # 设置为银行家舍入
+        # 创建精度字符串，例如 '1.000' 表示3位小数
+        precision_str = '1.' + '0' * self.timestamp_precision
+        result = decimal.Decimal(str(timestamp)).quantize(decimal.Decimal(precision_str))
+        return float(result)
     
     def _create_time_windows(self, 
                             visual_matches: List[TimestampMatch],
@@ -132,6 +139,30 @@ class TemporalLocalizationEngine:
                             speech_matches: List[TimestampMatch]) -> Dict[float, Dict]:
         """创建时间窗口并聚合匹配结果"""
         time_windows = {}
+        
+        # 合并所有匹配以找出需要创建的所有窗口
+        all_matches = list(visual_matches) + list(audio_matches) + list(speech_matches)
+        
+        # 如果有匹配，创建完整的窗口范围（包括空窗口）
+        if all_matches:
+            # 找出最小和最大时间戳
+            min_timestamp = min(match.timestamp for match in all_matches)
+            max_timestamp = max(match.timestamp for match in all_matches)
+            
+            # 计算窗口范围
+            min_window = self._round_to_window(min_timestamp)
+            max_window = self._round_to_window(max_timestamp)
+            
+            # 创建完整的窗口序列
+            current_window = min_window
+            while current_window <= max_window:
+                time_windows[current_window] = {
+                    "visual_matches": [],
+                    "audio_matches": [],
+                    "speech_matches": [],
+                    "window_center": current_window
+                }
+                current_window += self.time_window_size
         
         # 处理视觉匹配
         for match in visual_matches:

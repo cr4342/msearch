@@ -8,13 +8,15 @@ msearch 是一款跨平台的多模态桌面搜索软件，旨在成为用户的
 
 - **智能检索**: 无需手动整理、无需添加标签即可实现智能检索
 - **跨模态搜索**: 支持用任意模态（文本、图像、音频）检索其他模态内容
-- **高精度定位**: 支持毫秒级时间戳精确定位
+- **高精度定位**: 支持毫秒级时间戳精确定位，时间戳精度±2秒要求
 - **零配置**: 素材无需整理、无需标签
 - **高性能本地推理**: 利用Infinity Python-native模式实现高效向量化
 - **松耦合架构**: 数据库与业务逻辑分离，支持未来技术栈更换
 - **国内网络优化**: 自动配置国内镜像源，解决网络访问问题
 - **人脸识别增强**: 集成先进的人脸检测和识别能力
 - **智能音频处理**: 使用inaSpeechSegmenter自动分类音频内容（音乐/语音），基于质量检测过滤低质量片段
+- **完整桌面应用**: 基于PySide6的现代化桌面GUI，提供完整的用户体验
+- **测试问题修复**: 提供完整的测试环境问题解决方案，包括GPU驱动兼容性问题修复
 
 ## 技术架构
 
@@ -144,11 +146,15 @@ msearch/
 │   └── packages/           # Python依赖包
 ├── scripts/                # 脚本目录
 │   ├── deploy_msearch.sh   # 一键部署脚本
+│   ├── deploy_msearch.bat  # Windows部署脚本
 │   ├── download_model_resources.sh # 离线资源下载脚本
+│   ├── download_model_resources.bat # Windows离线资源下载脚本
 │   ├── start_all_services.sh # 启动所有服务脚本
 │   ├── stop_all_services.sh # 停止所有服务脚本
 │   ├── start_qdrant.sh     # 启动Qdrant服务脚本
+│   ├── start_qdrant.bat    # Windows Qdrant启动脚本
 │   ├── stop_qdrant.sh      # 停止Qdrant服务脚本
+│   ├── stop_qdrant.bat     # Windows Qdrant停止脚本
 │   ├── start_infinity_services.sh # 启动Infinity服务脚本
 │   └── stop_infinity_services.sh # 停止Infinity服务脚本
 ├── src/                    # 源代码目录
@@ -207,20 +213,53 @@ msearch/
 │       ├── main_window.py  # 主窗口
 │       ├── main.py         # GUI启动脚本
 │       ├── search_worker.py # 搜索工作器
+│       ├── theme_manager.py # 主题管理器
 │       └── widgets/        # 界面组件
-│           └── search_widget.py # 搜索组件
+│           ├── config_widget.py # 配置组件
+│           ├── face_recognition_widget.py # 人脸识别组件
+│           ├── file_manager_widget.py # 文件管理组件
+│           ├── search_widget.py # 搜索组件
+│           ├── side_bar_widget.py # 侧边栏组件
+│           ├── status_bar_widget.py # 状态栏组件
+│           └── timeline_widget.py # 时间线组件
 ├── tests/                  # 测试目录
 │   ├── conftest.py         # 测试配置
 │   ├── run_tests.py        # 测试运行脚本
+│   ├── run_integration_tests.py # 集成测试运行脚本
 │   ├── test_basic_structure.py # 基本结构测试
 │   ├── integration/        # 集成测试
-│   │   └── test_integration.py # 集成测试
+│   │   ├── test_integration.py # 集成测试
+│   │   ├── test_api_basic.py # API基础测试
+│   │   ├── test_basic_functionality.py # 基本功能测试
+│   │   ├── test_basic_integration.py # 基础集成测试
+│   │   ├── test_integration_comprehensive.py # 综合集成测试
+│   │   ├── test_integration_execution.py # 集成执行测试
+│   │   ├── test_real_data.py # 真实数据测试
+│   │   ├── test_temporal_integration.py # 时间集成测试
+│   │   ├── test_timestamp_accuracy.py # 时间戳精度测试
+│   │   └── test_with_real_data.py # 真实数据使用测试
 │   └── unit/               # 单元测试
 │       ├── test_api_modules.py # API模块测试
+│       ├── test_basic_imports.py # 基础导入测试
+│       ├── test_basic_imports_fast.py # 快速基础导入测试
+│       ├── test_core_components.py # 核心组件测试
+│       ├── test_core_only.py # 核心功能测试
+│       ├── test_embedding_engine.py # 向量化引擎测试
 │       ├── test_file_type_detector.py # 文件类型检测器测试
+│       ├── test_import.py # 导入测试
 │       ├── test_load_balancer.py # 负载均衡器测试
 │       ├── test_media_processor.py # 媒体处理器测试
-│       └── test_processing_orchestrator.py # 处理编排器测试
+│       ├── test_media_processors.py # 媒体处理器测试
+│       ├── test_processing_orchestrator.py # 处理编排器测试
+│       ├── test_processing_orchestrator_enhanced.py # 增强处理编排器测试
+│       ├── test_search_engine.py # 搜索引擎测试
+│       ├── test_simple_functionality.py # 简单功能测试
+│       ├── test_simple.py # 简单测试
+│       ├── test_smart_retrieval.py # 智能检索测试
+│       ├── test_temporal_localization_engine.py # 时间定位引擎测试
+│       ├── test_temporal_localization_enhanced.py # 增强时间定位测试
+│       ├── test_timestamp_functionality.py # 时间戳功能测试
+│       └── test_vector_store.py # 向量存储测试
 └── webui/                  # Web用户界面
     ├── index.html          # 主页面
     ├── package.json        # 前端依赖
@@ -424,24 +463,48 @@ pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ### 下载离线资源
 
 ```bash
-# 下载所有离线资源
+# Linux/macOS 下载所有离线资源
 bash scripts/download_model_resources.sh
+
+# Windows 下载所有离线资源
+scripts\download_model_resources.bat
 ```
 
 ### 启动服务
 
 ```bash
-# 启动所有服务（包括Qdrant和Infinity）
+# Linux/macOS 启动所有服务（包括Qdrant和Infinity）
 bash scripts/start_all_services.sh
+
+# Windows 启动Qdrant服务
+scripts\start_qdrant.bat
 
 # 启动API服务（主项目）
 python src/api/main.py
+
+# 启动桌面GUI应用
+python src/gui/main.py
 
 # 运行测试
 python tests/run_tests.py
 
 # 运行特定测试并生成覆盖率报告
 python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
+
+# 运行集成测试
+python tests/run_integration_tests.py
+```
+
+### 测试问题修复
+
+针对测试环境中可能出现的GPU驱动和库兼容性问题：
+
+```bash
+# Windows环境运行测试修复脚本
+fix_test_issues.bat
+
+# 使用CPU配置文件启动
+python src/api/main.py --config config_cpu.yml
 ```
 
 ### 服务端口配置
@@ -456,14 +519,19 @@ python tests/run_tests.py tests/unit/test_processing_orchestrator.py --coverage
 ### 一键部署
 
 ```bash
-# 在线部署
+# Linux/macOS 在线部署
 bash scripts/deploy_msearch.sh
+
+# Windows 在线部署
+scripts\deploy_msearch.bat
 
 # 离线部署（需要先下载离线资源）
 bash scripts/deploy_msearch.sh --offline
+scripts\deploy_msearch.bat --offline
 
 # 强制重新部署
 bash scripts/deploy_msearch.sh --force
+scripts\deploy_msearch.bat --force
 ```
 
 ## 开发实践
@@ -541,10 +609,16 @@ bash scripts/deploy_msearch.sh --force
 
 ### 测试要求
 
-1. **环境变量注入**：支持环境变量一次性注入，简化部署
-2. **跨平台兼容性**：确保软件能在不同系统间迁移和部署
-3. **真实大模型测试**：完成文本和图片检索的真实大模型测试
-4. **测试目录**：测试时在test目录下进行，包含创建的虚拟环境等尽可能还原真实安装场景
+1. **分层测试**：单元测试→集成测试→系统测试的完整测试体系
+2. **核心功能自动化测试覆盖率≥80%**：确保核心功能质量
+3. **性能导向**：关键路径性能测试必须通过
+4. **持续集成**：每次代码提交触发自动测试
+5. **时间戳精度测试**：需达到±2秒要求
+6. **多模态检索功能完整性测试**：确保跨模态检索功能正常
+7. **配置管理器功能测试**：验证配置加载和管理功能
+8. **各组件初始化和依赖注入验证**：确保系统启动正常
+9. **API端点功能测试**：验证所有API接口功能
+10. **文件处理完整流程测试**：确保文件处理流程完整
 
 ### 测试基础设施
 
@@ -553,32 +627,150 @@ bash scripts/deploy_msearch.sh --force
 - **覆盖率报告**: 确保代码质量
 - **持续集成**: GitHub Actions自动化测试
 - **基本结构测试**: 验证模块导入和基本实例化
+- **时间戳精度测试**: 专门验证时间戳精度要求
+- **真实数据测试**: 使用真实媒体文件进行测试
+- **GPU/CPU环境适配测试**: 验证不同硬件环境下的兼容性
+
+### 测试问题解决方案
+
+项目提供完整的测试环境问题解决方案：
+
+#### GPU驱动问题解决
+- GPU驱动诊断工具
+- PyTorch CUDA版本匹配检查
+- 自动化修复脚本
+
+#### 库版本兼容性解决
+- 依赖版本冲突检测
+- 自动降级/升级方案
+- CPU版本替代方案
+
+#### 测试环境配置
+- CPU专用配置文件（config_cpu.yml）
+- 环境隔离方案
+- 批量测试修复脚本
 
 ### 部署和迁移测试
 
 项目具备完整的部署和迁移测试能力：
-- 离线资源下载脚本
+- 离线资源下载脚本（支持Windows和Linux）
 - 支持环境变量注入功能测试
 - 支持跨平台迁移兼容性测试
 - 支持不同硬件环境（CPU/GPU）适配测试
+- 提供完整的问题诊断和修复工具
+
+## 新增功能和工具
+
+### 完整的桌面GUI应用
+- **现代化界面**: 基于PySide6的跨平台桌面应用
+- **完整功能模块**: 搜索、配置、文件管理、人脸识别、时间线等
+- **主题管理**: 支持多主题切换和界面定制
+- **响应式设计**: 适配不同屏幕尺寸和分辨率
+
+### 增强的测试基础设施
+- **全面的测试覆盖**: 单元测试、集成测试、系统测试
+- **时间戳精度测试**: 专门验证±2秒精度要求
+- **真实数据测试**: 使用真实媒体文件进行测试
+- **GPU/CPU环境适配**: 自动检测和适配不同硬件环境
+
+### 测试问题解决方案
+- **自动化修复脚本**: 一键诊断和修复常见测试问题
+- **GPU驱动兼容性**: 解决Windows环境下GPU驱动冲突
+- **库版本管理**: 自动处理依赖版本冲突
+- **CPU替代方案**: 提供完整的CPU运行环境
+
+### 增强的配置管理
+- **多环境配置**: 支持开发、测试、生产环境配置
+- **动态配置加载**: 支持运行时配置更新
+- **配置验证**: 自动验证配置文件正确性
+- **CPU专用配置**: 针对无GPU环境的优化配置
+
+### 完善的日志系统
+- **多级别日志**: DEBUG/INFO/WARNING/ERROR/CRITICAL
+- **分类日志存储**: 主日志、错误日志、性能日志、时间戳日志
+- **日志监控**: 自动监控错误率和性能指标
+- **开发/生产模式**: 不同环境下的日志优化配置
+
+## 新增功能和工具
+
+### 桌面GUI应用完善
+
+基于PySide6的现代化桌面应用，提供完整的用户界面：
+
+#### 主要组件
+- **主窗口** (main_window.py): 完整的桌面应用框架
+- **搜索组件** (search_widget.py): 多模态搜索界面
+- **配置组件** (config_widget.py): 系统配置管理界面
+- **人脸识别组件** (face_recognition_widget.py): 人脸搜索和管理
+- **文件管理组件** (file_manager_widget.py): 文件浏览和管理
+- **时间线组件** (timeline_widget.py): 时间轴浏览和导航
+- **侧边栏组件** (side_bar_widget.py): 功能导航
+- **状态栏组件** (status_bar_widget.py): 系统状态显示
+- **主题管理器** (theme_manager.py): 界面主题管理
+
+#### 功能特性
+- 跨平台原生界面
+- 拖拽文件支持
+- 实时搜索结果展示
+- 多线程搜索处理
+- 响应式界面设计
+
+### 测试问题诊断和修复工具
+
+#### 完整的测试问题解决方案
+- **GPU驱动问题诊断**: 自动检测GPU驱动状态和CUDA兼容性
+- **库版本兼容性检查**: 检测PyTorch、infinity_emb等库的版本冲突
+- **CPU版本配置**: 提供完整的CPU运行环境配置
+- **自动化修复脚本**: 一键修复常见的测试环境问题
+
+#### 测试工具
+- **基础导入测试**: 验证核心模块导入
+- **结构完整性测试**: 验证项目结构完整性
+- **时间戳精度测试**: 验证±2秒精度要求
+- **真实数据测试**: 使用真实媒体文件进行测试
+- **集成测试套件**: 全面的组件集成测试
+
+### 增强的配置管理
+
+#### 详细的配置系统
+- **多级别日志配置**: 支持组件级别的日志控制
+- **性能优化配置**: GPU内存管理和批处理优化
+- **时间戳处理配置**: 精确的时间戳处理参数
+- **多模态检索配置**: 智能权重分配和查询路由
+- **硬件自适应配置**: 根据硬件环境自动调整参数
+
+#### 配置文件
+- **config.yml**: 完整的主配置文件
+- **config_cpu.yml**: CPU专用配置文件
+
+### 文档系统完善
+
+#### 完整的文档体系
+- **API文档** (api_documentation.md): 完整的API接口文档
+- **部署指南** (deployment_guide.md): 详细的部署说明
+- **Windows部署指南** (deployment_guide_windows.md): Windows专用部署指南
+- **测试修复指南** (test_fix_guide.md): 测试问题解决方案
+- **用户手册** (user_manual.md): 完整的用户使用指南
+- **设计文档** (design.md): 系统设计说明
+- **需求文档** (requirements.md): 项目需求说明
 
 ## 未来规划
 
-1. 完善桌面GUI应用
-2. 增强人脸分类功能
-3. 优化性能和资源使用
-4. 支持更多媒体格式
-5. 改进用户界面和体验
-6. 实现命令行接口工具
-7. 完善测试覆盖
-8. 支持视频和音频的完整检索功能
-9. 增强跨平台兼容性
-10. 实现智能标签和分类功能
-11. 支持多语言界面
-12. 增加数据备份和恢复功能
-13. 完善WebUI功能和用户体验
-14. 集成更多AI模型和功能
+1. 持续完善桌面GUI应用功能和用户体验
+2. 增强人脸分类和识别功能
+3. 优化性能和资源使用效率
+4. 支持更多媒体格式和编解码器
+5. 实现命令行接口工具
+6. 进一步完善测试覆盖率和自动化
+7. 增强跨平台兼容性和稳定性
+8. 实现智能标签和自动分类功能
+9. 支持多语言界面国际化
+10. 增加数据备份和恢复功能
+11. 完善WebUI功能和用户体验
+12. 集成更多AI模型和功能
+13. 实现分布式部署支持
+14. 添加用户行为分析和推荐功能
 
 ---
 
-*最后更新: 2025-10-17*
+*最后更新: 2025-10-20*
