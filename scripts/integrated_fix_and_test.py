@@ -265,8 +265,8 @@ def install_dependencies():
     print("[INFO] 检查PyTorch版本...")
     if not is_package_installed("torch"):
         print("[INFO] 安装PyTorch CPU版本...")
-        install_dependency("torch==1.13.1+cpu", ["--index-url", "https://download.pytorch.org/whl/cpu"])
-        install_dependency("torchvision==0.14.1+cpu", ["--index-url", "https://download.pytorch.org/whl/cpu"])
+        install_dependency("torch==2.0.1", ["--index-url", "https://download.pytorch.org/whl/cpu"])
+        install_dependency("torchvision==0.15.2", ["--index-url", "https://download.pytorch.org/whl/cpu"])
     else:
         print("[INFO] PyTorch已安装，跳过")
     

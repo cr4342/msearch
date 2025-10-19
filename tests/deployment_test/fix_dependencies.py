@@ -27,11 +27,11 @@ def fix_numpy_compatibility():
     return run_command(f"{sys.executable} -m pip install 'numpy<2.0' -i https://pypi.tuna.tsinghua.edu.cn/simple")
 
 def upgrade_pytorch():
-    """升级PyTorch"""
-    print("=== 升级PyTorch ===")
+    """安装PyTorch"""
+    print("=== 安装PyTorch ===")
     
-    # 升级PyTorch到2.1.0版本
-    return run_command(f"{sys.executable} -m pip install torch==2.1.0 torchvision -i https://pypi.tuna.tsinghua.edu.cn/simple")
+    # 安装PyTorch 2.0.1版本（稳定版本，兼容性最佳）
+    return run_command(f"{sys.executable} -m pip install torch==2.0.1 torchvision==0.15.2 -i https://pypi.tuna.tsinghua.edu.cn/simple")
 
 def fix_transformers():
     """修复transformers库"""
