@@ -1,14 +1,35 @@
 @echo off
 chcp 65001 >nul
 
-:: MSearch Windows一键部署脚本 v3.0
-:: 整合了环境检查、依赖安装、模型下载、测试部署和Git提交功能
+:: MSearch Windows一键安装脚本 v4.0
+:: 功能：环境检查、依赖安装、模型下载、项目配置、启动软件等全部操作
 
-:: 获取脚本所在目录和项目根目录
+:: 获取脚本所在目录和自动检测项目根目录
 set "SCRIPT_DIR=%~dp0"
+set "CURRENT_DIR=%cd%"
+
+:: 自动检测项目根目录
+:: 1. 检查脚本所在目录的上级目录是否为项目根目录
 pushd %SCRIPT_DIR%..
-set "PROJECT_ROOT=%cd%"
+set "PARENT_DIR=%cd%"
 popd
+
+if exist "%PARENT_DIR%\src" (set "PROJECT_ROOT=%PARENT_DIR%") else (
+    :: 2. 检查当前目录是否为项目根目录
+    if exist "%CURRENT_DIR%\src" (set "PROJECT_ROOT=%CURRENT_DIR%") else (
+        :: 3. 检查同级目录是否有项目文件夹
+        for /d %%i in ("%CURRENT_DIR%\*") do (
+            if exist "%%i\src" (
+                set "PROJECT_ROOT=%%i"
+                goto :found_project
+            )
+        )
+        :found_project
+        if not defined PROJECT_ROOT (set "PROJECT_ROOT=%PARENT_DIR%")
+    )
+)
+
+echo [自动检测] 项目根目录: %PROJECT_ROOT%
 
 :: 设置部署测试目录
 set "DEPLOY_TEST_DIR=%PROJECT_ROOT%\tests\deployment_test"
@@ -32,13 +53,13 @@ set "BLUE=[94m"
 set "WHITE=[97m"
 set "CYAN=[96m"
 
-:: 显示部署菜单
-:show_deploy_menu
+:: 显示安装菜单
+:show_install_menu
 call :ColorEcho %CYAN% "=================================================="
-call :ColorEcho %GREEN% "        MSearch Windows一键部署工具 v3.0        "
+call :ColorEcho %GREEN% "        MSearch Windows一键安装工具 v4.0        "
 call :ColorEcho %CYAN% "=================================================="
 echo.
-call :ColorEcho %WHITE% "请选择部署操作："
+call :ColorEcho %WHITE% "请选择安装操作："
 echo 1. 创建部署测试环境
 call :ColorEcho %WHITE% "2. 安装系统依赖和Python包"
 echo 3. 下载和配置AI模型
@@ -46,8 +67,7 @@ echo 4. 部署真实软件环境
 call :ColorEcho %WHITE% "5. 运行功能测试"
 echo 6. 修复发现的问题
 echo 7. 运行单元测试验证
-call :ColorEcho %WHITE% "8. 提交更改到GitHub"
-echo 9. 完整一键部署（执行所有步骤）
+echo 9. 完整一键安装（执行所有步骤）
 echo 0. 退出
 echo.
 
@@ -89,10 +109,7 @@ if "%choice%" equ "7" (
     goto :deploy_menu_after_action
 )
 
-if "%choice%" equ "8" (
-    call :commit_to_github
-    goto :deploy_menu_after_action
-)
+
 
 if "%choice%" equ "9" (
     call :complete_one_click_deployment
@@ -144,6 +161,9 @@ if exist "%PROJECT_ROOT%\config\config.yml" (
 
 call :ColorEcho %BLUE% "[步骤3] 创建部署专用配置..."
 call :create_deployment_config
+
+call :ColorEcho %BLUE% "[步骤4] 生成启动脚本..."
+call :generate_windows_startup_scripts
 
 call :ColorEcho %GREEN% "部署测试环境创建完成！"
 goto :eof
@@ -343,7 +363,7 @@ call :ColorEcho %BLUE% "[步骤2] 创建测试数据..."
 call :create_test_data
 
 call :ColorEcho %BLUE% "[步骤3] 启动API服务..."
-start "MSearch API Deploy" cmd /c "cd %PROJECT_ROOT% && set PYTHONPATH=%DEPLOY_TEST_DIR% && python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload"
+start "MSearch API Deploy" cmd /c "cd %DEPLOY_TEST_DIR% && start_api.bat"
 
 call :ColorEcho %YELLOW% "[等待] 等待API服务启动..."
 ping -n 10 127.0.0.1 >nul
@@ -629,46 +649,134 @@ python -m pytest tests/unit/ --cov=src --cov-report=html:%DEPLOY_LOGS_DIR%\cover
 call :ColorEcho %GREEN% "单元测试验证完成！"
 goto :eof
 
-:: 8. 提交更改到GitHub
-:commit_to_github
+:: 创建安装说明文件
+:create_install_guide
 call :ColorEcho %BLUE% "==============================================="
-call :ColorEcho %GREEN% "            提交更改到GitHub                  "
+call :ColorEcho %GREEN% "            创建安装说明文件                  "
 call :ColorEcho %BLUE% "==============================================="
 echo.
 
-call :ColorEcho %BLUE% "[步骤1] 检查Git状态..."
-cd "%PROJECT_ROOT%"
-git status
+:: 生成安装指南
+( echo # MSearch 安装指南
+  echo.
+  echo ## 快速开始
+  echo.
+  echo ### 环境要求
+  echo - Python 3.9-3.11
+  echo - Git
+  echo - 足够的磁盘空间（推荐至少10GB）
+  echo - Visual C++ Build Tools
+  echo.
+  echo ### 安装步骤
+  echo.
+  echo 1. **环境准备**
+  echo    ```batch
+  echo    :: Windows
+  echo    :: 请确保已安装Visual C++ Build Tools
+  echo    :: 检查Python版本
+  echo    python --version
+  echo    
+  echo    :: 克隆项目（如果需要）
+  echo    git clone ^<项目仓库地址^>
+  echo    cd msearch
+  echo    ```
+  echo    
+  echo 2. **安装依赖**
+  echo    ```batch
+  echo    :: 升级pip
+  echo    python -m pip install --upgrade pip
+  echo    
+  echo    :: 安装核心依赖
+  echo    pip install -r requirements.txt
+  echo    ```
+  echo    
+  echo 3. **运行一键安装工具**
+  echo    ```batch
+  echo    :: Windows
+  echo    cd scripts
+  echo    install_auto.bat
+  echo    ```
+  echo    
+  echo 4. **使用生成的启动脚本**
+  echo    - 脚本会自动检测项目代码位置，可在任意目录运行
+  echo    - 启动所有服务：start_all.bat
+  echo    - 仅启动API服务：start_api.bat
+  echo    
+  echo ## 功能说明
+  echo    
+  echo - **AI模型自动下载**：脚本会自动下载CLIP、CLAP、Whisper等必要模型
+  echo - **环境自动检测**：启动脚本会自动检测项目代码位置和运行环境
+  echo - **配置自动生成**：根据部署环境自动生成合适的配置文件
+  echo    
+  echo ## 使用方法
+  echo    
+  echo ### API服务
+  echo - API地址：http://localhost:8000
+  echo - API文档：http://localhost:8000/docs
+  echo - 健康检查：http://localhost:8000/health
+  echo    
+  echo ### 功能测试
+  echo ```batch
+  echo :: 运行功能测试
+  echo python -m pytest tests/functionality/
+  echo ```
+  echo    
+  echo ## 目录结构说明
+  echo    
+  echo - config\：配置文件目录
+  echo - data\：数据存储目录（包括数据库文件和临时文件）
+  echo - models\：AI模型存储目录
+  echo - logs\：日志文件目录
+  echo - 启动脚本：start_api.bat、start_all.bat
+  echo    
+  echo ## 常见问题
+  echo    
+  echo 1. **端口被占用**
+  echo    - 修改配置文件中的端口号
+  echo    - 或在任务管理器中终止占用端口的进程
+  echo    
+  echo 2. **模型下载失败**
+  echo    - 检查网络连接
+  echo    - 设置环境变量：set HF_ENDPOINT=https://hf-mirror.com
+  echo    - 手动下载模型并放入models\目录
+  echo    
+  echo 3. **依赖安装问题**
+  echo    - 确保pip版本较新：python -m pip install --upgrade pip
+  echo    - 尝试使用虚拟环境：python -m venv venv && venv\Scripts\activate
+  echo    
+  echo 4. **Python环境问题**
+  echo    - 确保使用Python 3.9-3.11版本
+  echo    - 对于CUDA支持，需要安装对应版本的PyTorch
+  echo    
+  echo ## 部署到新环境
+  echo    
+  echo 1. 复制deploy_test\目录下的所有文件到目标环境
+  echo 2. 在目标环境中确保Python已安装
+  echo 3. 运行start_all.bat
+  echo 4. 脚本会自动检测项目代码位置并启动服务
+  echo    
+  echo ## 注意事项
+  echo    
+  echo - 首次运行时会下载大量模型，需要较长时间和稳定的网络
+  echo - 确保磁盘空间充足，尤其是模型存储目录
+  echo - 生产环境部署时请修改配置文件中的相关设置
+) > "%DEPLOY_TEST_DIR%\INSTALL_GUIDE.md"
 
-call :ColorEcho %BLUE% "[步骤2] 添加所有更改..."
-git add .
-
-call :ColorEcho %BLUE% "[步骤3] 提交更改..."
-git commit -m "feat: 整合Windows一键部署脚本和测试环境\n\n- 创建统一的Windows一键部署脚本\n- 添加专属部署测试目录\n- 集成真实软件和模型部署\n- 实现自动化测试和问题修复\n- 支持单元测试验证和Git提交"
-
-call :ColorEcho %BLUE% "[步骤4] 推送到GitHub..."
-git push origin main
-
-if %errorlevel% equ 0 (
-    call :ColorEcho %GREEN% "[成功] 更改已推送到GitHub！"
-) else (
-    call :ColorEcho %YELLOW% "[警告] 推送到GitHub失败，请检查网络连接"
-)
-
+call :ColorEcho %GREEN% "[成功] 安装说明文件已生成: %DEPLOY_TEST_DIR%\INSTALL_GUIDE.md"
 goto :eof
 
-:: 9. 完整一键部署
+:: 9. 完整一键安装
 :complete_one_click_deployment
 call :ColorEcho %CYAN% "=================================================="
-call :ColorEcho %GREEN% "            执行完整一键部署                  "
+call :ColorEcho %GREEN% "            执行完整一键安装                  "
 call :ColorEcho %CYAN% "=================================================="
 echo.
 
-call :ColorEcho %YELLOW% "[INFO] 这将执行所有部署步骤，可能需要较长时间..."
-set /p confirm=确认执行完整部署? [Y/N]: 
+call :ColorEcho %YELLOW% "[INFO] 这将执行所有安装步骤，可能需要较长时间..."
+set /p confirm=确认执行完整安装? [Y/N]: 
 
 if /i not "%confirm%" equ "Y" (
-    call :ColorEcho %BLUE% "已取消完整部署"
+    call :ColorEcho %BLUE% "已取消完整安装"
     goto :eof
 )
 
@@ -693,25 +801,204 @@ call :fix_discovered_issues
 call :ColorEcho %GREEN% "[步骤 7/8] 运行单元测试验证..."
 call :run_unit_tests
 
-call :ColorEcho %GREEN% "[步骤 8/8] 提交更改到GitHub..."
-call :commit_to_github
+call :ColorEcho %GREEN% "[步骤 8/8] 创建安装说明文档..."
+call :create_install_guide
 
 call :ColorEcho %CYAN% "=================================================="
-call :ColorEcho %GREEN% "               完整部署完成！                   "
+call :ColorEcho %GREEN% "               完整安装完成！                   "
 call :ColorEcho %CYAN% "=================================================="
 echo.
-call :ColorEcho %GREEN% "[部署信息]"
+call :ColorEcho %GREEN% "[安装信息]"
+call :ColorEcho %YELLOW% "- 项目目录: %PROJECT_ROOT%"
 call :ColorEcho %YELLOW% "- 部署目录: %DEPLOY_TEST_DIR%"
+call :ColorEcho %YELLOW% "- 配置文件: %DEPLOY_CONFIG_DIR%\config.yml"
+call :ColorEcho %YELLOW% "- 启动脚本: %DEPLOY_TEST_DIR%\start_all.bat"
+call :ColorEcho %YELLOW% "- 安装说明: %DEPLOY_TEST_DIR%\INSTALL_GUIDE.md"
 call :ColorEcho %YELLOW% "- API服务: http://localhost:8000"
 call :ColorEcho %YELLOW% "- API文档: http://localhost:8000/docs"
 echo.
-call :ColorEcho %GREEN% "[后续步骤]"
+call :ColorEcho %BLUE% "[部署到其他环境]"
+echo 1. 复制 %DEPLOY_TEST_DIR% 目录下的所有文件到目标环境
+echo 2. 在目标环境中确保Python已安装
+echo 3. 运行 start_all.bat
+echo 4. 脚本会自动检测项目代码位置并启动服务
+call :ColorEcho %YELLOW% "- API文档: http://localhost:8000/docs"
+echo.
+call :ColorEcho %GREEN% "[使用方法]"
 call :ColorEcho %BLUE% "1. 访问API文档测试功能"
-call :ColorEcho %BLUE% "2. 启动桌面应用: python src/gui/gui_main.py"
-call :ColorEcho %BLUE% "3. 查看部署日志: %DEPLOY_LOGS_DIR%"
+call :ColorEcho %BLUE% "2. 启动服务: cd %DEPLOY_TEST_DIR% && start_all.bat"
+call :ColorEcho %BLUE% "3. 查看安装说明: type %DEPLOY_TEST_DIR%\INSTALL_GUIDE.md"
+echo.
+call :ColorEcho %YELLOW% "[提示] 脚本支持在任意位置运行，会自动检测项目代码"
+goto :eof
+
+:: 生成Windows启动脚本
+:generate_windows_startup_scripts
+call :ColorEcho %BLUE% "==============================================="
+call :ColorEcho %GREEN% "          生成Windows启动脚本                "
+call :ColorEcho %BLUE% "==============================================="
+echo.
+
+:: 生成API启动脚本
+(echo @echo off
+chcp 65001 >nul
+
+:: MSearch API启动脚本 - 自动检测项目代码位置
+
+echo [启动] MSearch API服务...
+
+:: 获取脚本所在目录
+set "SCRIPT_DIR=%%~dp0"
+set "DEPLOY_ROOT=%%SCRIPT_DIR%%"
+set "DEPLOY_CONFIG=%%DEPLOY_ROOT%%\config"
+set "DEPLOY_DATA=%%DEPLOY_ROOT%%\data"
+set "DEPLOY_MODELS=%%DEPLOY_ROOT%%\models"
+set "DEPLOY_LOGS=%%DEPLOY_ROOT%%\logs"
+
+:: 自动检测项目根目录
+:: 1. 检查部署目录的上级目录的上级目录
+pushd %%DEPLOY_ROOT%%\..\..
+set "PARENT_PARENT_DIR=%%cd%%"
+popd
+
+if exist "%%PARENT_PARENT_DIR%%\src" (
+    set "PROJECT_ROOT=%%PARENT_PARENT_DIR%%"
+) else (
+    :: 2. 检查部署目录的上级目录
+    pushd %%DEPLOY_ROOT%%\..
+    set "PARENT_DIR=%%cd%%"
+    popd
+    
+    if exist "%%PARENT_DIR%%\src" (
+        set "PROJECT_ROOT=%%PARENT_DIR%%"
+    ) else (
+        :: 3. 检查同级目录是否有项目文件夹
+        for /d %%i in ("%%DEPLOY_ROOT%%\..\*") do (
+            if exist "%%i\src" (
+                set "PROJECT_ROOT=%%i"
+                goto :found_project
+            )
+        )
+        :found_project
+        if not defined PROJECT_ROOT (
+            set "PROJECT_ROOT=%%PARENT_DIR%%"
+            echo [警告] 未找到明确的项目结构，使用默认目录
+        )
+    )
+)
+
+echo [自动检测] 项目根目录: %%PROJECT_ROOT%%
+
+:: 设置环境变量
+set "PYTHONPATH=%%PROJECT_ROOT%%;%%DEPLOY_ROOT%%"
+set "PYTHONWARNINGS=ignore"
+set "KMP_DUPLICATE_LIB_OK=TRUE"
+set "CUDA_LAUNCH_BLOCKING=1"
+set "HF_HOME=%%DEPLOY_MODELS%%\huggingface"
+set "TRANSFORMERS_CACHE=%%DEPLOY_MODELS%%\huggingface"
+
+echo [配置] 设置环境变量完成
+
+:: 检查Python环境
+python --version >nul 2>&1
+if %%errorlevel%% neq 0 (
+    echo [错误] 未找到Python，请先安装Python 3.9-3.11版本
+    pause
+    exit /b 1
+)
+
+echo [启动] 正在启动API服务...
+echo [信息] API地址: http://localhost:8000
+echo [信息] API文档: http://localhost:8000/docs
+
+:: 启动API服务
+cd "%%PROJECT_ROOT%%"
+python -m uvicorn src.api.main:app --host 0.0.0.0 --port 8000 --reload
+) > "%DEPLOY_TEST_DIR%\start_api.bat"
+
+:: 生成完整启动脚本
+(echo @echo off
+chcp 65001 >nul
+
+:: MSearch完整启动脚本 - 自动检测项目代码位置
+
+echo ===============================================
+echo           MSearch 服务启动脚本                
+echo ===============================================
+echo.
+
+:: 获取脚本所在目录
+set "SCRIPT_DIR=%%~dp0"
+set "DEPLOY_ROOT=%%SCRIPT_DIR%%"
+
+:: 自动检测项目根目录
+:: 1. 检查部署目录的上级目录的上级目录
+pushd %%DEPLOY_ROOT%%\..\..
+set "PARENT_PARENT_DIR=%%cd%%"
+popd
+
+if exist "%%PARENT_PARENT_DIR%%\src" (
+    set "PROJECT_ROOT=%%PARENT_PARENT_DIR%%"
+) else (
+    :: 2. 检查部署目录的上级目录
+    pushd %%DEPLOY_ROOT%%\..
+    set "PARENT_DIR=%%cd%%"
+    popd
+    
+    if exist "%%PARENT_DIR%%\src" (
+        set "PROJECT_ROOT=%%PARENT_DIR%%"
+    ) else (
+        :: 3. 检查同级目录是否有项目文件夹
+        for /d %%i in ("%%DEPLOY_ROOT%%\..\*") do (
+            if exist "%%i\src" (
+                set "PROJECT_ROOT=%%i"
+                goto :found_project
+            )
+        )
+        :found_project
+        if not defined PROJECT_ROOT (
+            set "PROJECT_ROOT=%%PARENT_DIR%%"
+            echo [警告] 未找到明确的项目结构，使用默认目录
+        )
+    )
+)
+
+echo [自动检测] 项目根目录: %%PROJECT_ROOT%%
+
+:: 设置环境变量
+set "PYTHONPATH=%%PROJECT_ROOT%%;%%DEPLOY_ROOT%%"
+set "PYTHONWARNINGS=ignore"
+set "KMP_DUPLICATE_LIB_OK=TRUE"
+set "HF_HOME=%%DEPLOY_ROOT%%\models\huggingface"
+set "TRANSFORMERS_CACHE=%%DEPLOY_ROOT%%\models\huggingface"
+
+:: 启动Qdrant服务
+if exist "%%PROJECT_ROOT%%\scripts\start_qdrant.bat" (
+    echo [启动] 启动Qdrant服务...
+    start "Qdrant Service" cmd /c "cd %%PROJECT_ROOT%% && scripts\start_qdrant.bat"
+    echo [等待] 等待Qdrant服务启动...
+    ping -n 5 127.0.0.1 >nul
+) else (
+    echo [警告] Qdrant启动脚本不存在，跳过Qdrant服务启动
+)
+
+:: 启动API服务
+echo [启动] 启动API服务...
+echo [信息] API地址: http://localhost:8000
+echo [信息] API文档: http://localhost:8000/docs
+
+:: 启动API服务
+cd "%%DEPLOY_ROOT%%"
+start "MSearch API" cmd /c "start_api.bat"
+
+echo.
+echo [完成] 服务已启动
+) > "%DEPLOY_TEST_DIR%\start_all.bat"
+
+call :ColorEcho %GREEN% "[成功] 启动脚本生成完成！"
 goto :eof
 
 :: 显示启动信息
-echo 按任意键启动MSearch Windows一键部署工具...
+echo 按任意键启动MSearch Windows一键安装工具...
 pause >nul
-call :show_deploy_menu
+call :show_install_menu

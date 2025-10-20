@@ -1,6 +1,4 @@
-# API文档
-
-> **文档导航**: [文档索引](README.md) | [需求文档](requirements.md) | [设计文档](design.md) | [开发计划](development_plan.md) | [测试策略](test_strategy.md) | [部署指南](deployment_guide.md)
+# msearch API文档
 
 ## 1. API概述
 
@@ -8,36 +6,31 @@
 
 **API基础URL**: `http://localhost:8000/api/v1`
 
-**认证方式**: 当前版本无需认证（后续版本将支持API Key认证）
+**认证方式**: 当前版本无需认证
 
 **数据格式**: JSON
 
 **字符编码**: UTF-8
 
-### 1.2 通用响应格式
+### 11.2 通用响应格式
 
 **成功响应**：
 ```json
 {
-  "status": "success",
+  "success": true,
+  "message": "操作成功",
   "data": {
     // 具体数据内容
-  },
-  "message": "操作成功",
-  "timestamp": "2024-01-15T10:30:00Z"
+  }
 }
 ```
 
 **错误响应**：
 ```json
 {
-  "status": "error",
-  "error": {
-    "code": "INVALID_PARAMETER",
-    "message": "参数验证失败",
-    "details": "query参数不能为空"
-  },
-  "timestamp": "2024-01-15T10:30:00Z"
+  "success": false,
+  "message": "错误信息",
+  "error": "详细错误信息"
 }
 ```
 
@@ -53,315 +46,484 @@
 
 ## 2. 搜索接口
 
-### 2.1 多模态搜索
+### 2.1 智能搜索
 
 **端点**: `POST /api/v1/search`
 
-**描述**: 执行多模态搜索，支持文本、图片、音频等多种查询方式
+**描述**: 执行智能多模态搜索，系统会自动识别查询类型并动态调整权重
 
 **请求参数**：
 ```json
 {
-  "query": "美丽的风景照片",           // 查询文本
-  "modality": "text_to_image",        // 搜索模态
-  "top_k": 10,                        // 返回结果数量
-  "similarity_threshold": 0.3,        // 相似度阈值
-  "filters": {                        // 可选过滤条件
-    "file_types": ["image", "video"],
-    "date_range": {
-      "start": "2024-01-01T00:00:00Z",
-      "end": "2024-01-31T23:59:59Z"
-    }
-  }
+  "query": "包含张三的会议照片",
+  "limit": 10
 }
 ```
-
-**支持的搜索模态**：
-- `text_to_image`: 文本搜索图片
-- `text_to_video`: 文本搜索视频
-- `text_to_audio`: 文本搜索音频
-- `image_to_image`: 图片搜索相似图片
-- `smart`: 智能搜索（自动识别查询类型）
 
 **响应示例**：
 ```json
 {
   "status": "success",
+  "query": "包含张三的会议照片",
+  "limit": 10,
+  "results": [
+    {
+      "id": "point_1",
+      "score": 0.95,
+      "file_path": "/path/to/meeting.mp4",
+      "file_type": "video",
+      "start_time_ms": 10000,
+      "end_time_ms": 15000,
+      "metadata": {
+        "duration": 120.5,
+        "resolution": "1920x1080"
+      }
+    }
+  ],
+  "total": 1
+}
+```
+
+### 2.2 文本搜索
+
+**端点**: `POST /api/v1/search/text`
+
+**描述**: 执行文本检索，支持跨模态检索
+
+**请求参数**：
+- `query`: 查询文本
+- `limit`: 返回结果数量限制（默认20）
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "文本检索完成",
   "data": {
+    "query": "会议讨论",
     "results": [
       {
-        "file_id": "img_001",
-        "file_path": "/home/user/photos/sunset.jpg",
-        "file_name": "sunset.jpg",
-        "file_type": "image",
-        "similarity_score": 0.92,
-        "metadata": {
-          "width": 1920,
-          "height": 1080,
-          "format": "jpeg",
-          "size_mb": 2.5
-        },
-        "timestamp": null
-      },
-      {
-        "file_id": "vid_002",
-        "file_path": "/home/user/videos/vacation.mp4",
-        "file_name": "vacation.mp4",
+        "id": "point_1",
+        "score": 0.87,
+        "file_path": "/path/to/meeting.mp4",
         "file_type": "video",
-        "similarity_score": 0.87,
+        "start_time_ms": 25000,
+        "end_time_ms": 30000,
         "metadata": {
-          "duration": 120.5,
-          "resolution": "1920x1080",
-          "format": "mp4",
-          "size_mb": 45.2
-        },
-        "timestamp": {
-          "start_time": 25.5,
-          "end_time": 27.5,
-          "duration": 2.0
+          "file_id": "file_001",
+          "vector_metadata": {
+            "segment_type": "video"
+          }
         }
       }
     ],
-    "total_results": 2,
-    "query_time_ms": 156,
-    "search_metadata": {
-      "query_type": "visual",
-      "models_used": ["clip"],
-      "collections_searched": ["image_vectors", "video_vectors"]
-    }
+    "total": 1
   }
 }
 ```
 
-### 2.2 图片上传搜索
+### 2.3 图像搜索
 
 **端点**: `POST /api/v1/search/image`
 
-**描述**: 通过上传图片进行相似图片搜索
+**描述**: 通过上传图片进行相似图片/视频搜索
 
 **请求格式**: `multipart/form-data`
 
 **请求参数**：
-- `image`: 图片文件（支持JPG、PNG、GIF等格式）
-- `top_k`: 返回结果数量（可选，默认10）
-- `similarity_threshold`: 相似度阈值（可选，默认0.3）
-
-**cURL示例**：
-```bash
-curl -X POST "http://localhost:8000/api/v1/search/image" \
-  -F "image=@/path/to/query_image.jpg" \
-  -F "top_k=5" \
-  -F "similarity_threshold=0.5"
-```
-
-### 2.3 融合搜索
-
-**端点**: `POST /api/v1/search/fusion`
-
-**描述**: 多模态融合搜索，支持文本、图片、音频的组合查询
-
-**请求参数**：
-```json
-{
-  "text_query": "会议讨论场景",
-  "image_file": "base64_encoded_image_data",  // 可选
-  "audio_file": "base64_encoded_audio_data",  // 可选
-  "weights": {                                // 模态权重
-    "text": 0.5,
-    "image": 0.3,
-    "audio": 0.2
-  },
-  "top_k": 10,
-  "fusion_strategy": "weighted_sum"           // 融合策略
-}
-```
-
-## 3. 文件管理接口
-
-### 3.1 获取文件列表
-
-**端点**: `GET /api/v1/files`
-
-**描述**: 获取系统中已索引的文件列表
-
-**查询参数**：
-- `page`: 页码（默认1）
-- `page_size`: 每页数量（默认20）
-- `file_type`: 文件类型过滤（image/video/audio）
-- `status`: 处理状态过滤（pending/processing/completed/failed）
+- `file`: 图像文件
+- `limit`: 返回结果数量限制（默认20）
 
 **响应示例**：
 ```json
 {
-  "status": "success",
+  "success": true,
+  "message": "图像检索完成",
   "data": {
-    "files": [
+    "query_image": "search_image.jpg",
+    "results": [
       {
-        "file_id": "file_001",
-        "file_path": "/home/user/photos/image1.jpg",
-        "file_name": "image1.jpg",
+        "id": "point_1",
+        "score": 0.92,
+        "file_path": "/path/to/similar_image.jpg",
         "file_type": "image",
-        "file_size": 2048576,
-        "status": "completed",
-        "created_at": "2024-01-15T10:00:00Z",
-        "updated_at": "2024-01-15T10:05:00Z",
+        "start_time_ms": 0,
+        "end_time_ms": 0,
         "metadata": {
-          "width": 1920,
-          "height": 1080,
-          "format": "jpeg"
+          "segment_type": "image"
         }
       }
     ],
-    "pagination": {
-      "page": 1,
-      "page_size": 20,
-      "total_pages": 5,
-      "total_items": 100
-    }
+    "total": 1
   }
 }
 ```
 
-### 3.2 获取文件详情
+### 2.4 音频搜索
 
-**端点**: `GET /api/v1/files/{file_id}`
+**端点**: `POST /api/v1/search/audio`
 
-**描述**: 获取指定文件的详细信息
+**描述**: 通过上传音频文件进行音频内容搜索
 
-**路径参数**：
-- `file_id`: 文件ID
+**请求格式**: `multipart/form-data`
 
-**响应示例**：
-```json
-{
-  "status": "success",
-  "data": {
-    "file_id": "file_001",
-    "file_path": "/home/user/videos/meeting.mp4",
-    "file_name": "meeting.mp4",
-    "file_type": "video",
-    "file_size": 104857600,
-    "status": "completed",
-    "processing_info": {
-      "total_frames": 3600,
-      "keyframes_extracted": 180,
-      "scenes_detected": 8,
-      "audio_segments": 12,
-      "faces_detected": 3
-    },
-    "vectors_info": {
-      "visual_vectors": 180,
-      "audio_vectors": 12,
-      "face_vectors": 15
-    },
-    "metadata": {
-      "duration": 120.0,
-      "resolution": "1920x1080",
-      "fps": 30.0,
-      "format": "mp4",
-      "codec": "h264"
-    },
-    "created_at": "2024-01-15T10:00:00Z",
-    "updated_at": "2024-01-15T10:15:00Z"
-  }
-}
-```
-
-### 3.3 删除文件
-
-**端点**: `DELETE /api/v1/files/{file_id}`
-
-**描述**: 从系统中删除指定文件的索引信息
-
-**路径参数**：
-- `file_id`: 文件ID
+**请求参数**：
+- `file`: 音频文件
+- `limit`: 返回结果数量限制（默认20）
 
 **响应示例**：
 ```json
 {
-  "status": "success",
+  "success": true,
+  "message": "音频检索完成",
   "data": {
-    "file_id": "file_001",
-    "deleted": true
-  },
-  "message": "文件索引删除成功"
-}
-```
-
-## 4. 任务管理接口
-
-### 4.1 获取任务状态
-
-**端点**: `GET /api/v1/tasks`
-
-**描述**: 获取当前处理任务的状态信息
-
-**查询参数**：
-- `status`: 任务状态过滤（pending/processing/completed/failed）
-- `limit`: 返回数量限制（默认50）
-
-**响应示例**：
-```json
-{
-  "status": "success",
-  "data": {
-    "tasks": [
+    "query_audio": "search_audio.mp3",
+    "results": [
       {
-        "task_id": "task_001",
-        "file_id": "file_001",
-        "file_path": "/home/user/videos/new_video.mp4",
-        "task_type": "process_video",
-        "status": "processing",
-        "progress": 65,
-        "started_at": "2024-01-15T10:20:00Z",
-        "estimated_completion": "2024-01-15T10:25:00Z",
-        "error_message": null
+        "id": "point_1",
+        "score": 0.85,
+        "file_path": "/path/to/similar_audio.mp3",
+        "file_type": "audio_music",
+        "segment_type": "audio_music",
+        "start_time_ms": 30000,
+        "end_time_ms": 40000,
+        "transcribed_text": "",
+        "metadata": {
+          "segment_type": "audio_music"
+        }
       }
     ],
-    "queue_info": {
-      "pending_tasks": 3,
-      "processing_tasks": 2,
-      "completed_tasks": 45,
-      "failed_tasks": 1
+    "total": 1
+  }
+}
+```
+
+### 2.5 视频搜索
+
+**端点**: `POST /api/v1/search/video`
+
+**描述**: 通过上传视频文件进行视频内容搜索
+
+**请求格式**: `multipart/form-data`
+
+**请求参数**：
+- `file`: 视频文件
+- `limit`: 返回结果数量限制（默认20）
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "视频检索完成",
+  "data": {
+    "query_video": "search_video.mp4",
+    "results": [
+      {
+        "id": "point_1",
+        "score": 0.88,
+        "file_path": "/path/to/similar_video.mp4",
+        "file_type": "video",
+        "start_time_ms": 15000,
+        "end_time_ms": 20000,
+        "frame_index": 0,
+        "metadata": {
+          "segment_type": "video"
+        }
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+### 2.6 多模态搜索
+
+**端点**: `POST /api/v1/search/multimodal`
+
+**描述**: 支持文本、图像、音频、视频混合查询
+
+**请求格式**: `multipart/form-data`
+
+**请求参数**：
+- `query_text`: 查询文本（可选）
+- `image_file`: 图像文件（可选）
+- `audio_file`: 音频文件（可选）
+- `video_file`: 视频文件（可选）
+- `limit`: 返回结果数量限制（默认20）
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "多模态检索完成",
+  "data": {
+    "query_text": "会议讨论",
+    "query_image": null,
+    "query_audio": null,
+    "query_video": null,
+    "results": [
+      {
+        "id": "point_1",
+        "score": 0.91,
+        "fused_score": 0.91,
+        "modality_scores": {},
+        "file_path": "/path/to/meeting.mp4",
+        "file_type": "video",
+        "start_time_ms": 25000,
+        "end_time_ms": 30000,
+        "metadata": {
+          "file_id": "file_001",
+          "vector_metadata": {
+            "file_id": "file_001",
+            "file_path": "/path/to/meeting.mp4",
+            "segment_type": "video",
+            "start_time_ms": 25000,
+            "end_time_ms": 30000
+          }
+        }
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+### 2.7 时间线搜索
+
+**端点**: `POST /api/v1/search/timeline`
+
+**描述**: 按时间范围搜索媒体文件
+
+**请求参数**：
+```json
+{
+  "query": "会议",
+  "time_range": {
+    "start": "2024-01-01T00:00:00Z",
+    "end": "2024-01-31T23:59:59Z"
+  },
+  "file_types": ["video", "audio"],
+  "limit": 20
+}
+```
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "时间线搜索完成",
+  "data": {
+    "query": "会议",
+    "time_range": {
+      "start": "2024-01-01T00:00:00Z",
+      "end": "2024-01-31T23:59:59Z"
+    },
+    "file_types": ["video", "audio"],
+    "results": [
+      {
+        "id": "point_1",
+        "score": 0.89,
+        "file_path": "/path/to/meeting.mp4",
+        "file_type": "video",
+        "created_at": "2024-01-15T10:00:00Z",
+        "start_time_ms": 25000,
+        "end_time_ms": 30000,
+        "metadata": {
+          "file_id": "file_001",
+          "file_path": "/path/to/meeting.mp4",
+          "file_type": "video",
+          "created_at": "2024-01-15T10:00:00Z",
+          "vector_metadata": {
+            "file_id": "file_001",
+            "file_path": "/path/to/meeting.mp4",
+            "file_type": "video",
+            "created_at": "2024-01-15T10:00:00Z"
+          }
+        }
+      }
+    ],
+    "total": 1
+  }
+}
+```
+
+## 3. 人脸识别接口
+
+### 3.1 添加人物到人脸库
+
+**端点**: `POST /api/v1/face/persons`
+
+**描述**: 添加新的人物到人脸库
+
+**请求格式**: `multipart/form-data`
+
+**请求参数**：
+- `name`: 人物姓名
+- `image_files`: 人物照片文件列表
+- `aliases`: 人物别名（JSON数组字符串，可选）
+- `description`: 人物描述（可选）
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "人物 张三 添加成功",
+  "data": {
+    "person_id": 1
+  }
+}
+```
+
+### 3.2 获取所有人名列表
+
+**端点**: `GET /api/v1/face/persons`
+
+**描述**: 获取人脸库中的所有人物
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "获取人名列表成功",
+  "data": [
+    {
+      "id": 1,
+      "name": "张三",
+      "aliases": ["小张", "张总"],
+      "description": "公司CEO"
     }
+  ]
+}
+```
+
+### 3.3 人脸搜索
+
+**端点**: `POST /api/v1/face/search`
+
+**描述**: 通过上传人脸图片进行人脸搜索
+
+**请求格式**: `multipart/form-data`
+
+**请求参数**：
+- `image_file`: 人脸图片文件
+- `limit`: 返回结果数量限制（默认10）
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "人脸搜索完成",
+  "data": {
+    "query_image": "face.jpg",
+    "matches": [
+      {
+        "person_id": 1,
+        "person_name": "张三",
+        "aliases": ["小张", "张总"],
+        "similarity": 0.92,
+        "confidence": 0.95
+      }
+    ]
   }
 }
 ```
 
-### 4.2 启动处理任务
+## 4. 文件处理接口
 
-**端点**: `POST /api/v1/tasks/start`
+### 4.1 处理文件
 
-**描述**: 启动文件处理任务
+**端点**: `POST /api/v1/files/process`
+
+**描述**: 处理单个文件
 
 **请求参数**：
 ```json
 {
-  "task_type": "process_directory",  // 任务类型
-  "parameters": {
-    "directory_path": "/home/user/new_photos",
-    "recursive": true,
-    "file_types": ["image", "video"]
+  "file_path": "/path/to/file.mp4",
+  "file_id": 1
+}
+```
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "文件处理完成",
+  "data": {
+    "status": "success",
+    "file_id": "550e8400-e29b-41d4-a716-446655440000",
+    "file_path": "/path/to/file.mp4",
+    "file_type": "video",
+    "processing_time": 12.5
   }
 }
 ```
 
-**任务类型**：
-- `process_file`: 处理单个文件
-- `process_directory`: 处理目录
-- `reindex_all`: 重新索引所有文件
-- `cleanup_orphaned`: 清理孤立数据
+### 4.2 批量处理文件
 
-### 4.3 停止处理任务
+**端点**: `POST /api/v1/files/batch-process`
 
-**端点**: `POST /api/v1/tasks/stop`
-
-**描述**: 停止指定的处理任务
+**描述**: 批量处理文件
 
 **请求参数**：
 ```json
 {
-  "task_id": "task_001"  // 可选，不指定则停止所有任务
+  "file_list": [
+    {
+      "file_path": "/path/to/file1.mp4",
+      "file_id": "1"
+    },
+    {
+      "file_path": "/path/to/file2.jpg",
+      "file_id": "2"
+    }
+  ]
+}
+```
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "批量处理完成: 2/2 成功",
+  "data": [
+    {
+      "status": "success",
+      "file_id": "550e8400-e29b-41d4-a716-446655440000",
+      "file_path": "/path/to/file1.mp4",
+      "file_type": "video",
+      "processing_time": 12.5
+    },
+    {
+      "status": "success",
+      "file_id": "550e8400-e29b-41d4-a716-446655440001",
+      "file_path": "/path/to/file2.jpg",
+      "file_type": "image",
+      "processing_time": 2.3
+    }
+  ]
+}
+```
+
+### 4.3 获取文件处理状态
+
+**端点**: `GET /api/v1/files/process-status/{file_id}`
+
+**描述**: 获取文件处理状态
+
+**路径参数**：
+- `file_id`: 文件ID
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "状态获取成功",
+  "data": {
+    "file_id": "550e8400-e29b-41d4-a716-446655440000",
+    "status": "completed",
+    "progress": 100
+  }
 }
 ```
 
@@ -377,25 +539,32 @@ curl -X POST "http://localhost:8000/api/v1/search/image" \
 ```json
 {
   "status": "success",
+  "message": "系统配置获取成功",
   "data": {
-    "general": {
+    "hardware_mode": "cpu",
+    "paths": {
+      "watch_directories": ["/home/user/Pictures", "/home/user/Videos"],
+      "sqlite_db_path": "./data/msearch.db",
+      "log_file_path": "./data/logs/msearch.log"
+    },
+    "preprocessing": {},
+    "system": {
       "log_level": "INFO",
-      "max_concurrent_tasks": 4,
-      "watch_directories": [
-        "/home/user/Pictures",
-        "/home/user/Videos"
-      ]
+      "data_dir": "./data",
+      "temp_dir": "./temp",
+      "max_workers": 4
     },
-    "features": {
-      "enable_face_recognition": true,
-      "enable_audio_processing": true,
-      "enable_video_processing": true
+    "fastapi": {
+      "host": "0.0.0.0",
+      "port": 8000
     },
-    "models": {
-      "clip": {
-        "model_name": "openai/clip-vit-base-patch32",
-        "device": "cuda",
-        "batch_size": 16
+    "qdrant": {
+      "host": "localhost",
+      "port": 6333,
+      "collections": {
+        "visual_vectors": "visual_vectors",
+        "audio_music_vectors": "audio_music_vectors",
+        "audio_speech_vectors": "audio_speech_vectors"
       }
     }
   }
@@ -406,313 +575,330 @@ curl -X POST "http://localhost:8000/api/v1/search/image" \
 
 **端点**: `PUT /api/v1/config`
 
-**描述**: 更新系统配置（需要重启服务生效）
+**描述**: 更新系统配置信息
 
 **请求参数**：
 ```json
 {
-  "general": {
-    "log_level": "DEBUG",
-    "max_concurrent_tasks": 8
-  },
-  "features": {
-    "enable_face_recognition": false
+  "system": {
+    "log_level": "DEBUG"
   }
 }
 ```
 
-### 5.3 获取搜索配置
-
-**端点**: `GET /api/v1/config/search`
-
-**描述**: 获取搜索相关配置
-
 **响应示例**：
 ```json
 {
   "status": "success",
+  "message": "系统配置更新成功",
   "data": {
-    "weights": {
-      "default": {
-        "clip": 0.4,
-        "clap": 0.3,
-        "whisper": 0.3
-      },
-      "visual_query": {
-        "clip": 0.7,
-        "clap": 0.15,
-        "whisper": 0.15
-      }
-    },
-    "results": {
-      "max_results": 50,
-      "similarity_threshold": 0.3,
-      "enable_reranking": true
-    }
+    // 更新后的完整配置
   }
 }
 ```
 
-## 6. 人脸管理接口
+## 6. 任务管理接口
 
-### 6.1 添加人物
+### 6.1 启动任务
 
-**端点**: `POST /api/v1/faces/persons`
+**端点**: `POST /api/v1/tasks/start`
 
-**描述**: 添加新的人物到人脸库
-
-**请求格式**: `multipart/form-data`
-
-**请求参数**：
-- `name`: 人物姓名
-- `aliases`: 别名列表（JSON数组字符串，可选）
-- `images`: 人脸图片文件（支持多个）
-
-**cURL示例**：
-```bash
-curl -X POST "http://localhost:8000/api/v1/faces/persons" \
-  -F "name=张三" \
-  -F "aliases=[\"小张\", \"张总\"]" \
-  -F "images=@zhangsan_1.jpg" \
-  -F "images=@zhangsan_2.jpg"
-```
-
-**响应示例**：
-```json
-{
-  "status": "success",
-  "data": {
-    "person_id": 1,
-    "name": "张三",
-    "aliases": ["小张", "张总"],
-    "face_images": [
-      {
-        "image_id": 1,
-        "image_path": "faces/zhangsan_1.jpg",
-        "vector_id": "face_person_001_img_001",
-        "confidence": 0.95
-      }
-    ]
-  },
-  "message": "人物添加成功"
-}
-```
-
-### 6.2 获取人物列表
-
-**端点**: `GET /api/v1/faces/persons`
-
-**描述**: 获取人脸库中的所有人物
-
-**查询参数**：
-- `page`: 页码（默认1）
-- `page_size`: 每页数量（默认20）
-- `search`: 搜索关键词（可选）
-
-**响应示例**：
-```json
-{
-  "status": "success",
-  "data": {
-    "persons": [
-      {
-        "person_id": 1,
-        "name": "张三",
-        "aliases": ["小张", "张总"],
-        "face_count": 3,
-        "created_at": "2024-01-15T10:00:00Z"
-      }
-    ],
-    "pagination": {
-      "page": 1,
-      "page_size": 20,
-      "total_pages": 1,
-      "total_items": 1
-    }
-  }
-}
-```
-
-### 6.3 删除人物
-
-**端点**: `DELETE /api/v1/faces/persons/{person_id}`
-
-**描述**: 从人脸库中删除指定人物
-
-**路径参数**：
-- `person_id`: 人物ID
-
-**响应示例**：
-```json
-{
-  "status": "success",
-  "data": {
-    "person_id": 1,
-    "deleted": true
-  },
-  "message": "人物删除成功"
-}
-```
-
-## 7. 监控目录接口
-
-### 7.1 添加监控目录
-
-**端点**: `POST /api/v1/monitoring/directories`
-
-**描述**: 添加新的文件监控目录
+**描述**: 启动任务
 
 **请求参数**：
 ```json
 {
-  "directory_path": "/home/user/new_photos",
-  "recursive": true,
-  "file_types": ["image", "video", "audio"]
+  "task_type": "process_directory"
 }
 ```
 
 **响应示例**：
 ```json
 {
-  "status": "success",
-  "data": {
-    "directory_id": "dir_001",
-    "directory_path": "/home/user/new_photos",
-    "recursive": true,
-    "file_types": ["image", "video", "audio"],
-    "status": "active"
-  },
-  "message": "监控目录添加成功"
+  "message": "启动任务功能待实现",
+  "task_type": "process_directory"
 }
 ```
 
-### 7.2 获取监控目录
+### 6.2 停止任务
 
-**端点**: `GET /api/v1/monitoring/directories`
+**端点**: `POST /api/v1/tasks/stop`
 
-**描述**: 获取当前所有监控目录
+**描述**: 停止任务
+
+**请求参数**：
+```json
+{
+  "task_type": "process_directory"
+}
+```
 
 **响应示例**：
 ```json
 {
-  "status": "success",
-  "data": {
-    "directories": [
-      {
-        "directory_id": "dir_001",
-        "directory_path": "/home/user/Pictures",
-        "recursive": true,
-        "file_types": ["image", "video"],
-        "status": "active",
-        "files_count": 1250,
-        "last_scan": "2024-01-15T10:00:00Z"
-      }
-    ]
-  }
+  "message": "停止任务功能待实现",
+  "task_type": "process_directory"
 }
 ```
 
-### 7.3 删除监控目录
+### 6.3 获取任务状态
 
-**端点**: `DELETE /api/v1/monitoring/directories/{directory_id}`
+**端点**: `GET /api/v1/tasks/status`
 
-**描述**: 停止监控指定目录
+**描述**: 获取任务状态
 
-**路径参数**：
-- `directory_id`: 目录ID
+**请求参数**：
+```json
+{
+  "task_type": "process_directory"
+}
+```
 
-## 8. 系统状态接口
+**响应示例**：
+```json
+{
+  "message": "获取任务状态功能待实现",
+  "task_type": "process_directory"
+}
+```
 
-### 8.1 获取系统状态
+### 6.4 重置系统
+
+**端点**: `POST /api/v1/tasks/reset`
+
+**描述**: 重置系统
+
+**请求参数**：
+```json
+{
+  "reset_type": "all"
+}
+```
+
+**响应示例**：
+```json
+{
+  "message": "重置系统功能待实现",
+  "reset_type": "all"
+}
+```
+
+## 7. 系统状态接口
+
+### 7.1 获取系统状态
 
 **端点**: `GET /api/v1/status`
 
-**描述**: 获取系统整体运行状态
+**描述**: 获取系统状态
 
 **响应示例**：
 ```json
 {
-  "status": "success",
-  "data": {
-    "system": {
-      "status": "healthy",
-      "uptime": "2 days, 5 hours, 30 minutes",
-      "version": "1.0.0"
-    },
-    "services": {
-      "api_server": "running",
-      "embedding_engine": "running",
-      "file_monitor": "running",
-      "task_queue": "running"
-    },
-    "database": {
-      "sqlite": {
-        "status": "connected",
-        "file_count": 1250,
-        "db_size_mb": 45.2
-      },
-      "qdrant": {
-        "status": "connected",
-        "collections": {
-          "image_vectors": 850,
-          "video_vectors": 320,
-          "audio_vectors": 180,
-          "face_vectors": 45
-        }
-      }
-    },
-    "resources": {
-      "cpu_usage": 25.5,
-      "memory_usage": 68.2,
-      "disk_usage": 45.8,
-      "gpu_usage": 15.3
-    },
-    "statistics": {
-      "total_files": 1250,
-      "processed_files": 1180,
-      "pending_files": 70,
-      "failed_files": 0
-    }
-  }
+  "message": "获取系统状态功能待实现"
 }
 ```
 
-### 8.2 获取性能统计
+### 7.2 健康检查
 
-**端点**: `GET /api/v1/status/performance`
+**端点**: `GET /api/v1/status/health`
 
-**描述**: 获取系统性能统计信息
-
-**查询参数**：
-- `period`: 统计周期（hour/day/week，默认day）
+**描述**: 健康检查
 
 **响应示例**：
 ```json
 {
-  "status": "success",
+  "status": "healthy",
+  "message": "系统运行正常"
+}
+```
+
+### 7.3 获取系统指标
+
+**端点**: `GET /api/v1/status/metrics`
+
+**描述**: 获取系统指标
+
+**响应示例**：
+```json
+{
+  "message": "获取系统指标功能待实现"
+}
+```
+
+### 7.4 获取系统版本
+
+**端点**: `GET /api/v1/status/version`
+
+**描述**: 获取系统版本
+
+**响应示例**：
+```json
+{
+  "version": "0.1.0",
+  "message": "版本信息获取成功"
+}
+```
+
+## 8. 系统管理接口
+
+### 8.1 健康检查
+
+**端点**: `GET /health`
+
+**描述**: 系统健康检查端点
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "服务运行正常",
   "data": {
-    "period": "day",
-    "statistics": {
-      "search_requests": 156,
-      "avg_search_time_ms": 245,
-      "files_processed": 45,
-      "avg_processing_time_s": 12.5,
-      "error_rate": 0.02
-    },
-    "timeline": [
-      {
-        "timestamp": "2024-01-15T00:00:00Z",
-        "search_requests": 12,
-        "avg_search_time_ms": 230
-      }
-    ]
+    "status": "healthy",
+    "timestamp": "2024-01-15T10:30:00Z"
   }
 }
 ```
 
-## 9. 错误码参考
+### 8.2 获取系统版本
 
-### 9.1 通用错误码
+**端点**: `GET /api/v1/system/version`
+
+**描述**: 获取系统版本信息
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "版本信息获取成功",
+  "data": {
+    "version": "v0.1",
+    "environment": "development"
+  }
+}
+```
+
+### 8.3 获取系统状态
+
+**端点**: `GET /api/v1/system/status`
+
+**描述**: 获取系统状态信息
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "系统状态获取成功",
+  "data": {
+    "cpu_usage": "25.0%",
+    "memory_usage": "68.0%",
+    "memory_available": "8.00 GB",
+    "disk_usage": "45.00%",
+    "disk_available": "100.00 GB",
+    "uptime": "3600 seconds"
+  }
+}
+```
+
+### 8.4 获取数据库状态
+
+**端点**: `GET /api/v1/system/db-status`
+
+**描述**: 获取数据库连接状态
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "数据库状态检查完成",
+  "data": {
+    "sqlite_connected": true,
+    "qdrant_connected": true,
+    "sqlite_version": "3.35.0",
+    "qdrant_version": "1.1.0"
+  }
+}
+```
+
+### 8.5 系统重置
+
+**端点**: `POST /api/v1/system/reset`
+
+**描述**: 系统重置
+
+**请求参数**：
+```json
+{
+  "reset_type": "all"
+}
+```
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "系统重置成功: all",
+  "data": {
+    "reset_type": "all"
+  }
+}
+```
+
+## 9. 文件监控接口
+
+### 9.1 获取文件监控状态
+
+**端点**: `GET /api/v1/monitoring/status`
+
+**描述**: 获取文件监控状态
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "监控状态获取成功",
+  "data": {
+    // 监控状态信息
+  }
+}
+```
+
+### 9.2 启动文件监控
+
+**端点**: `POST /api/v1/monitoring/start`
+
+**描述**: 启动文件监控服务
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "文件监控已启动",
+  "data": {
+    // 监控状态信息
+  }
+}
+```
+
+### 9.3 停止文件监控
+
+**端点**: `POST /api/v1/monitoring/stop`
+
+**描述**: 停止文件监控服务
+
+**响应示例**：
+```json
+{
+  "success": true,
+  "message": "文件监控已停止",
+  "data": {
+    // 监控状态信息
+  }
+}
+```
+
+## 10. 错误码参考
+
+### 10.1 通用错误码
 
 | 错误码 | HTTP状态码 | 说明 |
 |--------|-----------|------|
@@ -722,7 +908,7 @@ curl -X POST "http://localhost:8000/api/v1/faces/persons" \
 | INTERNAL_ERROR | 500 | 内部服务器错误 |
 | SERVICE_UNAVAILABLE | 503 | 服务不可用 |
 
-### 9.2 业务错误码
+### 10.2 业务错误码
 
 | 错误码 | HTTP状态码 | 说明 |
 |--------|-----------|------|
@@ -733,9 +919,9 @@ curl -X POST "http://localhost:8000/api/v1/faces/persons" \
 | FACE_DETECTION_FAILED | 500 | 人脸检测失败 |
 | DUPLICATE_PERSON | 409 | 人物已存在 |
 
-## 10. SDK和示例
+## 11. SDK使用示例
 
-### 10.1 Python SDK示例
+### 11.1 Python SDK示例
 
 ```python
 import requests
@@ -745,30 +931,29 @@ class MSearchClient:
     def __init__(self, base_url="http://localhost:8000/api/v1"):
         self.base_url = base_url
     
-    def search(self, query, modality="smart", top_k=10):
-        """执行搜索"""
+    def search(self, query, limit=10):
+        """执行智能搜索"""
         url = f"{self.base_url}/search"
         data = {
             "query": query,
-            "modality": modality,
-            "top_k": top_k
+            "limit": limit
         }
         response = requests.post(url, json=data)
         return response.json()
     
-    def upload_image_search(self, image_path, top_k=10):
+    def upload_image_search(self, image_path, limit=10):
         """上传图片搜索"""
         url = f"{self.base_url}/search/image"
         with open(image_path, 'rb') as f:
-            files = {'image': f}
-            data = {'top_k': top_k}
+            files = {'file': f}
+            data = {'limit': limit}
             response = requests.post(url, files=files, data=data)
         return response.json()
     
     def add_person(self, name, image_paths, aliases=None):
         """添加人物到人脸库"""
-        url = f"{self.base_url}/faces/persons"
-        files = [('images', open(path, 'rb')) for path in image_paths]
+        url = f"{self.base_url}/face/persons"
+        files = [('image_files', open(path, 'rb')) for path in image_paths]
         data = {'name': name}
         if aliases:
             data['aliases'] = json.dumps(aliases)
@@ -783,9 +968,9 @@ class MSearchClient:
 # 使用示例
 client = MSearchClient()
 
-# 文本搜索
-result = client.search("美丽的风景", "text_to_image")
-print(f"找到 {len(result['data']['results'])} 个结果")
+# 智能搜索
+result = client.search("包含张三的会议照片")
+print(f"找到 {len(result['results'])} 个结果")
 
 # 图片搜索
 result = client.upload_image_search("query_image.jpg")
@@ -794,7 +979,7 @@ result = client.upload_image_search("query_image.jpg")
 result = client.add_person("张三", ["face1.jpg", "face2.jpg"], ["小张", "张总"])
 ```
 
-### 10.2 JavaScript SDK示例
+### 11.2 JavaScript SDK示例
 
 ```javascript
 class MSearchClient {
@@ -802,7 +987,7 @@ class MSearchClient {
         this.baseUrl = baseUrl;
     }
     
-    async search(query, modality = 'smart', topK = 10) {
+    async search(query, limit = 10) {
         const response = await fetch(`${this.baseUrl}/search`, {
             method: 'POST',
             headers: {
@@ -810,17 +995,16 @@ class MSearchClient {
             },
             body: JSON.stringify({
                 query: query,
-                modality: modality,
-                top_k: topK
+                limit: limit
             })
         });
         return await response.json();
     }
     
-    async uploadImageSearch(imageFile, topK = 10) {
+    async uploadImageSearch(imageFile, limit = 10) {
         const formData = new FormData();
-        formData.append('image', imageFile);
-        formData.append('top_k', topK);
+        formData.append('file', imageFile);
+        formData.append('limit', limit);
         
         const response = await fetch(`${this.baseUrl}/search/image`, {
             method: 'POST',
@@ -839,10 +1023,8 @@ class MSearchClient {
 const client = new MSearchClient();
 
 // 执行搜索
-client.search('会议场景', 'text_to_video')
+client.search('会议场景')
     .then(result => {
-        console.log(`找到 ${result.data.results.length} 个结果`);
+        console.log(`找到 ${result.results.length} 个结果`);
     });
 ```
-
-这个API文档提供了完整的接口说明，包括请求格式、响应格式、错误处理和使用示例，方便开发者集成和使用msearch系统。

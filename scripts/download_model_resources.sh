@@ -15,24 +15,110 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 NC='\033[0m' # No Color
 
-# 日志函数
+# 日志配置
+LOG_DIR="$SCRIPT_DIR/../logs"
+TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+LOG_FILE="${LOG_DIR}/download_resources_${TIMESTAMP}.log"
+LOG_LEVEL="INFO"  # 可选: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+# 创建日志目录
+mkdir -p "$LOG_DIR"
+
+# 日志级别映射
+declare -A LOG_LEVEL_MAP
+LOG_LEVEL_MAP["DEBUG"]=0
+LOG_LEVEL_MAP["INFO"]=1
+LOG_LEVEL_MAP["WARNING"]=2
+LOG_LEVEL_MAP["ERROR"]=3
+LOG_LEVEL_MAP["CRITICAL"]=4
+
+# 日志级别转换函数
+level_to_num() {
+    echo "${LOG_LEVEL_MAP[$1]:-1}"
+}
+
+# 判断是否应该记录该级别的日志
+should_log() {
+    local log_level="$1"
+    local current_level="$LOG_LEVEL"
+    
+    [ $(level_to_num "$log_level") -ge $(level_to_num "$current_level") ]
+}
+
+# 格式化日志信息
+format_log() {
+    local level="$1"
+    local message="$2"
+    local timestamp=$(date +"%Y-%m-%d %H:%M:%S")
+    
+    echo "[$timestamp] [$level] $message"
+}
+
+# 输出日志到控制台
+log_to_console() {
+    local level="$1"
+    local message="$2"
+    
+    case "$level" in
+        DEBUG)
+            echo -e "${BLUE}$message${NC}"
+            ;;
+        INFO)
+            echo -e "${GREEN}$message${NC}"
+            ;;
+        WARNING)
+            echo -e "${YELLOW}$message${NC}"
+            ;;
+        ERROR|CRITICAL)
+            echo -e "${RED}$message${NC}"
+            ;;
+    esac
+}
+
+# 通用日志函数
+log() {
+    local level="${1:-INFO}"
+    local message="$2"
+    
+    if should_log "$level"; then
+        local formatted_message=$(format_log "$level" "$message")
+        
+        # 输出到控制台
+        log_to_console "$level" "$formatted_message"
+        
+        # 输出到文件
+        echo "$formatted_message" >> "$LOG_FILE"
+    fi
+}
+
+# 便捷日志函数
+log_debug() {
+    log "DEBUG" "$1"
+}
+
 log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    log "INFO" "$1"
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    log "WARNING" "$1"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    log "ERROR" "$1"
 }
 
-log_debug() {
-    echo -e "${BLUE}[DEBUG]${NC} $1"
+log_critical() {
+    log "CRITICAL" "$1"
 }
 
 # 获取脚本所在目录
+
+# 初始化日志
+log_info "==========================================="
+log_info "开始下载离线资源..."
+log_info "日志文件: ${LOG_FILE}"
+log_info "==========================================="
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
@@ -41,12 +127,12 @@ download_dependencies() {
     log_info "1. 下载Python依赖包..."
     
     # 创建offline目录结构
-    mkdir -p "$PROJECT_ROOT/offline/packages/requirements"
+    mkdir -p "$PROJECT_ROOT/offline/packages"
     
     # 下载requirements.txt中列出的所有依赖包（使用国内镜像优化）
     log_info "下载requirements.txt中所有依赖包..."
     pip download -r "$PROJECT_ROOT/requirements.txt" \
-        --dest "$PROJECT_ROOT/offline/packages/requirements" \
+        --dest "$PROJECT_ROOT/offline/packages" \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         --timeout 60 \
@@ -55,7 +141,7 @@ download_dependencies() {
     # 特别处理inaSpeechSegmenter包（可能需要额外依赖）
     log_info "特别处理inaSpeechSegmenter包..."
     pip download inaspeechsegmenter \
-        --dest "$PROJECT_ROOT/offline/packages/requirements" \
+        --dest "$PROJECT_ROOT/offline/packages" \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         --timeout 60 \
@@ -128,17 +214,17 @@ download_dependencies() {
     fi
     
     # 验证下载结果
-    requirements_count=$(find "$PROJECT_ROOT/offline/packages/requirements" -type f -name "*.whl" | wc -l)
+    requirements_count=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" | wc -l)
     log_info "依赖包下载完成:"
     log_info "  - Wheel文件数量: $requirements_count"
-    log_info "  - 保存位置: $PROJECT_ROOT/offline/packages/requirements/"
+    log_info "  - 保存位置: $PROJECT_ROOT/offline/packages/"
     
     # 检查关键依赖包是否下载成功
     key_packages=("torch" "transformers" "fastapi" "qdrant-client" "inaspeechsegmenter")
     missing_packages=()
     
     for package in "${key_packages[@]}"; do
-        if ! find "$PROJECT_ROOT/offline/packages/requirements" -type f -name "*${package}*" | grep -q .; then
+        if ! find "$PROJECT_ROOT/offline/packages" -type f -name "*${package}*" | grep -q .; then
             missing_packages+=("$package")
         fi
     done
@@ -162,23 +248,23 @@ download_pyside6() {
     log_info "2. 下载PySide6跨平台GUI框架..."
     
     # 创建offline目录结构
-    mkdir -p "$PROJECT_ROOT/offline/packages/pyside6"
+    mkdir -p "$PROJECT_ROOT/offline/packages"
     
     log_info "开始下载PySide6离线包..."
     
     # 下载PySide6及其依赖
     pip download PySide6 \
-        --dest "$PROJECT_ROOT/offline/packages/pyside6" \
+        --dest "$PROJECT_ROOT/offline/packages" \
         --no-deps \
         --disable-pip-version-check \
         --timeout 60 \
         --retries 3
     
     # 验证下载结果
-    pyside6_count=$(find "$PROJECT_ROOT/offline/packages/pyside6" -type f -name "*.whl" | wc -l)
+    pyside6_count=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" | wc -l)
     log_info "PySide6下载完成:"
     log_info "  - Wheel文件数量: $pyside6_count"
-    log_info "  - 保存位置: $PROJECT_ROOT/offline/packages/pyside6/"
+    log_info "  - 保存位置: $PROJECT_ROOT/offline/packages/"
     
     if [ "$pyside6_count" -gt 0 ]; then
         log_info "PySide6离线包下载成功！"
@@ -522,7 +608,7 @@ echo "1. 安装依赖包："
 echo "   pip install --no-index --find-links=offline/packages -r requirements.txt"
 echo ""
 echo "2. 安装PySide6："
-echo "   pip install --no-index --find-links=offline/packages/pyside6 PySide6"
+echo "   pip install --no-index --find-links=offline/packages PySide6"
 echo ""
 echo "3. 启动Qdrant服务："
 echo "   ./scripts/start_qdrant.sh"

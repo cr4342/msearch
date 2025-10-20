@@ -19,8 +19,8 @@ MSearch提供了Windows一键部署脚本，可以自动完成所有安装和配
 3. 进入项目根目录
 4. 执行部署脚本：
 
-```bash
-scripts\deploy_msearch.bat
+```batch
+scripts\install_and_configure_msearch.bat
 ```
 
 该脚本会自动执行以下操作：
@@ -35,7 +35,7 @@ scripts\deploy_msearch.bat
 
 要停止所有服务，请运行：
 
-```bash
+```batch
 scripts\stop_all_services.bat
 ```
 
@@ -78,7 +78,7 @@ scripts\stop_all_services.bat
 
 可以通过以下命令启动桌面应用：
 
-```bash
+```batch
 # 先激活虚拟环境
 venv\Scripts\activate
 # 运行桌面应用
@@ -110,7 +110,7 @@ curl http://localhost:8000/health
 ### 5.2 环境变量覆盖
 
 可以通过设置环境变量来覆盖配置文件中的设置：
-```bash
+```batch
 set MSEARCH_LOG_LEVEL=DEBUG
 set MSEARCH_DATA_DIR=C:\custom\data\path
 ```
@@ -142,7 +142,7 @@ models:
 ## 7. 离线部署说明
 
 对于完全离线环境，建议先在有网络的环境中运行：
-```bash
+```batch
 scripts\download_model_resources.bat
 ```
 
@@ -155,10 +155,10 @@ scripts\download_model_resources.bat
 2. 更新代码库
 3. 重新运行部署脚本
 
-```bash
+```batch
 scripts\stop_all_services.bat
 git pull
-scripts\deploy_msearch.bat
+scripts\install_and_configure_msearch.bat
 ```
 
 ## 9. 联系方式

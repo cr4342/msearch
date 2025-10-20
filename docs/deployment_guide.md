@@ -31,17 +31,26 @@
 
 **Windows用户**：
 ```batch
-# 下载并运行安装脚本
-curl -O https://github.com/msearch/releases/install_windows.bat
-install_windows.bat
+# 克隆项目
+git clone https://github.com/cr4342/msearch.git
+cd msearch
+
+# 运行一键部署脚本
+scripts\install_and_configure_msearch.bat
 ```
 
 **Linux/macOS用户**：
 ```bash
-# 下载并运行安装脚本
-curl -O https://github.com/msearch/releases/install_unix.sh
-chmod +x install_unix.sh
-./install_unix.sh
+# 克隆项目
+git clone https://github.com/cr4342/msearch.git
+cd msearch
+
+# 创建虚拟环境并激活
+python3 -m venv venv
+source venv/bin/activate  # Linux/macOS
+
+# 运行一键部署脚本
+bash scripts/deploy_msearch.sh
 ```
 
 ### 2.2 手动安装步骤
@@ -50,14 +59,14 @@ chmod +x install_unix.sh
 
 **1. 克隆项目**：
 ```bash
-git clone https://github.com/your-org/msearch.git
+git clone https://github.com/cr4342/msearch.git
 cd msearch
 ```
 
 **2. 创建虚拟环境**：
 ```bash
 # 使用venv
-python -m venv venv
+python3 -m venv venv
 
 # Windows激活
 venv\Scripts\activate
@@ -75,12 +84,12 @@ pip install -r requirements.txt
 
 **1. 复制配置文件**：
 ```bash
-cp config/config.example.yml config/config.yml
+cp config/config.yml config/config.local.yml
 ```
 
 **2. 编辑配置文件**：
 ```yaml
-# config/config.yml
+# config/config.local.yml
 general:
   log_level: INFO
   data_dir: ./data
@@ -95,32 +104,39 @@ features:
   enable_video_processing: true
 ```
 
-**3. 初始化环境**：
-```bash
-python scripts/setup_environment.py
-```
-
 #### 2.2.3 启动服务
 
 **1. 下载模型文件**：
 ```bash
-python scripts/download_models.py
+# Linux/macOS
+bash scripts/download_model_resources.sh
+
+# Windows
+scripts\download_model_resources.bat
 ```
 
 **2. 初始化数据库**：
 ```bash
-python scripts/database_init.py
+# 数据库会自动初始化，无需手动操作
 ```
 
 **3. 启动应用**：
 ```bash
-python scripts/start.py
+# Linux/macOS
+bash scripts/start_qdrant.sh
+bash scripts/start_infinity_services.sh
+python3 src/api/main.py
+
+# Windows
+scripts\start_qdrant.bat
+scripts\start_infinity_services.bat
+python src\api\main.py
 ```
 
 **4. 验证安装**：
 访问 http://localhost:8000 查看API文档，或运行健康检查：
 ```bash
-curl http://localhost:8000/api/v1/status
+curl http://localhost:8000/health
 ```
 
 ## 3. 离线部署
@@ -130,7 +146,7 @@ curl http://localhost:8000/api/v1/status
 **1. 下载离线资源包**：
 ```bash
 # 在有网络的环境中执行
-python scripts/download_offline_resources.py --target ./offline/
+bash scripts/download_model_resources.sh
 ```
 
 **2. 打包离线部署包**：
@@ -150,32 +166,30 @@ cd msearch/
 **2. 设置离线模式**：
 ```bash
 # 设置环境变量指向本地模型目录
-export HF_HOME="$(pwd)/offline/models"
+export HF_HOME="$(pwd)/offline/models/huggingface"
 export TRANSFORMERS_CACHE="$HF_HOME"
 ```
 
 **3. 安装离线依赖**：
 ```bash
-# Windows
-offline\install_scripts\install_offline.bat
-
-# Linux/macOS
-chmod +x offline/install_scripts/install_offline.sh
-./offline/install_scripts/install_offline.sh
+# 使用离线包安装依赖
+pip install --no-index --find-links=offline/packages -r requirements.txt
 ```
 
 **4. 启动离线服务**：
 ```bash
-python scripts/start.py --offline
+bash scripts/start_qdrant.sh
+bash scripts/start_infinity_services.sh
+python3 src/api/main.py
 ```
 
 ### 3.3 离线部署验证
 
 **验证模型加载**：
 ```bash
-python -c "
-from src.business.embedding_engine import EmbeddingEngine
-engine = EmbeddingEngine()
+python3 -c "
+from src.business.embedding_engine import get_embedding_engine
+engine = get_embedding_engine()
 print('离线模型加载成功')
 "
 ```
@@ -330,14 +344,7 @@ database:
 **数据库初始化**：
 ```bash
 # 创建数据库表结构
-python scripts/database_init.py
-
-# 验证数据库连接
-python -c "
-from src.storage.sqlite_manager import SQLiteManager
-manager = SQLiteManager()
-print('数据库连接成功')
-"
+# 数据库会自动初始化，无需手动操作
 ```
 
 ### 5.2 Qdrant配置
@@ -391,7 +398,7 @@ Type=simple
 User=msearch
 WorkingDirectory=/opt/msearch
 Environment=PATH=/opt/msearch/venv/bin
-ExecStart=/opt/msearch/venv/bin/python scripts/start.py
+ExecStart=/opt/msearch/venv/bin/python scripts/start_all_services.py
 Restart=always
 RestartSec=10
 
@@ -416,7 +423,7 @@ sudo journalctl -u msearch -f
 ```batch
 # 使用NSSM安装Windows服务
 nssm install MSearch "C:\msearch\venv\Scripts\python.exe"
-nssm set MSearch Arguments "C:\msearch\scripts\start.py"
+nssm set MSearch Arguments "C:\msearch\scripts\start_all_services.py"
 nssm set MSearch AppDirectory "C:\msearch"
 nssm start MSearch
 ```
@@ -437,13 +444,13 @@ else
 fi
 
 # 检查数据库连接
-python -c "
-from src.storage.sqlite_manager import SQLiteManager
-from src.storage.qdrant_client import QdrantClient
+python3 -c "
+from src.storage.database import DatabaseManager
+from src.storage.vector_store import VectorStore
 
 try:
-    sqlite_manager = SQLiteManager()
-    qdrant_client = QdrantClient()
+    db_manager = DatabaseManager()
+    vector_store = VectorStore()
     print('数据库连接正常')
 except Exception as e:
     print(f'数据库连接异常: {e}')
@@ -507,7 +514,9 @@ def monitor_memory():
         if memory_percent > 80:
             print("警告: 内存使用率过高")
         
-        time.sleep(60)
+        time.sleep(60
+
+)
 
 if __name__ == "__main__":
     monitor_memory()
@@ -533,7 +542,7 @@ performance:
 # 症状：模型下载超时或失败
 # 解决方案：
 export HF_ENDPOINT=https://hf-mirror.com  # 使用镜像源
-python scripts/download_models.py --retry 3
+bash scripts/download_model_resources.sh --force
 ```
 
 **问题2：GPU内存不足**
@@ -575,7 +584,7 @@ grep "PERF" data/logs/performance.log | tail -20
 **日志级别调整**：
 ```bash
 # 临时启用DEBUG日志
-curl -X POST "http://localhost:8000/api/v1/logging/level" \
+curl -X POST "http://localhost:8000/api/v1/config/logging" \
   -H "Content-Type: application/json" \
   -d '{"logger_name": "msearch.processors.timestamp_processor", "level": "DEBUG"}'
 ```
@@ -585,7 +594,7 @@ curl -X POST "http://localhost:8000/api/v1/logging/level" \
 **系统资源监控**：
 ```bash
 # CPU和内存使用
-top -p $(pgrep -f "python.*start.py")
+top -p $(pgrep -f "python.*main.py")
 
 # GPU使用情况（如果有GPU）
 nvidia-smi
@@ -642,7 +651,7 @@ fi
 BACKUP_DIR="$1"
 
 # 停止服务
-sudo systemctl stop msearch
+bash scripts/stop_all_services.sh
 
 # 恢复配置
 cp -r "$BACKUP_DIR/config/" ./
@@ -651,7 +660,7 @@ cp -r "$BACKUP_DIR/config/" ./
 cp -r "$BACKUP_DIR/database/" data/
 
 # 重启服务
-sudo systemctl start msearch
+bash scripts/deploy_msearch.sh
 
 echo "恢复完成"
 ```

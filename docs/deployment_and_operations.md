@@ -40,14 +40,18 @@ python3 -m venv venv
 source venv/bin/activate  # Linux/macOS
 # venv\Scripts\activate  # Windows
 
-# 安装依赖
-pip install -r requirements.txt
+# 运行一键部署脚本
+bash scripts/deploy_msearch.sh
+```
 
-# 下载模型文件
-bash scripts/download_model_resources.sh
+**Windows用户**：
+```batch
+# 克隆项目
+git clone https://github.com/cr4342/msearch.git
+cd msearch
 
-# 启动服务
-bash scripts/start_all_services.sh
+# 运行一键部署脚本
+scripts\install_and_configure_msearch.bat
 ```
 
 ### 2.2 手动安装步骤
@@ -105,7 +109,11 @@ features:
 
 **1. 下载模型文件**：
 ```bash
+# Linux/macOS
 bash scripts/download_model_resources.sh
+
+# Windows
+scripts\download_model_resources.bat
 ```
 
 **2. 初始化数据库**：
@@ -115,7 +123,14 @@ bash scripts/download_model_resources.sh
 
 **3. 启动应用**：
 ```bash
-bash scripts/start_all_services.sh
+# 启动Qdrant服务
+bash scripts/start_qdrant.sh
+
+# 启动Infinity服务
+bash scripts/start_infinity_services.sh
+
+# 启动API服务
+python3 src/api/main.py
 ```
 
 **4. 验证安装**：
@@ -154,7 +169,14 @@ pip install --no-index --find-links=offline/packages -r requirements.txt
 
 **4. 启动离线服务**：
 ```bash
-bash scripts/start_all_services.sh
+# 启动Qdrant服务
+bash scripts/start_qdrant.sh
+
+# 启动Infinity服务
+bash scripts/start_infinity_services.sh
+
+# 启动API服务
+python3 src/api/main.py
 ```
 
 ### 3.3 离线部署验证
@@ -262,7 +284,7 @@ performance:
 
 ```bash
 # 启动所有服务
-bash scripts/start_all_services.sh
+bash scripts/deploy_msearch.sh
 
 # 启动单个服务
 bash scripts/start_qdrant.sh
@@ -434,7 +456,7 @@ pip install -r requirements.txt
 
 # 重启服务
 bash scripts/stop_all_services.sh
-bash scripts/start_all_services.sh
+bash scripts/deploy_msearch.sh
 ```
 
 ### 10.2 配置迁移

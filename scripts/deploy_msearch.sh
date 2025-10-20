@@ -2,34 +2,125 @@
 
 # msearch 一键部署脚本
 # 支持离线部署和在线部署两种模式
+# 实现多级别日志管理，支持详细日志记录和日志文件输出
 
 set -e
 set -u
 set -o pipefail
+
+# 获取脚本所在目录
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+LOG_DIR="$PROJECT_ROOT/logs"
+LOG_FILE="$LOG_DIR/deploy_msearch_$(date +%Y%m%d_%H%M%S).log"
+
+# 创建日志目录
+mkdir -p "$LOG_DIR"
+
+# 默认日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+LOG_LEVEL="INFO"
 
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+PURPLE='\033[0;35m'
 NC='\033[0m' # No Color
 
-# 日志函数
+# 日志级别映射
+LOG_LEVEL_DEBUG=0
+LOG_LEVEL_INFO=1
+LOG_LEVEL_WARNING=2
+LOG_LEVEL_ERROR=3
+LOG_LEVEL_CRITICAL=4
+
+# 转换日志级别为数字
+level_to_num() {
+    case "$1" in
+        DEBUG) echo $LOG_LEVEL_DEBUG ;;
+        INFO) echo $LOG_LEVEL_INFO ;;
+        WARNING) echo $LOG_LEVEL_WARNING ;;
+        ERROR) echo $LOG_LEVEL_ERROR ;;
+        CRITICAL) echo $LOG_LEVEL_CRITICAL ;;
+        *) echo $LOG_LEVEL_INFO ;;
+    esac
+}
+
+# 检查消息级别是否应该被记录
+should_log() {
+    local msg_level="$1"
+    local current_level="$(level_to_num "$LOG_LEVEL")"
+    local msg_level_num="$(level_to_num "$msg_level")"
+    [ "$msg_level_num" -ge "$current_level" ]
+}
+
+# 格式化日志消息
+format_log() {
+    local level="$1"
+    local message="$2"
+    local timestamp="$(date +"%Y-%m-%d %H:%M:%S")"
+    echo "[$timestamp] [${level}] $message"
+}
+
+# 输出带颜色的日志到控制台
+log_to_console() {
+    local level="$1"
+    local message="$2"
+    local formatted="$(format_log "$level" "$message")"
+    
+    case "$level" in
+        DEBUG) echo -e "${BLUE}${formatted}${NC}" ;;
+        INFO) echo -e "${GREEN}${formatted}${NC}" ;;
+        WARNING) echo -e "${YELLOW}${formatted}${NC}" ;;
+        ERROR) echo -e "${RED}${formatted}${NC}" ;;
+        CRITICAL) echo -e "${PURPLE}${formatted}${NC}" ;;
+        *) echo -e "${formatted}" ;;
+    esac
+}
+
+# 日志函数 - 支持多级别和文件记录
+log() {
+    local level="$1"
+    local message="$2"
+    
+    if should_log "$level"; then
+        # 输出到控制台
+        log_to_console "$level" "$message"
+        
+        # 写入日志文件
+        formatted_log="$(format_log "$level" "$message")"
+        echo "$formatted_log" >> "$LOG_FILE"
+    fi
+}
+
+# 便捷日志函数
+log_debug() {
+    log "DEBUG" "$1"
+}
+
 log_info() {
-    echo -e "${GREEN}[INFO]${NC} $1"
+    log "INFO" "$1"
 }
 
 log_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
+    log "WARNING" "$1"
 }
 
 log_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
+    log "ERROR" "$1"
 }
 
-log_debug() {
-    echo -e "${BLUE}[DEBUG]${NC} $1"
+log_critical() {
+    log "CRITICAL" "$1"
 }
+
+# 初始化日志
+log_info "=== msearch 部署脚本启动 ==="
+log_info "日志文件: $LOG_FILE"
+log_info "脚本目录: $SCRIPT_DIR"
+log_info "项目目录: $PROJECT_ROOT"
+log_info "日志级别: $LOG_LEVEL"
 
 # 显示帮助信息
 show_help() {
@@ -215,6 +306,41 @@ setup_china_mirrors() {
     log_info "已设置 Git 镜像源"
 }
 
+# 安装系统依赖（Ubuntu/Debian）
+install_system_dependencies() {
+    log_info "安装系统依赖..."
+    
+    # 检查是否是Ubuntu/Debian系统
+    if command -v apt-get &> /dev/null; then
+        log_info "检测到基于Debian的系统，安装系统依赖..."
+        
+        # 更新包列表
+        sudo apt-get update
+        
+        # 安装基础依赖
+        sudo apt-get install -y \
+            python3-dev \
+            python3-pip \
+            python3-venv \
+            git \
+            ffmpeg \
+            curl \
+            wget \
+            build-essential \
+            libgl1-mesa-glx \
+            libglib2.0-0 \
+            libsm6 \
+            libxext6 \
+            libxrender-dev \
+            libgomp1 \
+            libgtk2.0-0
+        
+        log_info "系统依赖安装完成"
+    else
+        log_warning "未检测到apt-get，跳过系统依赖安装"
+    fi
+}
+
 # 安装Python依赖
 install_python_dependencies() {
     log_info "安装Python依赖..."
@@ -283,6 +409,14 @@ download_models() {
     # 下载模型文件
     log_info "开始下载模型文件..."
     
+    # 确保huggingface_hub已安装
+    log_info "确保huggingface_hub已安装..."
+    if command -v pip3 &> /dev/null; then
+        pip3 install huggingface_hub -i https://pypi.tuna.tsinghua.edu.cn/simple --upgrade
+    else
+        python3 -m pip install huggingface_hub -i https://pypi.tuna.tsinghua.edu.cn/simple --upgrade
+    fi
+    
     # 下载CLIP模型
     log_info "下载CLIP模型: openai/clip-vit-base-patch32"
     if command -v huggingface-cli &> /dev/null; then
@@ -311,6 +445,74 @@ download_models() {
     fi
     
     log_info "模型文件下载完成"
+}
+
+# 下载离线依赖包
+download_offline_packages() {
+    log_info "下载离线依赖包..."
+    
+    # 创建离线包目录
+    mkdir -p "$PROJECT_ROOT/offline/packages"
+    
+    # 设置国内镜像源
+    setup_china_mirrors
+    
+    # 下载requirements.txt中列出的所有依赖包
+    log_info "下载requirements.txt中所有依赖包..."
+    if command -v pip3 &> /dev/null; then
+        pip3 download -r "$PROJECT_ROOT/requirements.txt" \
+            --dest "$PROJECT_ROOT/offline/packages" \
+            --disable-pip-version-check \
+            -i https://pypi.tuna.tsinghua.edu.cn/simple \
+            --timeout 120 \
+            --retries 5
+    else
+        python3 -m pip download -r "$PROJECT_ROOT/requirements.txt" \
+            --dest "$PROJECT_ROOT/offline/packages" \
+            --disable-pip-version-check \
+            -i https://pypi.tuna.tsinghua.edu.cn/simple \
+            --timeout 120 \
+            --retries 5
+    fi
+    
+    # 特别处理一些关键依赖包
+    log_info "特别处理关键依赖包..."
+    key_packages=("opencv-python" "librosa" "scipy" "scikit-learn" "whisper" "infinity-emb" "inaspeechsegmenter")
+    
+    for package in "${key_packages[@]}"; do
+        log_info "下载关键依赖包: $package"
+        if command -v pip3 &> /dev/null; then
+            pip3 download "$package" \
+                --dest "$PROJECT_ROOT/offline/packages" \
+                --disable-pip-version-check \
+                -i https://pypi.tuna.tsinghua.edu.cn/simple \
+                --timeout 120 \
+                --retries 5 \
+                --no-deps || true
+        else
+            python3 -m pip download "$package" \
+                --dest "$PROJECT_ROOT/offline/packages" \
+                --disable-pip-version-check \
+                -i https://pypi.tuna.tsinghua.edu.cn/simple \
+                --timeout 120 \
+                --retries 5 \
+                --no-deps || true
+        fi
+    done
+    
+    # 验证下载结果
+    packages_count=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" | wc -l)
+    log_info "依赖包下载完成:"
+    log_info "  - Wheel文件数量: $packages_count"
+    log_info "  - 保存位置: $PROJECT_ROOT/offline/packages/"
+    
+    if [ "$packages_count" -gt 0 ]; then
+        log_info "离线依赖包下载成功！"
+        return 0
+    else
+        log_error "离线依赖包下载失败！"
+        return 1
+    fi
 }
 
 # 启动服务
@@ -408,26 +610,83 @@ EOF
     log_info "停止服务: ./scripts/stop_infinity_services.sh"
 }
 
+# 验证安装
+verify_installation() {
+    log_info "验证安装..."
+    
+    # 验证Python依赖
+    log_info "验证Python依赖..."
+    if python3 -c "import torch; import torchvision; import transformers; import numpy; import pandas; print('核心依赖验证通过')" 2>/dev/null; then
+        log_info "核心Python依赖验证通过"
+    else
+        log_warning "核心Python依赖验证失败，请检查安装"
+    fi
+    
+    # 验证关键依赖
+    log_info "验证关键依赖..."
+    key_modules=("cv2" "librosa" "scipy" "sklearn" "whisper" "infinity_emb" "inaspeechsegmenter")
+    for module in "${key_modules[@]}"; do
+        if python3 -c "import $module; print('$module 导入成功')" 2>/dev/null; then
+            log_info "$module 验证通过"
+        else
+            log_warning "$module 验证失败，请检查安装"
+        fi
+    done
+    
+    # 验证模型文件
+    log_info "验证模型文件..."
+    required_models=("clip-vit-base-patch32" "clap-htsat-fused" "whisper-base")
+    for model in "${required_models[@]}"; do
+        if [ -d "$PROJECT_ROOT/offline/models/$model" ] && [ -n "$(ls -A "$PROJECT_ROOT/offline/models/$model")" ]; then
+            log_info "模型 $model 验证通过"
+        else
+            log_warning "模型 $model 验证失败，请检查下载"
+        fi
+    done
+    
+    log_info "安装验证完成"
+}
+
 # 主部署流程
 main() {
     log_info "开始执行部署流程..."
     
-    # 1. 安装Python依赖
+    # 1. 检查系统环境
+    check_environment
+    
+    # 2. 安装系统依赖（仅在线模式）
+    if [ "$OFFLINE_MODE" = false ]; then
+        install_system_dependencies
+    fi
+    
+    # 3. 下载离线依赖包（仅在线模式）
+    if [ "$OFFLINE_MODE" = false ]; then
+        download_offline_packages
+    fi
+    
+    # 4. 安装Python依赖
     install_python_dependencies
     
-    # 2. 下载模型文件（在线模式）
+    # 5. 下载模型文件（在线模式）
     if [ "$OFFLINE_MODE" = false ]; then
         download_models
     fi
     
-    # 3. 生成并启动服务
+    # 6. 生成并启动服务
     start_services
+    
+    # 7. 验证安装
+    verify_installation
     
     log_info "部署完成！"
     log_info ""
     log_info "下一步操作:"
     log_info "1. 启动服务: ./scripts/start_infinity_services.sh"
     log_info "2. 启动API服务: python3 src/api/main.py"
+    log_info ""
+    log_info "离线部署说明:"
+    log_info "如需进行离线部署，请将整个项目目录（包括offline文件夹）复制到目标机器，然后运行:"
+    log_info "  ./scripts/deploy_msearch.sh --offline"
 }
 
 # 执行主流程

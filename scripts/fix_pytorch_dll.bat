@@ -6,29 +6,143 @@ REM PyTorch DLL 问题修复脚本 - Windows专用
 REM 更新时间: 2025-10-21
 REM =====================================
 
-echo ====================================================
-echo 🛠️  PyTorch DLL 问题修复工具 v1.0
+REM 设置输出编码为UTF-8
+chcp 65001 > nul
+
+REM 获取脚本所在目录和项目根目录
 set "script_dir=%~dp0"
 set "project_root=%script_dir%.."
 set "project_root=%project_root:\=/%"
 
-REM 设置输出编码为UTF-8
-chcp 65001 > nul
+REM 日志配置
+set "LOG_DIR=%project_root%\logs"
+for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
+set "YYYY=%dt:~0,4%"
+set "MM=%dt:~4,2%"
+set "DD=%dt:~6,2%"
+set "HH=%dt:~8,2%"
+set "Min=%dt:~10,2%"
+set "Sec=%dt:~12,2%"
+set "TIMESTAMP=%YYYY%%MM%%DD%_%HH%%Min%%Sec%"
+set "LOG_FILE=%LOG_DIR%\fix_pytorch_dll_%TIMESTAMP%.log"
+set "LOG_LEVEL=INFO" :: 可选: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+REM 创建日志目录
+mkdir "%LOG_DIR%" 2>nul
+
+REM 日志级别映射
+set "DEBUG_LEVEL=0"
+set "INFO_LEVEL=1"
+set "WARNING_LEVEL=2"
+set "ERROR_LEVEL=3"
+set "CRITICAL_LEVEL=4"
+
+REM 获取当前日志级别数值
+if /i "%LOG_LEVEL%" == "DEBUG" set "CURRENT_LEVEL=%DEBUG_LEVEL%"
+if /i "%LOG_LEVEL%" == "INFO" set "CURRENT_LEVEL=%INFO_LEVEL%"
+if /i "%LOG_LEVEL%" == "WARNING" set "CURRENT_LEVEL=%WARNING_LEVEL%"
+if /i "%LOG_LEVEL%" == "ERROR" set "CURRENT_LEVEL=%ERROR_LEVEL%"
+if /i "%LOG_LEVEL%" == "CRITICAL" set "CURRENT_LEVEL=%CRITICAL_LEVEL%"
+if not defined CURRENT_LEVEL set "CURRENT_LEVEL=%INFO_LEVEL%"
+
+REM 彩色输出定义
+for /F %%a in ('echo prompt $E ^| cmd') do set "ESC=%%a"
+set "GREEN=%ESC%[92m"
+set "YELLOW=%ESC%[93m"
+set "RED=%ESC%[91m"
+set "BLUE=%ESC%[94m"
+set "RESET=%ESC%[0m"
+
+REM 格式化日志时间戳
+:GetTimestamp
+for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
+set "YYYY=%dt:~0,4%"
+set "MM=%dt:~4,2%"
+set "DD=%dt:~6,2%"
+set "HH=%dt:~8,2%"
+set "Min=%dt:~10,2%"
+set "Sec=%dt:~12,2%"
+set "LOG_TIMESTAMP=%YYYY%-%MM%-%DD% %HH%:%Min%:%Sec%"
+goto :eof
+
+REM 通用日志函数
+:Log
+set "level=%1"
+set "message=%2"
+set "level_num="
+
+REM 设置日志级别数值
+if /i "%level%" == "DEBUG" set "level_num=%DEBUG_LEVEL%"
+if /i "%level%" == "INFO" set "level_num=%INFO_LEVEL%"
+if /i "%level%" == "WARNING" set "level_num=%WARNING_LEVEL%"
+if /i "%level%" == "ERROR" set "level_num=%ERROR_LEVEL%"
+if /i "%level%" == "CRITICAL" set "level_num=%CRITICAL_LEVEL%"
+
+REM 检查是否应该记录该级别日志
+if %level_num% lss %CURRENT_LEVEL% goto :eof
+
+REM 获取时间戳
+call :GetTimestamp
+
+REM 格式化日志信息
+set "formatted_log=[%LOG_TIMESTAMP%] [%level%] %message%"
+
+REM 输出到文件
+>> "%LOG_FILE%" echo %formatted_log%
+
+REM 输出到控制台（根据级别使用不同颜色）
+if /i "%level%" == "DEBUG" echo %BLUE%%formatted_log%%RESET%
+if /i "%level%" == "INFO" echo %GREEN%%formatted_log%%RESET%
+if /i "%level%" == "WARNING" echo %YELLOW%%formatted_log%%RESET%
+if /i "%level%" == "ERROR" echo %RED%%formatted_log%%RESET%
+if /i "%level%" == "CRITICAL" echo %RED%%formatted_log%%RESET%
+goto :eof
+
+REM 便捷日志函数
+:LogDebug
+call :Log "DEBUG" "%1"
+goto :eof
+
+:LogInfo
+call :Log "INFO" "%1"
+goto :eof
+
+:LogWarning
+call :Log "WARNING" "%1"
+goto :eof
+
+:LogError
+call :Log "ERROR" "%1"
+goto :eof
+
+:LogCritical
+call :Log "CRITICAL" "%1"
+goto :eof
+
+REM 初始化日志
+call :LogInfo "==================================================="
+call :LogInfo "🛠️  PyTorch DLL 问题修复工具 v1.0 启动"
+call :LogInfo "日志文件: %LOG_FILE%"
+call :LogInfo "==================================================="
 
 REM 检查Python是否安装
+call :LogDebug "检查Python是否安装..."
 python --version >nul 2>&1
 if %errorlevel% neq 0 (
-    echo ❌ 错误: 未检测到Python，请先安装Python 3.9或更高版本
+    call :LogError "❌ 未检测到Python，请先安装Python 3.9或更高版本"
     pause
     exit /b 1
 )
 
-echo ✅ 检测到Python环境
+REM 获取Python版本
+for /f "tokens=2" %%v in ('python --version 2^>^&1') do (
+    set "PYTHON_VERSION=%%v"
+)
+call :LogInfo "✅ 检测到Python环境，版本: %PYTHON_VERSION%"
 
 REM 创建Python修复脚本
 set "py_fix_script=%TEMP%\fix_pytorch_dll_temp.py"
-
-echo 创建临时修复脚本...
+call :LogInfo "创建临时修复脚本..."
 ( 
   echo import sys
   echo import os

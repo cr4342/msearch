@@ -10,6 +10,37 @@ pushd %SCRIPT_DIR%..
 set "PROJECT_ROOT=%cd%"
 popd
 
+:: 日志配置
+set "LOG_DIR=%PROJECT_ROOT%\logs"
+for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
+set "YYYY=%dt:~0,4%"
+set "MM=%dt:~4,2%"
+set "DD=%dt:~6,2%"
+set "HH=%dt:~8,2%"
+set "Min=%dt:~10,2%"
+set "Sec=%dt:~12,2%"
+set "TIMESTAMP=%YYYY%%MM%%DD%_%HH%%Min%%Sec%"
+set "LOG_FILE=%LOG_DIR%\install_configure_%TIMESTAMP%.log"
+set "LOG_LEVEL=INFO" :: 可选: DEBUG, INFO, WARNING, ERROR, CRITICAL
+
+:: 创建日志目录
+mkdir "%LOG_DIR%" 2>nul
+
+:: 日志级别映射
+set "DEBUG_LEVEL=0"
+set "INFO_LEVEL=1"
+set "WARNING_LEVEL=2"
+set "ERROR_LEVEL=3"
+set "CRITICAL_LEVEL=4"
+
+:: 获取当前日志级别数值
+if /i "%LOG_LEVEL%" == "DEBUG" set "CURRENT_LEVEL=%DEBUG_LEVEL%"
+if /i "%LOG_LEVEL%" == "INFO" set "CURRENT_LEVEL=%INFO_LEVEL%"
+if /i "%LOG_LEVEL%" == "WARNING" set "CURRENT_LEVEL=%WARNING_LEVEL%"
+if /i "%LOG_LEVEL%" == "ERROR" set "CURRENT_LEVEL=%ERROR_LEVEL%"
+if /i "%LOG_LEVEL%" == "CRITICAL" set "CURRENT_LEVEL=%CRITICAL_LEVEL%"
+if not defined CURRENT_LEVEL set "CURRENT_LEVEL=%INFO_LEVEL%"
+
 :: 彩色输出函数
 :ColorEcho
 set "color=%1"
@@ -31,22 +62,94 @@ set "RED=[91m"
 set "BLUE=[94m"
 set "WHITE=[97m"
 
+:: 格式化日志时间戳
+:GetTimestamp
+for /f "tokens=2 delims==" %%a in ('wmic OS Get localdatetime /value') do set "dt=%%a"
+set "YYYY=%dt:~0,4%"
+set "MM=%dt:~4,2%"
+set "DD=%dt:~6,2%"
+set "HH=%dt:~8,2%"
+set "Min=%dt:~10,2%"
+set "Sec=%dt:~12,2%"
+set "LOG_TIMESTAMP=%YYYY%-%MM%-%DD% %HH%:%Min%:%Sec%"
+goto :eof
+
+:: 通用日志函数
+:Log
+set "level=%1"
+set "message=%2"
+set "level_num="
+
+:: 设置日志级别数值
+if /i "%level%" == "DEBUG" set "level_num=%DEBUG_LEVEL%"
+if /i "%level%" == "INFO" set "level_num=%INFO_LEVEL%"
+if /i "%level%" == "WARNING" set "level_num=%WARNING_LEVEL%"
+if /i "%level%" == "ERROR" set "level_num=%ERROR_LEVEL%"
+if /i "%level%" == "CRITICAL" set "level_num=%CRITICAL_LEVEL%"
+
+:: 检查是否应该记录该级别日志
+if %level_num% lss %CURRENT_LEVEL% goto :eof
+
+:: 获取时间戳
+call :GetTimestamp
+
+:: 格式化日志信息
+set "formatted_log=[%LOG_TIMESTAMP%] [%level%] %message%"
+
+:: 输出到文件
+>> "%LOG_FILE%" echo %formatted_log%
+
+:: 输出到控制台（根据级别使用不同颜色）
+if /i "%level%" == "DEBUG" (call :ColorEcho %BLUE% "%formatted_log%")
+if /i "%level%" == "INFO" (call :ColorEcho %GREEN% "%formatted_log%")
+if /i "%level%" == "WARNING" (call :ColorEcho %YELLOW% "%formatted_log%")
+if /i "%level%" == "ERROR" (call :ColorEcho %RED% "%formatted_log%")
+if /i "%level%" == "CRITICAL" (call :ColorEcho %RED% "%formatted_log%")
+goto :eof
+
+:: 便捷日志函数
+:LogDebug
+call :Log "DEBUG" "%1"
+goto :eof
+
+:LogInfo
+call :Log "INFO" "%1"
+goto :eof
+
+:LogWarning
+call :Log "WARNING" "%1"
+goto :eof
+
+:LogError
+call :Log "ERROR" "%1"
+goto :eof
+
+:LogCritical
+call :Log "CRITICAL" "%1"
+goto :eof
+
+:: 初始化日志
+call :LogInfo "==========================================="
+call :LogInfo "MSearch环境配置与部署管理工具启动"
+call :LogInfo "日志文件: %LOG_FILE%"
+call :LogInfo "==========================================="
+
 :show_menu
-call :ColorEcho %BLUE% "=================================================="
-call :ColorEcho %GREEN% "           MSearch 环境配置与部署管理工具         "
-call :ColorEcho %BLUE% "=================================================="
+call :LogInfo "=================================================="
+call :LogInfo "           MSearch 环境配置与部署管理工具         "
+call :LogInfo "=================================================="
 echo.
-call :ColorEcho %WHITE% "请选择操作："
-echo 1. 检查运行环境
-call :ColorEcho %WHITE% "2. 安装所有依赖包"
-echo 3. 修复PyTorch DLL问题
-call :ColorEcho %WHITE% "4. 运行依赖检查（详细）"
-echo 5. 一键配置（检查+安装+修复）
-echo 6. 下载模型资源
-call :ColorEcho %WHITE% "7. 创建虚拟环境"
-echo 8. 一键部署并启动服务
-call :ColorEcho %WHITE% "9. 停止所有服务"
-echo 0. 退出
+call :LogInfo "请选择操作："
+call :LogInfo "1. 检查运行环境"
+call :LogInfo "2. 安装所有依赖包"
+call :LogInfo "3. 修复PyTorch DLL问题"
+call :LogInfo "4. 运行依赖检查（详细）"
+call :LogInfo "5. 一键配置（检查+安装+修复）"
+call :LogInfo "6. 下载模型资源"
+call :LogInfo "7. 创建虚拟环境"
+call :LogInfo "8. 一键部署并启动服务"
+call :LogInfo "9. 停止所有服务"
+call :LogInfo "0. 退出"
 echo.
 
 set /p choice=请输入选择 (0-9): 
