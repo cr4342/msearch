@@ -3566,6 +3566,11 @@ msearch/
 ├── scripts/                           # 脚本文件
 │   ├── start.py                       # 应用启动脚本
 │   ├── setup_environment.py          # 环境初始化脚本
+│   ├── download_model_resources.sh   # 模型资源下载脚本
+│   ├── download_model_resources.bat  # Windows模型资源下载脚本
+│   ├── install_auto.sh         # Linux/Mac离线安装
+│   └── install_auto.bat        # Windows离线安装
+
 │   ├── download_models.py             # 模型下载脚本
 │   └── database_init.py               # 数据库初始化脚本
 │
@@ -3618,10 +3623,10 @@ msearch/
 │   │   ├── models--openai--clip-vit-base-patch32/
 │   │   ├── models--laion--clap-htsat-fused/
 │   │   └── models--openai--whisper-base/
-│   ├── dependencies/                  # 离线依赖包
-│   └── install_scripts/               # 离线安装脚本
-│       ├── install_offline.sh         # Linux/Mac离线安装
-│       └── install_offline.bat        # Windows离线安装
+│   ├── packages/                     # 离线依赖包
+│   └── bin/                          # 二进制执行文件
+│       ├── qdrant                    # qdrant安装包
+│       └── qdrant-x86_64-unknown-linux-musl.tar.gz 
 │
 ├── docs/                              # 文档目录
 │   ├── README.md                      # 文档索引

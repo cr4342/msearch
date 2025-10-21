@@ -66,7 +66,6 @@ coverage/
 .vscode/launch.json
 
 # Offline resources
-offline/test/deployment
 offline/
 # 测试数据目录
 testdata/
@@ -74,7 +73,7 @@ tests/fixtures
 
 # 部署测试目录（真机测试）
 deploy_test/
-
+msearch_package/
 # 离线模型和依赖（避免重复下载）
 offline/
 
