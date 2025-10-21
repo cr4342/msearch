@@ -206,7 +206,7 @@ class TemporalLocalizationEngine:
         """将时间戳舍入到时间窗口中心"""
         return round(timestamp / self.time_window_size) * self.time_window_size
     
-    async def fuse_temporal_results(self, visual_matches, audio_matches, speech_matches, weights=None):
+    async def fuse_temporal_results(self, visual_matches=None, audio_matches=None, speech_matches=None, weights=None):
         """
         融合多模态时间戳结果
         
@@ -218,40 +218,113 @@ class TemporalLocalizationEngine:
             
         Returns:
             list[FusedTimestamp]: 融合后的时间戳列表，按分数降序排列
+            
+        Raises:
+            ValueError: 当输入参数类型不正确时
+            TypeError: 当输入参数类型不匹配时
         """
+        # 参数验证
+        if visual_matches is not None and not isinstance(visual_matches, (list, tuple)):
+            raise TypeError("visual_matches 必须是列表或元组类型")
+        if audio_matches is not None and not isinstance(audio_matches, (list, tuple)):
+            raise TypeError("audio_matches 必须是列表或元组类型")
+        if speech_matches is not None and not isinstance(speech_matches, (list, tuple)):
+            raise TypeError("speech_matches 必须是列表或元组类型")
+        
+        # 权重类型验证 - 如果不是字典类型则记录警告并使用默认权重
+        if weights is not None and not isinstance(weights, dict):
+            logger.warning(f"权重类型无效 ({type(weights)})，使用默认权重")
+            weights = None
+        
+        # 确保参数不为None
+        visual_matches = visual_matches or []
+        audio_matches = audio_matches or []
+        speech_matches = speech_matches or []
+        
         # 使用默认权重如果没有提供
         if weights is None:
             weights = self.default_weights.copy()
+        else:
+            # 验证权重字典包含必要的键
+            required_keys = {"visual", "audio", "speech"}
+            if not required_keys.issubset(weights.keys()):
+                missing_keys = required_keys - set(weights.keys())
+                logger.warning(f"权重字典缺少必要键: {missing_keys}, 使用默认权重")
+                # 补充缺失的权重
+                for key in missing_keys:
+                    weights[key] = self.default_weights[key]
+        
+        # 验证权重值范围
+        for key, value in weights.items():
+            if not isinstance(value, (int, float)) or value < 0:
+                logger.warning(f"权重 {key} 的值 {value} 无效，使用默认值")
+                weights[key] = self.default_weights.get(key, 0.0)
         
         # 组合所有匹配结果
         all_matches = []
-        if visual_matches:
-            all_matches.extend(visual_matches)
-        if audio_matches:
-            all_matches.extend(audio_matches)
-        if speech_matches:
-            all_matches.extend(speech_matches)
+        all_matches.extend(visual_matches)
+        all_matches.extend(audio_matches)
+        all_matches.extend(speech_matches)
         
         # 如果没有匹配结果，返回空列表
         if not all_matches:
+            logger.debug("没有匹配结果，返回空列表")
             return []
         
-        # 创建时间窗口
-        time_windows = self._create_time_windows(visual_matches, audio_matches, speech_matches)
+        # 验证匹配结果格式
+        for match_list, match_type in [(visual_matches, "visual"), (audio_matches, "audio"), (speech_matches, "speech")]:
+            for match in match_list:
+                if not hasattr(match, 'timestamp') or not hasattr(match, 'similarity'):
+                    logger.warning(f"无效的 {match_type} 匹配结果: {match}")
         
-        # 计算每个窗口的融合分数
-        fused_timestamps = []
-        for window_data in time_windows.values():
-            fused_timestamp = self._calculate_fused_score(window_data, weights)
-            fused_timestamps.append(fused_timestamp)
-        
-        # 按总分降序排序
-        fused_timestamps.sort(key=lambda x: x.total_score, reverse=True)
-        
-        # 解决时间戳冲突
-        resolved_timestamps = self._resolve_timestamp_conflicts(fused_timestamps)
-        
-        return resolved_timestamps
+        try:
+            # 创建时间窗口
+            time_windows = self._create_time_windows(visual_matches, audio_matches, speech_matches)
+            
+            # 计算每个窗口的融合分数
+            fused_timestamps = []
+            for window_key, window_data in time_windows.items():
+                try:
+                    fused_timestamp = self._calculate_fused_score(window_data, weights)
+                    fused_timestamps.append(fused_timestamp)
+                except Exception as e:
+                    logger.error(f"计算窗口 {window_key} 的融合分数时出错: {e}")
+                    # 继续处理其他窗口
+                    continue
+            
+            # 如果没有有效的融合结果，返回空列表
+            if not fused_timestamps:
+                logger.debug("没有有效的融合结果，返回空列表")
+                return []
+            
+            # 按总分降序排序
+            try:
+                fused_timestamps.sort(key=lambda x: x.total_score, reverse=True)
+            except Exception as e:
+                logger.error(f"排序融合时间戳时出错: {e}")
+                # 如果排序失败，返回未排序的结果
+                pass
+            
+            # 解决时间戳冲突
+            try:
+                resolved_timestamps = self._resolve_timestamp_conflicts(fused_timestamps)
+            except Exception as e:
+                logger.error(f"解决时间戳冲突时出错: {e}")
+                # 如果冲突解决失败，返回原始结果
+                resolved_timestamps = fused_timestamps
+            
+            # 限制返回结果数量
+            if len(resolved_timestamps) > self.max_results:
+                resolved_timestamps = resolved_timestamps[:self.max_results]
+                logger.debug(f"结果数量超过限制，截取前 {self.max_results} 个结果")
+            
+            logger.debug(f"成功融合 {len(resolved_timestamps)} 个时间戳结果")
+            return resolved_timestamps
+            
+        except Exception as e:
+            logger.error(f"融合时间戳结果时发生未预期的错误: {e}", exc_info=True)
+            # 返回空列表而不是抛出异常，确保函数的稳定性
+            return []
     
     def _calculate_fused_score(self, window_data: Dict, weights: Dict[str, float]) -> FusedTimestamp:
         """计算时间窗口的融合得分"""
