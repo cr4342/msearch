@@ -4560,15 +4560,6 @@ async def adaptive_person_search(self, query: str):
 - **API网关**：统一API入口和负载均衡
 - **分布式存储**：Qdrant集群和数据分片
 
-#### 10.4.2 云原生部署
-
-**目标**：支持Kubernetes部署和自动扩缩容。
-
-**实现方案**：
-- **容器化**：Docker镜像和Helm Charts
-- **服务网格**：Istio流量管理和监控
-- **自动扩缩容**：基于负载的Pod自动扩缩容
-
 ### 10.5 用户体验优化
 
 #### 10.5.1 高级可视化界面
