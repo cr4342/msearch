@@ -1,4 +1,34 @@
-# 实施计划
+# MSearch 开发计划
+
+> 本文档描述MSearch系统的开发计划，包含各阶段的功能实现、技术选型和实施优先级。
+
+## 文档导航
+
+- [设计文档](design.md) - 系统整体设计和技术架构
+- [需求文档](requirements.md) - 软件需求规范
+- [技术实现文档](technical_implementation.md) - 技术实现细节
+- [API文档](api_documentation.md) - API接口说明
+- [测试策略](test_strategy.md) - 测试方案和策略
+- [用户手册](user_manual.md) - 用户操作指南
+
+## 项目概述
+
+MSearch是一个基于michaelfeil/infinity的多模态内容检索系统，支持文本、图像、视频和音频的智能搜索。本开发计划按照功能模块和优先级，将项目分为10个阶段逐步实施。
+
+## 技术架构
+
+### 核心组件
+- **michaelfeil/infinity**: 多模型服务引擎，提供统一的AI推理能力
+- **向量存储层**: 基于Qdrant的向量数据库，存储多模态向量数据
+- **多模态处理器**: 支持文本、图像、视频、音频的向量化处理
+- **时间定位机制**: 基于帧级时间戳的精确时间定位（±2秒精度）
+
+### 技术栈
+- **后端**: Python + FastAPI + SQLAlchemy
+- **AI推理**: michaelfeil/infinity (集成CLIP、CLAP、Whisper等模型)
+- **向量数据库**: Qdrant (本地二进制部署)
+- **前端**: React/Vue.js + TypeScript
+- **桌面应用**: PySide6 
 
 ## 实施策略概述
 
@@ -65,7 +95,7 @@ python -c "from src.core.logger_manager import LoggerManager; LoggerManager().ge
 **技术实现**：
 - [x] [p0] Python-native EmbeddingEngine
   - 实现EmbeddingEngine集成 michaelfeil/infinity Python-native模式
-  - 直接在Python中管理CLIP、CLAP、Whisper模型
+  - 直接在Python中管理CLIP、CLAP、Whisper等模型
   - 消除HTTP通信开销，提升20-30%性能
   - 统一GPU内存管理和批处理优化
   - _需求：AI推理层设计_
@@ -351,6 +381,13 @@ print(f'预处理结果: {result}')
   - 支持±2秒精度保证：重叠时间窗口+精确边界检测
   - 实现场景感知切片：避免在场景中间进行时间切分
   - _需求：时间戳处理机制设计_
+
+- [x] [p0] TimeAccurateRetrieval精确时间检索
+  - 实现时间戳索引查询：向量相似度检索→时间戳查询→精度验证
+  - 支持时间段合并与去重：重叠时间段智能合并
+  - 实现连续性检测：判断时间段是否连续（考虑±2秒精度）
+  - 优化查询性能：时间戳查询延迟<10ms，批量查询<50ms
+  - _需求：精确时间检索算法_
 
 - [x] [p0] 时间戳数据库设计
   - 实现video_timestamps表：存储文件ID、向量ID、时间戳、模态类型
@@ -823,7 +860,7 @@ curl -X PUT "http://localhost:8000/config/models" \
 
 **技术实现**：
 - [x] [p0] Python-native EmbeddingEngine优化（基于 michaelfeil/infinity）
-  - 优化AsyncEngineArray统一管理CLIP、CLAP、Whisper模型
+  - 优化AsyncEngineArray统一管理CLIP、CLAP、Whisper等模型
   - 实现统一GPU内存池管理，提升资源利用率
   - 集成智能批处理优化，提升GPU利用率
   - 实现模型热加载和动态切换机制
@@ -950,7 +987,7 @@ curl -X PUT "http://localhost:8000/config/models" \
 
 **技术实现**：
 - [x] [p2] Python-native模式测试套件
-  - 创建EmbeddingEngine测试：验证CLIP、CLAP、Whisper Python-native集成
+  - 创建EmbeddingEngine测试：验证CLIP、CLAP、Whisper等模型Python-native集成
   - 实现时间戳处理测试：验证±2秒精度、多模态同步、帧级计算
   - 实现配置驱动测试：验证config.yml参数加载、验证、热重载
   - 集成性能测试：验证Python-native模式20-30%性能提升
