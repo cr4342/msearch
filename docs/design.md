@@ -517,7 +517,7 @@ graph TB
 | 音频 | AudioProcessor | 内容分类、质量评估、格式转换 | 标准化音频片段 |
 | 文本 | TextProcessor | 编码检测、内容清理、结构化提取 | 清理后文本内容 |
 
-#### 3.3.4 EmbeddingEngine组件（重新设计）
+#### 3.3.4 EmbeddingEngine组件
 
 **核心职责**：使用 michaelfeil/infinity Python-native模式统一管理AI模型，生成媒体内容向量。
 
@@ -3566,13 +3566,12 @@ msearch/
 ├── scripts/                           # 脚本文件
 │   ├── start.py                       # 应用启动脚本
 │   ├── setup_environment.py          # 环境初始化脚本
-│   ├── download_model_resources.sh   # 模型资源下载脚本
+│   ├── download_model_resources.sh   # 模型资源下载到offline/models/
 │   ├── download_model_resources.bat  # Windows模型资源下载脚本
-│   ├── install_auto.sh         # Linux/Mac离线安装
-│   └── install_auto.bat        # Windows离线安装
-
-│   ├── download_models.py             # 模型下载脚本
-│   └── database_init.py               # 数据库初始化脚本
+│   ├── install_auto.sh               # Linux/Mac离线安装
+│   ├── install_auto.bat              # Windows离线安装
+│   ├── download_models.py            # 模型下载脚本
+│   └── database_init.py              # 数据库初始化脚本
 │
 ├── tests/                             # 测试文件
 │   ├── __init__.py
@@ -3607,10 +3606,10 @@ msearch/
 │   ├── database/                      # 数据库文件
 │   │   ├── msearch.db                 # SQLite数据库
 │   │   └── qdrant/                    # Qdrant数据目录
-│   ├── models/                        # AI模型缓存
-│   │   ├── clip/                      # CLIP模型文件
-│   │   ├── clap/                      # CLAP模型文件
-│   │   └── whisper/                   # Whisper模型文件
+│   ├── models/                        # 系统运行时使用的AI模型存储
+│   │   ├── clip/                      # CLIP模型文件（运行时使用）
+│   │   ├── clap/                      # CLAP模型文件（运行时使用）
+│   │   └── whisper/                   # Whisper模型文件（运行时使用）
 │   ├── temp/                          # 临时文件
 │   └── logs/                          # 日志文件
 │       ├── msearch.log                # 主日志文件
@@ -3618,12 +3617,12 @@ msearch/
 │       ├── performance.log            # 性能日志文件
 │       └── timestamp.log              # 时间戳处理日志
 │
-├── offline/                           # 离线部署资源
-│   ├── models/                        # 预下载的模型文件
-│   │   ├── models--openai--clip-vit-base-patch32/
-│   │   ├── models--laion--clap-htsat-fused/
-│   │   └── models--openai--whisper-base/
-│   ├── packages/                     # 离线依赖包
+├── offline/                           # 离线部署资源缓存（安装时使用）
+│   ├── models/                        # 离线安装时的模型缓存文件，安装时脚本自动从这里将模型复制到data/models/
+│   │   ├── models--openai--clip-vit-base-patch32/  
+│   │   ├── models--laion--clap-htsat-fused/         
+│   │   └── models--openai--whisper-base/           
+│   ├── packages/                     # 离线Python依赖包
 │   └── bin/                          # 二进制执行文件
 │       ├── qdrant                    # qdrant安装包
 │       └── qdrant-x86_64-unknown-linux-musl.tar.gz 
@@ -3792,16 +3791,27 @@ msearch/
   - 支持后台运行和进程管理
 
 - `setup_environment.py`: 环境初始化，创建必要目录和配置
-  - 自动创建数据目录结构
+  - 自动创建 `data/` 运行时目录结构
   - 初始化数据库表结构和索引
   - 检查和安装必要的系统依赖
   - 生成默认配置文件和示例数据
 
-- `download_models.py`: 模型下载脚本，支持离线部署
-  - 自动下载所需的AI模型文件
+- `download_model_resources.sh/.bat`: 模型资源下载脚本
+  - **目标路径**: 下载模型到 `offline/models/` 缓存目录
+  - **缓存格式**: 使用HuggingFace标准缓存格式
+  - **用途**: 为离线安装准备模型资源
   - 支持断点续传和校验验证
-  - 提供离线模型包的制作和部署
+
+- `install_auto.sh/.bat`或`install_auto.sh`: 本地优先自动安装脚本
+  - **本地优先**: 首先尝试从 `offline/` 缓存目录读取资源，若无则自动从网络下载
+  - **目标路径**: 安装到 `data/` 运行时目录
+  - **核心功能**: 模型格式转换和路径重组织
+  - **依赖处理**: 离线安装Python包和二进制文件，若无则在线下载安装
+
+- `download_models.py`: 模型下载脚本（Python版本）
+  - 提供编程接口的模型下载功能
   - 集成模型版本管理和更新机制
+  - 支持自定义下载路径和格式
 
 - `database_init.py`: 数据库初始化，创建表结构和索引
   - 创建SQLite数据库表结构
@@ -3929,15 +3939,19 @@ graph TB
 
 ### 7.1 部署策略
 
-**环境配置管理**：
-- 使用环境变量管理不同环境的配置
-- 配置文件支持热重载，无需重启服务
-- 支持离线部署，减少外部依赖
+### 7.1 环境配置与监控体系
 
-**服务监控**：
-- 关键指标监控：CPU、内存、磁盘、网络
-- 业务指标监控：处理成功率、响应时间、错误率
-- 日志集中管理，便于问题排查
+#### 7.1.1 配置驱动架构
+
+**配置热重载机制**：
+- 基于 `watchdog` 实现配置文件实时监听
+- 修改后立即生效，无需重启任何服务
+- 支持多级配置覆盖（默认 → 环境 → 用户）
+
+**离线部署策略**：
+- 模型、依赖、二进制全部打包到 `offline/` 目录
+- 安装脚本一键完成本地化部署
+- 零外部依赖，内网环境即插即用
 
 ### 7.2 运维最佳实践
 
@@ -3955,18 +3969,26 @@ graph TB
 
 这个优化后的架构设计更加合理，既保证了系统的高性能，又确保了良好的可维护性和扩展性。通过严格的编码规范和测试要求，确保代码质量和系统稳定性。
 
-## 8. michaelfeil/infinity 部署与离线部署方案
+## 8. michaelfeil/infinity 使用本地模型方案
 
-### 8.1 michaelfeil/infinity 部署方案
+### 8.1 michaelfeil/infinity 概述
 
-#### 8.1.1 Python-native模式部署
+**项目说明**：michaelfeil/infinity 是一个专为文本嵌入、重排序模型、CLIP、CLAP 和 ColPali 设计的高吞吐量、低延迟服务引擎。项目地址：https://github.com/michaelfeil/infinity
 
-采用 **michaelfeil/infinity** 的Python-native模式，直接集成到应用中：
+**核心优势**：
+- 🚀 高性能向量生成
+- 📦 多模型统一管理
+- 🔧 灵活的部署选项
+- 🔄 支持本地模型直接使用
 
-> **项目说明**：michaelfeil/infinity 是一个专为文本嵌入、重排序模型、CLIP、CLAP 和 ColPali 设计的高吞吐量、低延迟服务引擎。项目地址：https://github.com/michaelfeil/infinity
+### 8.2 Python-native模式与本地模型集成
+
+#### 8.2.1 Python-native模式基础
+
+**Python-native模式**允许直接在Python代码中集成infinity引擎，无需启动独立服务：
 
 ```python
-# 直接在Python代码中使用，无需独立服务
+# 基本使用示例
 from infinity_emb import AsyncEngineArray, EngineArgs
 
 # 初始化多模型引擎
@@ -3984,28 +4006,28 @@ engine_array = AsyncEngineArray.from_args(engine_args)
 - 🎯 **直接集成**：Python原生调用，延迟更低
 - 📦 **统一管理**：模型生命周期与应用一致
 
-#### 8.1.2 Python-native集成架构
+#### 8.2.2 使用本地模型的Python-native集成
 
-**简化集成架构**：
+**本地模型集成架构**：
 ```mermaid
 graph TB
     A[EmbeddingEngine] --> B[Infinity Python-native]
-    B --> C[CLIP模型]
-    B --> D[CLAP模型] 
-    B --> E[Whisper模型]
+    B --> C[本地CLIP模型]
+    B --> D[本地CLAP模型] 
+    B --> E[本地Whisper模型]
     A --> F[直接Python调用]
     F --> G[向量生成接口]
 ```
 
-**Python-native集成方案**：
+**本地模型集成方案**：
 ```python
 class EmbeddingEngine:
     def __init__(self):
-        # 直接在Python中初始化所有模型
+        # 直接在Python中初始化所有本地模型
         self.engine_array = AsyncEngineArray.from_args([
-            EngineArgs(model_name_or_path="openai/clip-vit-base-patch32"),
-            EngineArgs(model_name_or_path="laion/clap-htsat-fused"), 
-            EngineArgs(model_name_or_path="openai/whisper-base")
+            EngineArgs(model_name_or_path="./data/models/clip"),
+            EngineArgs(model_name_or_path="./data/models/clap"), 
+            EngineArgs(model_name_or_path="./data/models/whisper")
         ])
     
     async def embed_image(self, images):
@@ -4018,122 +4040,192 @@ class EmbeddingEngine:
         return await self.engine_array.embed(audio, model="whisper")
 ```
 
-**架构优势**：
-- **零服务依赖**：无需管理独立的HTTP服务
-- **性能最优**：Python原生调用，无网络开销
-- **简化开发**：直接集成到业务逻辑中
+### 8.3 本地模型配置与使用
 
-### 8.2 离线部署方案
+#### 8.3.1 本地模型目录结构
 
-#### 8.2.1 离线部署架构
+**明确的目录结构区分**：
 
-**离线部署流程图**：
-```mermaid
-graph LR
-    A[模型下载脚本] --> B[本地模型目录]
-    B --> C[Infinity服务启动]
-    C --> D[离线向量服务]
-    D --> E[多模态检索系统]
+# 1. 离线缓存目录（仅安装脚本使用，不会被运行时直接读取）
+```
+offline/models/
+├── clip-vit-base-patch32/     # 直接使用模型名称作为目录名
+│   ├── config.json
+│   ├── model.safetensors
+│   └── [其他模型文件]
+├── clap-htsat-fused/           # 直接使用模型名称作为目录名
+│   ├── config.json
+│   ├── model.safetensors
+│   └── [其他模型文件]
+└── whisper-base/              # 直接使用模型名称作为目录名
+    ├── config.json
+    ├── model.safetensors
+    └── [其他模型文件]
     
-    F[环境变量配置] --> B
-    G[权限设置] --> C
+```        
+
+# 2. 系统运行时模型目录（安装脚本创建，运行时实际使用）
+
+```
+data/models/
+├── clip/                              # 从offline复制而来，运行时使用
+│   ├── config.json
+│   ├── model.safetensors
+│   └── [其他模型文件]
+├── clap/                              # 从offline复制而来，运行时使用
+│   ├── config.json
+│   ├── model.safetensors
+│   └── [其他模型文件]
+└── whisper/                           # 从offline复制而来，运行时使用
+    ├── config.json
+    ├── model.safetensors
+    └── [其他模型文件]
 ```
 
-**离线部署脚本**：
-```bash
-# 一键下载并启动
-./scripts/download_model_resources.sh  # 下载模型
-./scripts/start_infinity_services.sh   # 启动服务
-```
+#### 8.3.2 本地模型加载与验证
 
-#### 8.2.2 非Docker模式下使用本地指定目录模型
+**本地模型加载示例**：
 
-**michaelfeil/infinity** 支持直接使用本地指定目录下的模型文件，无需从HuggingFace下载：
-
-**环境变量配置**：
-```bash
-# 设置HuggingFace模型缓存路径（指向本地模型目录）
-export HF_HOME="/data/project/msearch/offline/models"
-export TRANSFORMERS_CACHE="$HF_HOME"
-
-# 创建模型缓存目录
-mkdir -p "$HF_HOME"
-```
-
-**本地模型目录结构**：
-```
-offline/models
-├── models--openai--clip-vit-base-patch32/
-│   └── snapshots/
-│       └── [模型文件]
-├── models--laion--clap-htsat-fused/
-│   └── snapshots/
-│       └── [模型文件]
-└── models--openai--whisper-base/
-    └── snapshots/
-        └── [模型文件]
-```
-
-**Python-native模式集成（使用本地模型）**：
 ```python
 # 直接在Python代码中使用本地模型，无需独立服务
 import os
-os.environ["HF_HOME"] = "/data/project/msearch/offline/models"
+
+# 启用离线模式，防止尝试在线下载
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_HUB_OFFLINE"] = "1"
 
 from infinity_emb import AsyncEngineArray, EngineArgs
 
-# 初始化本地模型引擎
+# 系统运行时模型路径配置（使用data/models，不是offline缓存路径）
+RUNTIME_MODELS_DIR = "/data/project/msearch/data/models"
+
+# 初始化本地模型引擎 - 使用运行时模型路径
 engine_args = [
     EngineArgs(
-        model_name_or_path="openai/clip-vit-base-patch32",
-        device="cpu"  # 或 "cuda" 根据硬件配置
+        model_name_or_path=os.path.join(RUNTIME_MODELS_DIR, "clip"),  # 运行时模型路径
+        device="cpu",  # 或 "cuda" 根据硬件配置
+        trust_remote_code=True  # 对于自定义模型或需要远程代码的模型很重要
     ),
     EngineArgs(
-        model_name_or_path="laion/clap-htsat-fused", 
-        device="cpu"
+        model_name_or_path=os.path.join(RUNTIME_MODELS_DIR, "clap"),  # 运行时模型路径
+        device="cpu",
+        trust_remote_code=True
     ),
     EngineArgs(
-        model_name_or_path="openai/whisper-base",
-        device="cpu"
+        model_name_or_path=os.path.join(RUNTIME_MODELS_DIR, "whisper"),  # 运行时模型路径
+        device="cpu",
+        trust_remote_code=True
     )
 ]
 
+# 创建引擎数组
 engine_array = AsyncEngineArray.from_args(engine_args)
+
+# 验证模型是否成功加载
+def verify_models_loaded():
+    try:
+        # 检查每个模型是否正常工作
+        print("验证模型加载状态...")
+        
+        # 测试CLIP模型（文本编码）
+        clip_result = await engine_array.embed("测试文本", model=0)
+        print(f"CLIP模型验证成功，向量维度: {len(clip_result[0])}")
+        
+        # 如果有更多测试可以在这里添加
+        
+        return True
+    except Exception as e:
+        print(f"模型验证失败: {e}")
+        return False
 ```
 
-#### 8.2.3 离线部署优势
+#### 8.3.3 直接引用本地模型的优势
 
-**部署优势对比表**：
+- ✅ **明确的路径引用**：不依赖缓存机制，直接指定模型位置
+- ✅ **更灵活的目录结构**：可以使用任意符合模型格式的目录结构
+- ✅ **确定性加载**：确保始终使用指定的本地模型，不会尝试在线下载
+- ✅ **部署可靠性**：在严格的内网环境中更加可靠
 
-| 特性 | 在线部署 | 离线部署 |
-|------|----------|----------|
-| 网络依赖 | 需要网络连接 | 完全离线可用 |
-| 启动速度 | 依赖模型下载 | 快速启动 |
-| 安全性 | 依赖外部服务 | 内网安全 |
-| 稳定性 | 受网络影响 | 稳定可靠 |
-| 部署环境 | 云环境/有网环境 | 内网/离线环境 |
+### 8.4 离线部署方案
 
-**技术优势**：
-- 🚀 **快速启动**：无需网络下载，直接使用本地模型文件
-- 🔒 **离线支持**：完全离线环境可用，适合内网部署
-- 📁 **路径灵活**：支持自定义模型目录路径
-- 🔄 **版本控制**：确保使用指定版本的模型文件
+#### 8.4.1 目录用途明确划分
 
-#### 8.2.4 部署注意事项
+| 目录路径 | 用途 | 生命周期 | 说明 |
+|---------|------|---------|------|
+| `offline/models/` | 离线安装缓存 | 安装时使用 | HuggingFace缓存格式，安装脚本读取源 |
+| `data/models/` | 系统运行时存储 | 运行时使用 | 标准模型格式，系统实际加载路径 |
+| `offline/packages/` | Python依赖缓存 | 安装时使用 | pip离线安装包 |
+| `offline/bin/` | 二进制文件缓存 | 安装时使用 | Qdrant等二进制程序 |
 
-**配置注意事项**：
-- 确保本地模型目录结构与HuggingFace缓存结构一致
-- 模型文件需要预先下载到指定目录
-- 路径权限需要正确设置，确保 michaelfeil/infinity 服务可访问
+#### 8.4.2 离线安装流程详解
+
+**离线安装流程**：
+
+```bash
+# 1. 离线安装脚本执行流程
+./scripts/install_auto.sh
+
+# 脚本内部执行步骤：
+# Step 1: 检查offline缓存目录
+if [ -d "offline/models" ]; then
+    echo "发现离线模型缓存，开始安装..."
+else
+    echo "未发现离线缓存，请先下载模型资源"
+    exit 1
+fi
+
+# Step 2: 创建运行时目录结构
+mkdir -p data/models/{clip,clap,whisper}
+mkdir -p data/database
+mkdir -p data/logs
+
+# Step 3: 从offline缓存复制模型到运行时目录
+cp -r offline/models/models--openai--clip-vit-base-patch32/snapshots/* data/models/clip/
+cp -r offline/models/models--laion--clap-htsat-fused/snapshots/* data/models/clap/
+cp -r offline/models/models--openai--whisper-base/snapshots/* data/models/whisper/
+
+# Step 4: 安装Python依赖（从offline/packages）
+pip install --no-index --find-links offline/packages -r requirements.txt
+
+# Step 5: 安装Qdrant（从offline/bin）
+tar -xzf offline/bin/qdrant-x86_64-unknown-linux-musl.tar.gz -C data/
+```
+
+#### 8.4.3 模型路径配置
+
+```python
+# config.yml中的模型路径配置
+embedding:
+  # 运行时模型根目录（不是offline路径）
+  models_dir: "./data/models"
+  
+  # 各模型配置
+  models:
+    clip: "clip"
+    clap: "clap"
+    whisper: "whisper"
+    
+models:
+  # 离线缓存路径（仅安装脚本使用）
+  offline_cache: "./offline/models"
+```
+
+#### 8.4.4 部署注意事项
+
+**路径配置注意事项**：
+- ✅ **系统运行时**：始终使用 `data/models/` 路径
+- ✅ **离线安装时**：从 `offline/models/` 读取缓存
+- ✅ **权限设置**：确保系统对 `data/models/` 有读写权限
+- ❌ **避免混淆**：不要在运行时直接使用 `offline/` 路径
 
 **性能优化建议**：
 - 根据硬件配置调整设备参数（CPU/GPU）
 - 合理设置批处理大小，平衡内存使用和性能
 - 监控服务资源使用情况，及时调整配置
 
-### 8.3 部署监控与管理
+### 8.5 部署监控与管理
 
-#### 8.3.1 服务健康检查
+#### 8.5.1 服务健康检查
 
 **Python-native健康检查**：
 ```python
@@ -4159,7 +4251,7 @@ def check_models_status(engine: EmbeddingEngine):
             print(f"{model.upper()}模型: 异常")
 ```
 
-#### 8.3.2 性能监控指标
+#### 8.5.2 性能监控指标
 
 **关键监控指标**：
 - 服务响应时间
@@ -4196,14 +4288,47 @@ monitoring:
 **实现方案**：
 ```python
 # 直接在Python代码中集成，无需独立服务
+import os
+from ..core.config_manager import ConfigManager
+
+# 启用离线模式，防止尝试在线下载
+os.environ["TRANSFORMERS_OFFLINE"] = "1"
+os.environ["HF_HUB_OFFLINE"] = "1"
+
 from infinity_emb import AsyncEngineArray, EngineArgs
 
 class EmbeddingEngine:
     def __init__(self):
+        # 从配置中读取模型路径配置
+        config_manager = ConfigManager()
+        config = config_manager.get_config()
+        
+        # 系统运行时模型路径（从配置中读取，使用data/models，不是offline缓存路径）
+        RUNTIME_MODELS_DIR = config.get("embedding.models_dir", os.path.join(os.path.dirname(__file__), "..", "data", "models"))
+        
+        # 从配置中读取各模型的具体路径配置
+        clip_model_path = config.get("embedding.models.clip", "clip")
+        clap_model_path = config.get("embedding.models.clap", "clap")
+        whisper_model_path = config.get("embedding.models.whisper", "whisper")
+        
+        # 构建完整的模型路径
+        clip_full_path = os.path.join(RUNTIME_MODELS_DIR, clip_model_path)
+        clap_full_path = os.path.join(RUNTIME_MODELS_DIR, clap_model_path)
+        whisper_full_path = os.path.join(RUNTIME_MODELS_DIR, whisper_model_path)
+        
         self.engine_array = AsyncEngineArray.from_args([
-            EngineArgs(model_name_or_path="openai/clip-vit-base-patch32"),
-            EngineArgs(model_name_or_path="laion/clap-htsat-fused"),
-            EngineArgs(model_name_or_path="openai/whisper-base")
+            EngineArgs(
+                model_name_or_path=clip_full_path,  # 从配置中读取的本地运行时路径
+                trust_remote_code=True
+            ),
+            EngineArgs(
+                model_name_or_path=clap_full_path,  # 从配置中读取的本地运行时路径
+                trust_remote_code=True
+            ),
+            EngineArgs(
+                model_name_or_path=whisper_full_path,  # 从配置中读取的本地运行时路径
+                trust_remote_code=True
+            )
         ])
     
     async def embed_content(self, content, content_type):
@@ -4444,16 +4569,7 @@ async def adaptive_person_search(self, query: str):
 
 ### 10.5 用户体验优化
 
-#### 10.5.1 智能推荐系统
-
-**目标**：基于用户行为提供个性化搜索建议。
-
-**功能特性**：
-- **搜索历史分析**：用户偏好学习
-- **相关内容推荐**：基于当前搜索的相关推荐
-- **热门内容发现**：系统级热门内容推荐
-
-#### 10.5.2 高级可视化界面
+#### 10.5.1 高级可视化界面
 
 **目标**：提供更直观的搜索结果展示和交互体验。
 
@@ -4469,53 +4585,101 @@ async def adaptive_person_search(self, query: str):
 2. **中期（6个月）**：多语言支持、微服务化改造
 3. **长期（12个月）**：实时检索、云原生部署
 
-这些优化计划将进一步提升系统的智能化水平、性能表现和用户体验，确保msearch在多模态检索领域的技术领先地位。
-                device=self.config.get('device', 'cpu')
-            ))
-        
-        if self.config.get('features.enable_whisper', True):
-            engine_args.append(EngineArgs(
-                model_name_or_path=self.config.get('models.whisper_model'),
-                device=self.config.get('device', 'cpu')
-            ))
-        
-        self.engine_array = AsyncEngineArray.from_args(engine_args)
-    
-    async def embed_content(self, content, content_type):
-        """统一的内容向量化接口"""
-        model_mapping = {
-            'image': 'clip',
-            'text': 'clip',
-            'audio_music': 'clap', 
-            'audio_speech': 'whisper'
-        }
-        
-        model = model_mapping.get(content_type)
-        if not model:
-            raise ValueError(f"不支持的内容类型: {content_type}")
-        
-        return await self.engine_array.embed(content, model)
+
+# 11 部署说明
+
+## 11.1 统一目录结构设计
+
+### 11.1.1 目录结构一致性
+
+为了简化开发和部署流程，系统采用**统一的目录结构**设计原则：
+
+- **开发环境**和**部署环境**使用**相同的目录结构**
+- **配置文件位置统一**：无论开发还是部署，配置文件始终位于`config/`目录
+- **部署时选择性包含文件**：部署包不包含开发专用文件
+
+### 11.1.2 统一目录结构
+
+```
+msearch/
+├── config/                # 配置文件（开发和部署统一位置）
+│   └── config.yml         # 主配置文件
+├── data/                  # 数据存储目录
+│   └── models/            # 系统运行时模型路径，包含clip、clap、whisper等子目录
+├── logs/                  # 日志文件目录
+├── offline/               # 离线资源目录（仅在部署时下载缓存使用，部署完成后自动删除）
+│   └── models/            # 模型文件临时缓存目录
+├── src/                   # 源代码
+└── scripts/               # 部署和维护脚本
 ```
 
-#### 9.3.3 架构优化总结
+### 11.1.3 目录职责说明
 
-**核心改进**：
-1. **消除HTTP层**：直接Python调用，性能提升20-30%
-2. **简化部署**：无需管理独立服务，降低50%部署复杂度
-3. **统一资源管理**：GPU内存池统一管理，提升资源利用率
-4. **简化错误处理**：Python原生异常机制，减少40%错误处理代码
+| 目录 | 职责 | 可持久化 |
+|------|------|----------|
+| `config/` | 系统配置 | ✅ |
+| `data/` | 数据库和索引 | ✅ |
+| `logs/` | 运行日志 | ✅ |
+| `offline/` | 离线资源 | ✅ |
+| `src/` | 源代码 | ✅ |
+| `scripts/` | 运维脚本 | 仅包含安装运行必要脚本 |
+| `venv/` | 虚拟环境 | 重新部署时需重建 |
 
-**开发效率提升**：
-- 减少了InfinityClient组件的复杂HTTP通信逻辑
-- 简化了服务启动和健康检查机制
-- 统一了模型管理和配置逻辑
-- 降低了整体系统的维护成本
+## 11.2 部署文件选择
 
-通过采用Python-native模式，系统架构变得更加简洁高效，既满足了单机版的性能需求，又大幅降低了开发和维护复杂度。
+### 11.2.1 部署时应包含的文件
+
+- **config/**：配置文件目录（开发和部署统一位置）
+- **src/**：编译后的源代码
+- **scripts/**：部署和维护脚本
+- **offline/**：离线资源和预下载的模型
+- **data/**：空目录，用于运行时存储数据（可根据需要预先创建）
+- **logs/**：空目录，用于运行时存储日志（可根据需要预先创建）
+
+### 11.2.2 部署时应排除的开发文件
+
+- **tests/**：测试文件和测试数据
+- **docs/**：文档文件（除部署指南外）
+- **examples/**：示例代码
+- **.github/**：CI/CD配置
+- **pytest.ini**, **.coveragerc**：测试配置
+- **requirements-dev.txt**, **requirements-test.txt**：开发依赖
+- **venv/**：虚拟环境（应在部署环境重新创建）
+- **.git/**：版本控制文件
+
+## 11.3 部署流程
+
+### 11.3.1 快速部署
+
+使用提供的自动化脚本进行一键部署：
+
+```bash
+# Linux/Mac
+./scripts/install_auto.sh
+
+# Windows
+./scripts/install_auto.bat
+```
+
+### 11.3.2 手动部署步骤
+
+1. **准备环境**：安装Python 3.8+和依赖
+2. **创建目录结构**：按照统一目录结构创建部署目录
+3. **配置管理**：确保config/目录包含正确的配置文件
+4. **模型下载**：下载所需AI模型到offline/models/
+5. **启动服务**：启动API服务和Web UI
+
+### 11.3.3 部署后验证
+
+部署完成后，建议执行以下验证：
+
+- 检查API服务是否正常启动（默认端口8000）
+- 验证UI是否可访问（默认端口3000）
+- 运行基础功能测试确保系统正常工作
 
 
-# 10 相关文档及资料参考
-## 10.1 ## 快速导航
+# 12 相关文档及资料参考
+## 12.1 ## 快速导航
 
 ### 🚀 快速开始
 1. 阅读[需求文档](requirements.md)了解系统功能
