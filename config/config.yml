@@ -41,11 +41,28 @@ features:
 # - 检索音乐内容：使用CLAP对查询文本向量化，与audio_vectors匹配  
 # - 检索语音内容：使用Whisper对查询文本向量化，与audio_vectors匹配
 # 这种设计确保了跨模态检索时的向量空间对齐
+
+# 模型存储配置
+models_storage:
+  # 本地模型根目录（运行时使用）
+  models_dir: "./data/models"
+  # 离线模式设置（防止尝试在线下载）
+  offline_mode: true
+  # 强制使用本地模型（不尝试从HuggingFace下载）
+  force_local: true
+  # 离线缓存路径（仅安装脚本使用）
+  offline_cache: "./offline/models"
+
+# 模型配置
 models:
   # CLIP模型配置 - 用于图像处理和图像检索时的文本向量化
   clip:
-    model_name: "sentence-transformers/clip-ViT-B-32"
-    # 可选: sentence-transformers/clip-ViT-B-16 (更高精度，需要更多资源)
+    # 使用本地模型路径（不是模型名称）
+    model_name: "./data/models/clip"
+    # 本地路径（与model_name相同）
+    local_path: "./data/models/clip"
+    # 不允许下载
+    allow_download: false
     device: "auto"  # auto, cpu, cuda
     batch_size: 16
     # 文本向量化用途：查询文本 -> 检索图片/视频
@@ -53,7 +70,12 @@ models:
     
   # CLAP模型配置 - 用于音频处理和音频检索时的文本向量化
   clap:
-    model_name: "sentence-transformers/clap-htsat-unfused"
+    # 使用本地模型路径（不是模型名称）
+    model_name: "./data/models/clap"
+    # 本地路径（与model_name相同）
+    local_path: "./data/models/clap"
+    # 不允许下载
+    allow_download: false
     device: "auto"
     batch_size: 8
     # 文本向量化用途：查询文本 -> 检索音频内容
@@ -61,8 +83,12 @@ models:
     
   # Whisper模型配置 - 用于语音转文本和语音检索时的文本向量化
   whisper:
-    model_name: "sentence-transformers/all-MiniLM-L6-v2"
-    # 可选: sentence-transformers/all-mpnet-base-v2 (更高精度)
+    # 使用本地模型路径（不是模型名称）
+    model_name: "./data/models/whisper"
+    # 本地路径（与model_name相同）
+    local_path: "./data/models/whisper"
+    # 不允许下载
+    allow_download: false
     device: "auto"
     batch_size: 4
     # 文本向量化用途：查询文本 -> 检索语音内容
@@ -315,7 +341,7 @@ database:
     host: "localhost"
     port: 6333
     # 部署模式: embedded(嵌入式) 或 server(服务器模式)
-    mode: "embedded"
+    mode: "server"
     # 嵌入式模式配置
     embedded:
       path: "./data/database/qdrant"

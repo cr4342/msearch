@@ -24,7 +24,8 @@ class VectorStore:
     def __init__(self):
         """初始化向量存储"""
         self.config = get_config()
-        self.qdrant_config = self.config.get("qdrant", {})
+        # 正确获取嵌套的Qdrant配置
+        self.qdrant_config = self.config.get("database", {}).get("qdrant", {})
         self.collections = self.qdrant_config.get("collections", {})
         
         # 初始化Qdrant客户端
@@ -36,19 +37,75 @@ class VectorStore:
         
         logger.info("向量存储初始化完成")
     
+    def _create_collections(self, client: QdrantClient):
+        """创建必要的集合"""
+        try:
+            # 获取集合配置
+            collections_config = self.qdrant_config.get('embedded', {}).get('collections', {})
+            
+            for collection_key, collection_info in collections_config.items():
+                collection_name = f"msearch_{collection_key}"
+                vector_size = collection_info.get('vector_size', 512)
+                distance = collection_info.get('distance', 'cosine')
+                
+                # 检查集合是否已存在
+                try:
+                    client.get_collection(collection_name)
+                    logger.info(f"集合 {collection_name} 已存在")
+                except Exception:
+                    # 集合不存在，创建它
+                    from qdrant_client.models import VectorParams, Distance
+                    
+                    # 转换距离类型
+                    distance_enum = Distance.COSINE
+                    if distance.lower() == 'dot':
+                        distance_enum = Distance.DOT
+                    elif distance.lower() == 'euclid':
+                        distance_enum = Distance.EUCLID
+                    
+                    client.create_collection(
+                        collection_name=collection_name,
+                        vectors_config=VectorParams(size=vector_size, distance=distance_enum)
+                    )
+                    logger.info(f"集合 {collection_name} 创建成功")
+        except Exception as e:
+            logger.error(f"创建集合时出错: {e}")
+    
     def _init_qdrant_client(self) -> QdrantClient:
         """初始化Qdrant客户端"""
         try:
-            host = self.qdrant_config.get('host', '127.0.0.1')
-            port = self.qdrant_config.get('port', 6333)
+            # 检查是否使用嵌入式模式
+            mode = self.qdrant_config.get('mode', 'server')
             
-            client = QdrantClient(host=host, port=port)
-            
-            # 验证连接
-            collections = client.get_collections()
-            logger.info(f"Qdrant连接成功，现有集合: {[col.name for col in collections.collections]}")
-            
-            return client
+            if mode == 'embedded':
+                # 使用嵌入式模式
+                embedded_config = self.qdrant_config.get('embedded', {})
+                path = embedded_config.get('path', './data/database/qdrant')
+                
+                logger.info(f"使用嵌入式Qdrant模式，数据路径: {path}")
+                client = QdrantClient(path=path)
+                
+                # 创建必要的集合（如果不存在）
+                self._create_collections(client)
+                
+                logger.info("嵌入式Qdrant客户端初始化成功")
+                return client
+            else:
+                # 使用服务器模式
+                host = self.qdrant_config.get('host', '127.0.0.1')
+                port = self.qdrant_config.get('port', 6333)
+                
+                logger.info(f"使用服务器模式连接Qdrant: {host}:{port}")
+                client = QdrantClient(host=host, port=port)
+                
+                # 验证连接
+                try:
+                    collections = client.get_collections()
+                    logger.info(f"Qdrant连接成功，现有集合: {[col.name for col in collections.collections]}")
+                except Exception as conn_error:
+                    logger.warning(f"Qdrant连接验证失败: {conn_error}，但将继续使用客户端")
+                
+                return client
         except Exception as e:
             logger.error(f"Qdrant连接失败: {e}")
             # 返回一个模拟客户端用于开发
@@ -206,6 +263,52 @@ class VectorStore:
             })
         return results
     
+    async def store_vector(self, vector_id: str, vector: List[float], payload: Dict = None, collection_name: str = None) -> bool:
+        """
+        存储单个向量数据
+        
+        Args:
+            vector_id: 向量ID
+            vector: 向量数据
+            payload: 负载数据
+            collection_name: 集合名称
+            
+        Returns:
+            存储是否成功
+        """
+        logger.info(f"在集合 {collection_name} 中存储向量 {vector_id}")
+        
+        # 如果Qdrant客户端不可用，返回模拟结果
+        if self.client is None:
+            logger.warning("Qdrant客户端不可用，无法存储向量")
+            return False
+        
+        try:
+            # 获取实际的集合名称
+            collection_config = self.collections.get(collection_name, {})
+            actual_collection_name = collection_config.get('name', f'msearch_{collection_name}')
+            
+            # 创建点结构
+            from qdrant_client.models import PointStruct
+            point = PointStruct(
+                id=vector_id,
+                vector=vector,
+                payload=payload or {}
+            )
+            
+            # 存储向量
+            self.client.upsert(
+                collection_name=actual_collection_name,
+                points=[point]
+            )
+            
+            logger.info(f"向量 {vector_id} 存储成功")
+            return True
+            
+        except Exception as e:
+            logger.error(f"存储向量失败: {e}")
+            return False
+    
     async def store_vectors(self, collection_name: str, vectors: List[List[float]], payloads: List[Dict] = None) -> bool:
         """
         存储向量数据
@@ -250,11 +353,36 @@ class VectorStore:
         """
         logger.info("获取集合信息")
         
-        # 模拟集合信息
-        return {
-            "collections": list(self.collections.keys()),
-            "status": "healthy"
-        }
+        # 如果客户端不可用，返回模拟信息
+        if self.client is None:
+            return {
+                "collections": list(self.collections.keys()),
+                "status": "healthy"
+            }
+        
+        try:
+            # 获取实际的集合信息
+            collections = self.client.get_collections()
+            collection_names = []
+            
+            # 提取集合名称并移除"msearch_"前缀
+            for collection in collections.collections:
+                name = collection.name
+                if name.startswith("msearch_"):
+                    name = name[8:]  # 移除"msearch_"前缀
+                collection_names.append(name)
+            
+            return {
+                "collections": collection_names,
+                "status": "healthy"
+            }
+        except Exception as e:
+            logger.error(f"获取集合信息失败: {e}")
+            # 返回模拟信息作为降级方案
+            return {
+                "collections": list(self.collections.keys()),
+                "status": "degraded"
+            }
     
     async def reset_collection(self, collection_name: str) -> bool:
         """
