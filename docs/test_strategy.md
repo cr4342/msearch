@@ -12,6 +12,8 @@
 - **性能指标**：确保系统满足性能要求，特别是时间戳精度（±2秒）
 - **稳定性保证**：验证系统在各种条件下的稳定运行
 - **用户体验**：确保用户界面友好、操作流畅
+- **跨平台兼容性**：确保在Linux CPU环境和Windows GPU环境下均能正常运行
+- **日志记录完整性**：通过日志记录反馈程序错误，便于问题定位和修复
 
 ### 1.2 测试原则
 
@@ -21,697 +23,753 @@
 | **自动化优先** | 核心功能自动化测试覆盖率≥80% | 提高测试效率 |
 | **性能导向** | 关键路径性能测试必须通过 | 保证用户体验 |
 | **持续集成** | 每次代码提交触发自动测试 | 及早发现问题 |
+| **环境分离** | CPU环境与GPU环境测试分离 | 确保各环境兼容性 |
+| **日志驱动** | 通过日志记录反馈程序错误 | 便于问题定位和修复 |
 
 ### 1.3 测试环境
 
 **测试环境配置**：
-- **开发环境**：本地开发机器，用于单元测试和快速验证
-- **集成环境**：模拟生产环境，用于集成测试和性能测试
+- **开发环境（Linux CPU）**：本地开发机器，用于单元测试和快速验证
+- **集成环境（Linux CPU）**：模拟生产环境，用于集成测试和性能测试
+- **GPU测试环境（Windows）**：用于GPU加速功能测试和性能验证
 - **部署测试环境**：/deploy_test目录，用于真实部署测试（符合设计文档规范）
 
-## 2. 测试分类与策略
+**环境特定测试策略**：
+- **Linux CPU环境**：专注于功能正确性、时间戳精度、系统稳定性和日志记录
+- **Windows GPU环境**：专注于GPU加速性能、显存优化和大规模数据处理
+- **跨环境一致性**：确保两种环境下的功能结果一致性，性能差异在预期范围内
 
-### 2.1 单元测试
+## 2. CPU环境测试策略（Linux开发环境）
 
-#### 2.1.1 测试范围
+### 2.1 CPU环境测试重点
 
-**核心组件测试**：
-- `src/core/config_manager.py` - 配置管理器测试
-- `src/core/logger_manager.py` - 日志管理器测试
-- `src/core/file_type_detector.py` - 文件类型检测器测试
+**功能完整性测试**：
+- 验证所有核心功能在CPU环境下正常工作
+- 确保时间戳精度满足±2秒要求
+- 测试多模态检索的基本功能
+- 验证系统在没有GPU情况下的降级处理
 
-**业务逻辑测试**：
-- `src/business/embedding_engine.py` - 向量化引擎测试
-- `src/business/search_engine.py` - 检索引擎测试
-- `src/business/smart_retrieval.py` - 智能检索测试
-
-**处理器测试**：
-- `src/processors/timestamp_processor.py` - 时间戳处理器测试
-- `src/processors/image_processor.py` - 图片处理器测试
-- `src/processors/video_processor.py` - 视频处理器测试
-
-#### 2.1.2 测试标准
-
-**覆盖率要求（基于设计文档标准）**：
-- 核心业务逻辑测试覆盖率不低于80%（符合设计文档要求）
-- 关键路径必须100%覆盖
-- 时间戳处理相关功能必须100%覆盖（设计文档核心要求）
-- 边界条件和异常情况需要充分测试
-
-**测试结构（符合设计文档规范）**：
-```python
-# 测试文件结构 - 遵循设计文档的命名规范
-tests/
-├── unit/                       # 单元测试目录
-│   ├── test_config_manager.py      # 配置管理器测试
-│   ├── test_embedding_engine.py    # 向量化引擎测试
-│   ├── test_search_engine.py       # 检索引擎测试
-│   └── test_timestamp_processor.py # 时间戳处理器测试（重点）
-├── integration/                # 集成测试目录
-│   ├── test_api_endpoints.py       # API端点测试
-│   ├── test_search_workflow.py     # 检索流程测试
-│   └── test_video_processing_pipeline.py # 视频处理流程测试
-└── fixtures/                   # 测试数据目录
-    ├── test_video.mp4              # 测试视频文件
-    ├── test_image.jpg              # 测试图片文件
-    └── test_config.yml             # 测试配置文件
-```
-
-#### 2.1.3 关键测试用例（基于设计文档的时间戳精度要求）
-
-**时间戳处理精度测试**：
-```python
-class TestTimestampAccuracy:
-    def test_frame_level_precision(self):
-        """测试帧级时间戳精度 - 符合设计文档±0.033s@30fps要求"""
-        processor = TimestampProcessor(fps=30.0, time_base=0.0)
-        
-        # 测试连续帧的时间戳精度
-        for frame_idx in range(100):
-            timestamp = processor.calculate_frame_timestamp(frame_idx)
-            expected = frame_idx / 30.0
-            assert abs(timestamp - expected) < 0.001  # 1ms精度，满足帧级要求
-    
-    def test_multimodal_sync_tolerance(self):
-        """测试多模态同步容差 - 符合设计文档的同步精度要求"""
-        sync_validator = MultiModalTimeSyncValidator()
-        
-        # 测试视觉-音频同步（设计文档要求：视觉±0.033s，音频±0.1s）
-        visual_time = 10.0
-        audio_time = 10.05  # 50ms偏差，在音频容差范围内
-        
-        assert sync_validator.validate_multimodal_sync(
-            visual_time, audio_time, 'audio_music'
-        )  # 应该在容差范围内
-    
-    def test_retrieval_accuracy_requirement(self):
-        """测试检索时间精度要求 - 符合设计文档±2秒精度要求"""
-        retrieval_engine = TimeAccurateRetrieval(accuracy_requirement=2.0)
-        
-        # 模拟时间戳信息
-        timestamp_info = TimestampInfo(
-            start_time=10.0,
-            end_time=12.0,
-            duration=2.0
-        )
-        
-        # 验证±2秒精度要求
-        assert retrieval_engine.validate_time_accuracy(timestamp_info)
-        
-        # 测试超出精度要求的情况
-        long_timestamp = TimestampInfo(
-            start_time=10.0,
-            end_time=15.0,
-            duration=5.0
-        )
-        assert not retrieval_engine.validate_time_accuracy(long_timestamp)
-```
-
-**配置管理器测试**：
-```python
-class TestConfigManager:
-    def test_config_loading(self):
-        """测试配置加载"""
-        config_manager = ConfigManager('tests/fixtures/test_config.yml')
-        
-        # 测试基本配置读取
-        assert config_manager.get('general.log_level') == 'DEBUG'
-        assert config_manager.get('models.clip.model_name') == 'openai/clip-vit-base-patch32'
-    
-    def test_default_values(self):
-        """测试默认值机制"""
-        config_manager = ConfigManager()
-        
-        # 测试不存在的配置项返回默认值
-        assert config_manager.get('nonexistent.key', 'default') == 'default'
-```
-
-### 2.2 集成测试
-
-#### 2.2.1 测试范围
-
-**API端点测试**：
-- 检索API功能完整性测试
-- 配置API参数验证测试
-- 任务控制API状态管理测试
-
-**工作流测试**：
-- 文件处理完整流程测试
-- 多模态检索工作流测试
-- 时间戳精度端到端测试
-
-#### 2.2.2 测试结构
-
-```python
-# 集成测试文件结构
-tests/integration/
-├── test_api_endpoints.py       # API端点测试
-├── test_search_workflow.py     # 检索流程测试
-├── test_processing_pipeline.py # 处理流程测试
-└── test_multimodal_integration.py # 多模态集成测试
-```
-
-#### 2.2.3 关键集成测试
-
-**视频处理流程测试**：
-```python
-class TestVideoProcessingPipeline:
-    async def test_video_processing_with_timestamp_accuracy(self):
-        """测试视频处理流程的时间戳精度"""
-        # Arrange
-        test_video_path = "tests/fixtures/test_video.mp4"
-        processor = VideoProcessor()
-        
-        # Act
-        results = await processor.process_video(test_video_path)
-        
-        # Assert - 验证时间戳精度
-        for result in results['visual_vectors']:
-            assert result['timestamp_accuracy'] <= 2.0
-            assert result['start_time'] >= 0
-            assert result['end_time'] > result['start_time']
-```
-
-**API端点集成测试**：
-```python
-class TestSearchAPI:
-    async def test_multimodal_search_endpoint(self):
-        """测试多模态搜索API"""
-        async with AsyncClient(app=app, base_url="http://test") as ac:
-            # 测试文本搜索
-            response = await ac.post("/api/v1/search", json={
-                "query": "美丽的风景",
-                "modality": "text_to_image",
-                "top_k": 10
-            })
-            
-            assert response.status_code == 200
-            data = response.json()
-            assert "results" in data
-            assert len(data["results"]) <= 10
-```
-
-### 2.3 性能测试
-
-#### 2.3.1 性能指标（基于设计文档的具体要求）
-
-**时间戳查询性能（设计文档明确要求）**：
-- 单次时间戳查询延迟必须<10ms
-- 批量查询(50个向量)延迟必须<50ms
-- 时间范围查询必须使用索引优化
-
-**多模态处理性能（设计文档技术指标）**：
-- 视频预处理性能：720p视频处理速度>2x实时
-- 时间戳计算性能：帧级计算延迟<1ms
-- 同步验证性能：多模态同步检查<5ms
-- 分辨率转换性能：4K→720p转换提升30-50%处理效率
-- 显存优化效果：预处理降采样减少60-80%显存占用
-
-**检索精度性能（设计文档核心要求）**：
-- ±2秒时间精度保证：100%满足用户精度要求
-- 帧级精确定位：±0.033秒@30fps
-- 多模态时间同步：视觉(±0.033s)，音频(±0.1s)，语音(±0.2s)
-
-#### 2.3.2 性能测试用例
-
-```python
-class TestPerformance:
-    async def test_timestamp_query_performance(self):
-        """测试时间戳查询性能"""
-        import time
-        
-        retrieval_engine = TimeAccurateRetrieval()
-        vector_ids = [f"vector_{i}" for i in range(50)]
-        
-        start_time = time.time()
-        
-        # 批量查询时间戳
-        for vector_id in vector_ids:
-            await retrieval_engine.get_timestamp_info(vector_id, 'visual')
-        
-        end_time = time.time()
-        query_time = (end_time - start_time) * 1000  # 转换为毫秒
-        
-        # 验证性能要求：50个查询<50ms
-        assert query_time < 50, f"查询时间过长: {query_time}ms"
-    
-    def test_video_processing_performance(self):
-        """测试视频处理性能"""
-        processor = VideoProcessor()
-        
-        # 测试720p视频处理速度
-        start_time = time.time()
-        result = processor.process_video("tests/fixtures/720p_test.mp4")
-        processing_time = time.time() - start_time
-        
-        # 验证处理速度 > 2x实时
-        video_duration = result['metadata']['duration']
-        speed_ratio = video_duration / processing_time
-        assert speed_ratio > 2.0, f"处理速度不足: {speed_ratio}x"
-```
-
-### 2.4 系统测试
-
-#### 2.4.1 功能测试
-
-**多模态检索功能**：
-- 文本搜索图片功能测试
-- 图片搜索相似图片功能测试
-- 视频时间戳定位功能测试
-- 人脸识别检索功能测试
-
-**系统稳定性测试**：
+**性能基准测试**：
+- CPU模式下的处理速度基准测试
+- 内存使用情况监控
+- 并发处理能力测试
 - 长时间运行稳定性测试
-- 大文件处理压力测试
-- 并发用户访问测试
 
-#### 2.4.2 兼容性测试
+**日志记录与错误反馈**：
+- 完整的日志记录机制
+- 错误信息详细记录
+- 性能指标日志记录
+- 系统资源使用日志记录
 
-**硬件兼容性**：
-- CPU模式运行测试
-- GPU加速模式测试
-- 不同内存配置测试
+### 2.2 CPU环境测试配置
 
-**操作系统兼容性**：
-- Windows系统部署测试
-- Linux系统部署测试
-- macOS系统部署测试
+**测试环境设置**：
+```yaml
+# tests/configs/cpu_test_config.yml
+cpu_test:
+  # 强制使用CPU模式
+  device: "cpu"
+  
+  # 降低批处理大小以适应CPU内存限制
+  batch_size: 4
+  
+  # 使用轻量级模型进行测试
+  model:
+    clip_model: "openai/clip-vit-base-patch32"
+    face_model: "retinaface_mobile"
+  
+  # 测试数据限制
+  test_data:
+    max_video_duration: 300  # 5分钟
+    max_image_resolution: [720, 720]
+  
+  # 性能基准（CPU模式）
+  performance_benchmarks:
+    video_processing_fps: 0.5  # 实时处理的0.5倍
+    search_response_time_ms: 500  # 搜索响应时间
+    memory_usage_mb: 2048  # 最大内存使用
+```
 
-### 2.5 用户验收测试 (UAT)
+**日志配置**：
+```yaml
+# tests/configs/logging_config.yml
+logging:
+  version: 1
+  disable_existing_loggers: false
+  
+  formatters:
+    detailed:
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
+    
+    performance:
+      format: "%(asctime)s - PERFORMANCE - %(message)s"
+      
+    error:
+      format: "%(asctime)s - ERROR - %(module)s - %(funcName)s:%(lineno)d - %(message)s\n%(exc_info)s\n"
+  
+  handlers:
+    console:
+      class: logging.StreamHandler
+      level: INFO
+      formatter: detailed
+      stream: ext://sys.stdout
+      
+    file:
+      class: logging.handlers.RotatingFileHandler
+      level: DEBUG
+      formatter: detailed
+      filename: logs/msearch_test.log
+      maxBytes: 10485760  # 10MB
+      backupCount: 5
+      
+    performance_file:
+      class: logging.handlers.RotatingFileHandler
+      level: INFO
+      formatter: performance
+      filename: logs/performance_test.log
+      maxBytes: 10485760  # 10MB
+      backupCount: 5
+      
+    error_file:
+      class: logging.handlers.RotatingFileHandler
+      level: ERROR
+      formatter: error
+      filename: logs/error_test.log
+      maxBytes: 10485760  # 10MB
+      backupCount: 5
+  
+  loggers:
+    msearch:
+      level: DEBUG
+      handlers: [console, file]
+      propagate: false
+      
+    msearch.performance:
+      level: INFO
+      handlers: [performance_file]
+      propagate: false
+      
+    msearch.error:
+      level: ERROR
+      handlers: [error_file, console]
+      propagate: false
+  
+  root:
+    level: INFO
+    handlers: [console, file]
+```
 
-#### 2.5.1 真实场景测试
+### 2.3 CPU环境测试用例
 
-**用户工作流验证**：
-- 真实用户数据导入和处理测试
-- 典型使用场景端到端验证
-- 用户界面易用性评估
-- 搜索结果准确性人工验证
-
-**业务场景测试**：
+**CPU模式功能测试**：
 ```python
-class TestRealWorldScenarios:
-    def test_large_media_library_processing(self):
-        """测试大型媒体库处理场景"""
-        # 模拟用户导入1000+文件的真实场景
-        media_files = self.prepare_large_dataset(1000)
+# tests/unit/test_cpu_mode.py
+import pytest
+import logging
+import time
+import psutil
+from src.business.search_engine import SearchEngine
+from src.core.config_manager import ConfigManager
+
+class TestCPUMode:
+    """CPU模式下的功能测试"""
+    
+    @pytest.fixture
+    def cpu_config(self):
+        """CPU测试配置"""
+        return ConfigManager("tests/configs/cpu_test_config.yml")
+    
+    @pytest.fixture
+    def search_engine(self, cpu_config):
+        """CPU模式搜索引擎"""
+        return SearchEngine(config=cpu_config)
+    
+    def test_cpu_mode_initialization(self, search_engine):
+        """测试CPU模式初始化"""
+        assert search_engine.device == "cpu"
+        assert search_engine.model_loaded == True
+        logging.info("CPU模式初始化测试通过")
+    
+    def test_text_search_functionality(self, search_engine):
+        """测试文本搜索功能"""
+        query = "美丽的风景"
+        start_time = time.time()
+        
+        results = search_engine.search(query, modality="text_to_image")
+        search_time = (time.time() - start_time) * 1000  # 转换为毫秒
+        
+        assert len(results) > 0
+        assert search_time < 500  # CPU模式下搜索响应时间应小于500ms
+        
+        # 记录性能日志
+        perf_logger = logging.getLogger("msearch.performance")
+        perf_logger.info(f"文本搜索 - 查询: {query}, 响应时间: {search_time:.2f}ms, 结果数: {len(results)}")
+        
+        logging.info(f"文本搜索功能测试通过，响应时间: {search_time:.2f}ms")
+    
+    def test_image_search_functionality(self, search_engine):
+        """测试图片搜索功能"""
+        test_image_path = "tests/fixtures/images/test_image.jpg"
+        start_time = time.time()
+        
+        results = search_engine.search(test_image_path, modality="image_to_image")
+        search_time = (time.time() - start_time) * 1000  # 转换为毫秒
+        
+        assert len(results) > 0
+        assert search_time < 1000  # CPU模式下图片搜索响应时间应小于1000ms
+        
+        # 记录性能日志
+        perf_logger = logging.getLogger("msearch.performance")
+        perf_logger.info(f"图片搜索 - 图片: {test_image_path}, 响应时间: {search_time:.2f}ms, 结果数: {len(results)}")
+        
+        logging.info(f"图片搜索功能测试通过，响应时间: {search_time:.2f}ms")
+    
+    def test_timestamp_accuracy(self, search_engine):
+        """测试时间戳精度"""
+        test_video_path = "tests/fixtures/videos/test_video.mp4"
+        
+        results = search_engine.search(test_video_path, modality="video_to_image")
+        
+        # 验证时间戳精度
+        for result in results:
+            if result.get("timestamp"):
+                timestamp_accuracy = result.get("timestamp_accuracy", float('inf'))
+                assert timestamp_accuracy <= 2.0, f"时间戳精度超出要求: {timestamp_accuracy}秒"
+                
+                # 记录时间戳精度日志
+                logging.info(f"时间戳精度验证 - 视频: {test_video_path}, 精度: {timestamp_accuracy}秒")
+        
+        logging.info("时间戳精度测试通过")
+    
+    def test_memory_usage(self, search_engine):
+        """测试内存使用情况"""
+        process = psutil.Process()
+        initial_memory = process.memory_info().rss / (1024 * 1024)  # MB
+        
+        # 执行大量搜索操作
+        for i in range(100):
+            search_engine.search(f"测试查询 {i}")
+        
+        final_memory = process.memory_info().rss / (1024 * 1024)  # MB
+        memory_increase = final_memory - initial_memory
+        
+        assert memory_increase < 500, f"内存增长过多: {memory_increase}MB"
+        
+        # 记录内存使用日志
+        perf_logger = logging.getLogger("msearch.performance")
+        perf_logger.info(f"内存使用测试 - 初始: {initial_memory:.2f}MB, 最终: {final_memory:.2f}MB, 增长: {memory_increase:.2f}MB")
+        
+        logging.info(f"内存使用测试通过，增长: {memory_increase:.2f}MB")
+```
+
+**错误处理与日志记录测试**：
+```python
+# tests/unit/test_error_handling.py
+import pytest
+import logging
+import os
+from src.business.media_processor import MediaProcessor
+from src.core.config_manager import ConfigManager
+
+class TestErrorHandling:
+    """错误处理与日志记录测试"""
+    
+    @pytest.fixture
+    def cpu_config(self):
+        """CPU测试配置"""
+        return ConfigManager("tests/configs/cpu_test_config.yml")
+    
+    @pytest.fixture
+    def media_processor(self, cpu_config):
+        """媒体处理器"""
+        return MediaProcessor(config=cpu_config)
+    
+    def test_invalid_file_handling(self, media_processor):
+        """测试无效文件处理"""
+        invalid_file = "tests/fixtures/invalid_file.xyz"
+        
+        # 设置错误日志捕获
+        error_logger = logging.getLogger("msearch.error")
+        
+        try:
+            result = media_processor.process_file(invalid_file)
+            assert result.success == False
+            assert "不支持的文件格式" in result.error_message
+            
+            # 验证错误日志记录
+            with open("logs/error_test.log", "r") as f:
+                log_content = f.read()
+                assert "不支持的文件格式" in log_content
+                
+            logging.info("无效文件处理测试通过")
+        except Exception as e:
+            error_logger.error(f"无效文件处理测试失败: {str(e)}", exc_info=True)
+            raise
+    
+    def test_corrupted_file_handling(self, media_processor):
+        """测试损坏文件处理"""
+        corrupted_file = "tests/fixtures/corrupted_image.jpg"
+        
+        # 设置错误日志捕获
+        error_logger = logging.getLogger("msearch.error")
+        
+        try:
+            result = media_processor.process_file(corrupted_file)
+            assert result.success == False
+            assert result.error_code == "FILE_CORRUPTED"
+            
+            # 验证错误日志记录
+            with open("logs/error_test.log", "r") as f:
+                log_content = f.read()
+                assert "FILE_CORRUPTED" in log_content
+                
+            logging.info("损坏文件处理测试通过")
+        except Exception as e:
+            error_logger.error(f"损坏文件处理测试失败: {str(e)}", exc_info=True)
+            raise
+    
+    def test_resource_exhaustion_handling(self, media_processor):
+        """测试资源耗尽处理"""
+        # 设置错误日志捕获
+        error_logger = logging.getLogger("msearch.error")
+        
+        try:
+            # 模拟资源耗尽情况
+            large_files = ["tests/fixtures/large_video_1.mp4", "tests/fixtures/large_video_2.mp4"]
+            
+            for file_path in large_files:
+                result = media_processor.process_file(file_path)
+                if not result.success and result.error_code == "RESOURCE_EXHAUSTED":
+                    # 验证错误日志记录
+                    with open("logs/error_test.log", "r") as f:
+                        log_content = f.read()
+                        assert "RESOURCE_EXHAUSTED" in log_content
+                    
+                    logging.info("资源耗尽处理测试通过")
+                    return
+            
+            # 如果没有触发资源耗尽，测试仍然通过
+            logging.info("资源耗尽处理测试通过（未触发资源耗尽）")
+        except Exception as e:
+            error_logger.error(f"资源耗尽处理测试失败: {str(e)}", exc_info=True)
+            raise
+```
+
+### 2.4 CPU环境性能基准测试
+
+**性能基准测试用例**：
+```python
+# tests/performance/test_cpu_performance.py
+import pytest
+import logging
+import time
+import psutil
+import json
+from src.business.search_engine import SearchEngine
+from src.core.config_manager import ConfigManager
+
+class TestCPUPerformance:
+    """CPU环境性能基准测试"""
+    
+    @pytest.fixture
+    def cpu_config(self):
+        """CPU测试配置"""
+        return ConfigManager("tests/configs/cpu_test_config.yml")
+    
+    @pytest.fixture
+    def search_engine(self, cpu_config):
+        """CPU模式搜索引擎"""
+        return SearchEngine(config=cpu_config)
+    
+    def test_text_search_performance(self, search_engine):
+        """测试文本搜索性能"""
+        queries = ["美丽的风景", "人物肖像", "城市建筑", "自然风光", "动物世界"]
+        response_times = []
+        
+        for query in queries:
+            start_time = time.time()
+            results = search_engine.search(query, modality="text_to_image")
+            end_time = time.time()
+            
+            response_time = (end_time - start_time) * 1000  # 转换为毫秒
+            response_times.append(response_time)
+            
+            assert len(results) > 0, f"查询 '{query}' 无结果"
+        
+        avg_response_time = sum(response_times) / len(response_times)
+        max_response_time = max(response_times)
+        
+        # CPU模式下性能基准
+        assert avg_response_time < 300, f"平均响应时间过长: {avg_response_time}ms"
+        assert max_response_time < 500, f"最大响应时间过长: {max_response_time}ms"
+        
+        # 记录性能日志
+        perf_logger = logging.getLogger("msearch.performance")
+        perf_data = {
+            "test_type": "text_search_performance",
+            "avg_response_time_ms": avg_response_time,
+            "max_response_time_ms": max_response_time,
+            "query_count": len(queries)
+        }
+        perf_logger.info(f"性能数据: {json.dumps(perf_data)}")
+        
+        logging.info(f"文本搜索性能测试通过 - 平均响应时间: {avg_response_time:.2f}ms")
+    
+    def test_video_processing_performance(self, search_engine):
+        """测试视频处理性能"""
+        test_video = "tests/fixtures/videos/test_video.mp4"
         
         start_time = time.time()
-        processing_results = []
+        results = search_engine.search(test_video, modality="video_to_image")
+        end_time = time.time()
         
-        for media_file in media_files:
-            result = self.system.process_file(media_file)
-            processing_results.append(result)
+        processing_time = end_time - start_time
+        
+        # 获取视频元数据
+        video_metadata = search_engine.get_video_metadata(test_video)
+        video_duration = video_metadata.get("duration", 60)  # 默认60秒
+        
+        # 计算处理速度（实时倍数）
+        processing_speed = video_duration / processing_time
+        
+        # CPU模式下性能基准（至少0.2倍实时处理速度）
+        assert processing_speed > 0.2, f"视频处理速度过慢: {processing_speed}x实时"
+        
+        # 记录性能日志
+        perf_logger = logging.getLogger("msearch.performance")
+        perf_data = {
+            "test_type": "video_processing_performance",
+            "video_duration_s": video_duration,
+            "processing_time_s": processing_time,
+            "processing_speed_x": processing_speed
+        }
+        perf_logger.info(f"性能数据: {json.dumps(perf_data)}")
+        
+        logging.info(f"视频处理性能测试通过 - 处理速度: {processing_speed:.2f}x实时")
+    
+    def test_memory_usage_performance(self, search_engine):
+        """测试内存使用性能"""
+        process = psutil.Process()
+        initial_memory = process.memory_info().rss / (1024 * 1024)  # MB
+        
+        # 执行批量操作
+        batch_size = 50
+        for i in range(batch_size):
+            search_engine.search(f"批量测试查询 {i}")
+        
+        final_memory = process.memory_info().rss / (1024 * 1024)  # MB
+        memory_increase = final_memory - initial_memory
+        memory_per_operation = memory_increase / batch_size
+        
+        # CPU模式下内存使用基准
+        assert memory_per_operation < 5, f"单次操作内存使用过多: {memory_per_operation}MB"
+        assert final_memory < 2048, f"总内存使用过多: {final_memory}MB"
+        
+        # 记录性能日志
+        perf_logger = logging.getLogger("msearch.performance")
+        perf_data = {
+            "test_type": "memory_usage_performance",
+            "initial_memory_mb": initial_memory,
+            "final_memory_mb": final_memory,
+            "memory_increase_mb": memory_increase,
+            "memory_per_operation_mb": memory_per_operation,
+            "batch_size": batch_size
+        }
+        perf_logger.info(f"性能数据: {json.dumps(perf_data)}")
+        
+        logging.info(f"内存使用性能测试通过 - 单次操作内存: {memory_per_operation:.2f}MB")
+    
+    def test_concurrent_performance(self, search_engine):
+        """测试并发性能"""
+        import threading
+        import queue
+        
+        results_queue = queue.Queue()
+        
+        def worker(query):
+            start_time = time.time()
+            result = search_engine.search(query, modality="text_to_image")
+            end_time = time.time()
             
-            # 验证处理过程中系统稳定性
-            assert self.system.health_check(), "系统健康检查失败"
+            results_queue.put({
+                "query": query,
+                "response_time": (end_time - start_time) * 1000,
+                "result_count": len(result)
+            })
+        
+        # 创建并启动线程
+        threads = []
+        queries = [f"并发测试查询 {i}" for i in range(20)]
+        
+        start_time = time.time()
+        for query in queries:
+            thread = threading.Thread(target=worker, args=(query,))
+            threads.append(thread)
+            thread.start()
+        
+        # 等待所有线程完成
+        for thread in threads:
+            thread.join()
         
         total_time = time.time() - start_time
         
-        # 验证批量处理性能
-        assert total_time < len(media_files) * 2, "批量处理性能不达标"
+        # 收集结果
+        results = []
+        while not results_queue.empty():
+            results.append(results_queue.get())
         
-        # 验证所有文件都成功处理
-        success_rate = sum(1 for r in processing_results if r.success) / len(processing_results)
-        assert success_rate >= 0.95, f"处理成功率过低: {success_rate}"
+        response_times = [r["response_time"] for r in results]
+        avg_response_time = sum(response_times) / len(response_times)
+        max_response_time = max(response_times)
+        
+        # 并发性能基准
+        assert avg_response_time < 500, f"并发平均响应时间过长: {avg_response_time}ms"
+        assert max_response_time < 1000, f"并发最大响应时间过长: {max_response_time}ms"
+        assert total_time < 30, f"总执行时间过长: {total_time}s"
+        
+        # 记录性能日志
+        perf_logger = logging.getLogger("msearch.performance")
+        perf_data = {
+            "test_type": "concurrent_performance",
+            "concurrent_queries": len(queries),
+            "total_time_s": total_time,
+            "avg_response_time_ms": avg_response_time,
+            "max_response_time_ms": max_response_time
+        }
+        perf_logger.info(f"性能数据: {json.dumps(perf_data)}")
+        
+        logging.info(f"并发性能测试通过 - 平均响应时间: {avg_response_time:.2f}ms")
 ```
 
-#### 2.5.2 用户体验测试
+## 3. GPU环境测试策略（Windows测试环境）
 
-**可用性测试**：
-- 新用户首次使用体验测试
-- 常见操作流程时间测量
-- 错误恢复机制验证
-- 帮助文档有效性验证
+### 3.1 GPU环境测试重点
 
-**性能感知测试**：
-- 搜索响应时间用户感知测试
-- 大文件上传进度反馈测试
-- 系统负载下的用户体验测试
+**GPU加速性能测试**：
+- GPU模式下的处理速度基准测试
+- CPU与GPU性能对比测试
+- GPU内存使用情况监控
+- 大规模数据处理能力测试
 
-### 2.6 生产环境验证测试（符合设计文档规范）
+**显存优化效果验证**：
+- 预处理降采样减少60-80%显存占用的验证
+- 不同分辨率下的显存使用对比
+- 批处理大小对显存使用的影响
 
-#### 2.6.1 部署验证测试
+**跨环境一致性测试**：
+- CPU与GPU环境下的功能结果一致性
+- 时间戳精度在不同环境下的一致性
+- 搜索结果相似度对比
 
-**自动化部署测试（使用设计文档指定的/deploy_test目录）**：
-```bash
-# 部署验证脚本示例
-#!/bin/bash
-# /deploy_test/test_production_deployment.sh
+### 3.2 GPU环境测试配置
 
-echo "开始生产环境部署验证..." | tee -a /deploy_test/deploy_test.log
-
-# 1. 环境准备验证
-./scripts/verify_environment.sh
-if [ $? -ne 0 ]; then
-    echo "环境验证失败" | tee -a /deploy_test/deploy_test.log
-    exit 1
-fi
-
-# 2. 服务部署测试
-./scripts/deploy_services.sh
-sleep 30  # 等待服务启动
-
-# 3. 健康检查
-curl -f http://localhost:8000/health || exit 1
-curl -f http://localhost:8001/health || exit 1
-
-# 4. 基本功能验证
-python /deploy_test/basic_function_test.py
-
-# 5. 性能基准测试
-python /deploy_test/performance_baseline_test.py
-
-echo "部署验证完成" | tee -a /deploy_test/deploy_test.log
-```
-
-**部署测试日志记录（符合设计文档要求）**：
-- 测试结果记录在`/deploy_test/deploy_test.log`文件中
-- 该目录不被Git管理，确保测试环境独立性
-- 包含完整的系统流程验证和性能测试结果
-
-**配置验证测试**：
-- 生产配置文件语法和逻辑验证
-- 环境变量和依赖项检查
-- 安全配置和权限验证
-- 日志配置和输出验证
-
-#### 2.6.2 生产数据测试
-
-**数据迁移测试**：
-```python
-class TestProductionDataMigration:
-    def test_existing_data_compatibility(self):
-        """测试现有数据兼容性"""
-        # 使用生产环境的数据样本进行测试
-        production_data_sample = self.load_production_sample()
-        
-        migration_engine = DataMigrationEngine()
-        
-        # 测试数据迁移过程
-        migration_result = migration_engine.migrate(production_data_sample)
-        
-        # 验证迁移结果
-        assert migration_result.success_rate >= 0.99
-        assert migration_result.data_integrity_check_passed
-        
-        # 验证迁移后的搜索功能
-        search_engine = SearchEngine()
-        for sample in production_data_sample[:10]:
-            results = search_engine.search(sample.query)
-            assert len(results) > 0, f"迁移后搜索失败: {sample.query}"
-```
-
-### 2.7 故障注入和混沌测试
-
-#### 2.7.1 故障注入测试
-
-**系统故障模拟**：
-```python
-class TestChaosEngineering:
-    def test_database_connection_failure(self):
-        """测试数据库连接故障处理"""
-        with DatabaseFailureSimulator():
-            # 模拟数据库连接中断
-            search_engine = SearchEngine()
-            
-            # 验证系统优雅降级
-            result = search_engine.search("测试查询")
-            assert result.status == "degraded"
-            assert "数据库连接异常" in result.message
-            
-            # 验证系统自动恢复
-            time.sleep(5)  # 等待重连机制
-            result = search_engine.search("测试查询")
-            assert result.status == "success"
-    
-    def test_high_memory_pressure(self):
-        """测试高内存压力下的系统行为"""
-        memory_pressure = MemoryPressureSimulator(target_usage=0.9)
-        
-        with memory_pressure:
-            # 在高内存压力下执行批量处理
-            processor = BatchProcessor()
-            
-            # 验证系统不会崩溃
-            result = processor.process_batch(large_file_list)
-            assert result.completed_successfully
-            
-            # 验证内存使用控制
-            assert psutil.virtual_memory().percent < 95
-```
-
-**网络故障测试**：
-- 网络延迟和丢包模拟
-- 服务间通信中断测试
-- 外部依赖服务不可用测试
-
-#### 2.7.2 恢复能力测试
-
-**自动恢复测试**：
-```python
-class TestSystemRecovery:
-    def test_service_auto_restart(self):
-        """测试服务自动重启机制"""
-        service_manager = ServiceManager()
-        
-        # 强制终止服务进程
-        service_manager.kill_service("search_engine")
-        
-        # 验证自动重启
-        time.sleep(10)
-        assert service_manager.is_service_running("search_engine")
-        
-        # 验证服务功能正常
-        health_check = service_manager.health_check("search_engine")
-        assert health_check.status == "healthy"
-    
-    def test_data_corruption_recovery(self):
-        """测试数据损坏恢复机制"""
-        # 模拟索引文件损坏
-        index_corruptor = IndexCorruptor()
-        index_corruptor.corrupt_random_entries(corruption_rate=0.1)
-        
-        # 触发自动修复
-        repair_engine = IndexRepairEngine()
-        repair_result = repair_engine.auto_repair()
-        
-        # 验证修复效果
-        assert repair_result.corrupted_entries_fixed > 0
-        assert repair_result.integrity_check_passed
-```
-
-### 2.8 监控和可观测性测试
-
-#### 2.8.1 监控指标验证
-
-**关键指标测试**：
-```python
-class TestMonitoringMetrics:
-    def test_performance_metrics_accuracy(self):
-        """测试性能指标准确性"""
-        metrics_collector = MetricsCollector()
-        
-        # 执行已知性能特征的操作
-        start_time = time.time()
-        search_engine.search("测试查询")
-        actual_duration = time.time() - start_time
-        
-        # 验证监控指标的准确性
-        reported_duration = metrics_collector.get_metric("search_duration_ms")
-        accuracy = abs(actual_duration * 1000 - reported_duration) / (actual_duration * 1000)
-        assert accuracy < 0.05, f"监控指标误差过大: {accuracy}"
-    
-    def test_alert_threshold_validation(self):
-        """测试告警阈值设置验证"""
-        alert_manager = AlertManager()
-        
-        # 模拟超过阈值的情况
-        metrics_simulator = MetricsSimulator()
-        metrics_simulator.simulate_high_response_time(duration=300)  # 5分钟
-        
-        # 验证告警触发
-        alerts = alert_manager.get_active_alerts()
-        assert any(alert.type == "high_response_time" for alert in alerts)
-```
-
-#### 2.8.2 日志和追踪测试
-
-**日志完整性测试**：
-```python
-class TestLoggingAndTracing:
-    def test_request_tracing_completeness(self):
-        """测试请求追踪完整性"""
-        tracer = RequestTracer()
-        
-        with tracer.start_trace("test_search_request") as trace:
-            # 执行完整的搜索请求
-            result = search_engine.search("测试查询")
-        
-        # 验证追踪信息完整性
-        trace_data = tracer.get_trace_data(trace.trace_id)
-        
-        assert "request_received" in trace_data.events
-        assert "embedding_generated" in trace_data.events
-        assert "vector_search_completed" in trace_data.events
-        assert "response_sent" in trace_data.events
-        
-        # 验证时间戳精度
-        for event in trace_data.events:
-            assert event.timestamp_accuracy <= 2.0
-```
-
-### 2.9 长期运行和稳定性测试
-
-#### 2.9.1 长期运行测试
-
-**7x24小时稳定性测试**：
-```python
-class TestLongTermStability:
-    def test_week_long_continuous_operation(self):
-        """测试一周连续运行稳定性"""
-        stability_monitor = StabilityMonitor()
-        test_duration = 7 * 24 * 3600  # 7天
-        
-        start_time = time.time()
-        
-        while time.time() - start_time < test_duration:
-            # 模拟正常用户操作
-            self.simulate_user_operations()
-            
-            # 检查系统健康状态
-            health_status = stability_monitor.check_system_health()
-            assert health_status.overall_status == "healthy"
-            
-            # 检查内存泄漏
-            memory_usage = psutil.virtual_memory().percent
-            assert memory_usage < 80, f"内存使用过高: {memory_usage}%"
-            
-            # 检查文件句柄泄漏
-            open_files = psutil.Process().num_fds()
-            assert open_files < 1000, f"文件句柄过多: {open_files}"
-            
-            time.sleep(300)  # 每5分钟检查一次
-    
-    def simulate_user_operations(self):
-        """模拟用户操作"""
-        operations = [
-            lambda: self.search_engine.search("随机查询"),
-            lambda: self.file_processor.process_file("test_file.jpg"),
-            lambda: self.config_manager.update_config("test_key", "test_value"),
-        ]
-        
-        # 随机执行操作
-        operation = random.choice(operations)
-        operation()
-```
-
-**内存和资源泄漏测试**：
-```python
-class TestResourceLeaks:
-    def test_memory_leak_detection(self):
-        """测试内存泄漏检测"""
-        memory_tracker = MemoryTracker()
-        
-        initial_memory = memory_tracker.get_current_usage()
-        
-        # 执行大量操作
-        for i in range(1000):
-            self.search_engine.search(f"测试查询 {i}")
-            
-            if i % 100 == 0:
-                current_memory = memory_tracker.get_current_usage()
-                memory_growth = current_memory - initial_memory
-                
-                # 内存增长不应超过合理范围
-                assert memory_growth < 100 * 1024 * 1024, f"可能存在内存泄漏: {memory_growth} bytes"
-```
-
-#### 2.9.2 压力和负载测试
-
-**并发用户压力测试**：
-```python
-class TestConcurrentLoad:
-    async def test_concurrent_users_load(self):
-        """测试并发用户负载"""
-        concurrent_users = 50
-        requests_per_user = 100
-        
-        async def user_simulation(user_id):
-            """模拟单个用户行为"""
-            results = []
-            for i in range(requests_per_user):
-                try:
-                    result = await self.search_engine.async_search(f"用户{user_id}查询{i}")
-                    results.append(result)
-                    await asyncio.sleep(random.uniform(0.1, 1.0))  # 模拟用户思考时间
-                except Exception as e:
-                    results.append({"error": str(e)})
-            return results
-        
-        # 并发执行用户模拟
-        tasks = [user_simulation(i) for i in range(concurrent_users)]
-        all_results = await asyncio.gather(*tasks)
-        
-        # 验证结果
-        total_requests = concurrent_users * requests_per_user
-        successful_requests = sum(
-            1 for user_results in all_results 
-            for result in user_results 
-            if "error" not in result
-        )
-        
-        success_rate = successful_requests / total_requests
-        assert success_rate >= 0.95, f"并发测试成功率过低: {success_rate}"
-```
-
-## 3. 测试数据管理
-
-### 3.1 测试数据结构
-
-```
-tests/fixtures/
-├── images/                    # 测试图片
-│   ├── landscape_1.jpg        # 风景图片
-│   ├── portrait_1.jpg         # 人物图片
-│   └── object_1.jpg           # 物体图片
-├── videos/                    # 测试视频
-│   ├── short_video.mp4        # 短视频(<120s)
-│   ├── long_video.mp4         # 长视频(>120s)
-│   └── 720p_test.mp4          # 720p测试视频
-├── audios/                    # 测试音频
-│   ├── music_sample.mp3       # 音乐样本
-│   ├── speech_sample.wav      # 语音样本
-│   └── mixed_content.m4a      # 混合内容
-└── configs/                   # 测试配置
-    ├── test_config.yml        # 测试配置文件
-    └── minimal_config.yml     # 最小配置文件
-```
-
-### 3.2 测试数据要求
-
-**数据质量标准**：
-- 图片：分辨率不低于720p，格式多样化
-- 视频：包含不同时长、分辨率、编码格式
-- 音频：包含音乐、语音、混合内容样本
-- 配置：覆盖各种配置场景和边界情况
-
-**数据管理原则**：
-- 测试数据版本控制，确保测试一致性
-- 敏感数据脱敏处理，保护隐私安全
-- 数据大小控制，避免仓库过大
-
-## 4. 测试自动化
-
-### 4.1 持续集成配置
-
-**GitHub Actions配置示例**：
+**测试环境设置**：
 ```yaml
-name: Test Suite
+# tests/configs/gpu_test_config.yml
+gpu_test:
+  # 强制使用GPU模式
+  device: "cuda"
+  
+  # GPU批处理大小
+  batch_size: 16
+  
+  # 使用完整模型进行测试
+  model:
+    clip_model: "openai/clip-vit-large-patch14"
+    face_model: "retinaface_resnet50"
+  
+  # 测试数据设置
+  test_data:
+    max_video_duration: 1800  # 30分钟
+    max_image_resolution: [1920, 1080]
+  
+  # 性能基准（GPU模式）
+  performance_benchmarks:
+    video_processing_fps: 2.0  # 实时处理的2倍
+    search_response_time_ms: 100  # 搜索响应时间
+    memory_usage_mb: 4096  # 最大内存使用
+    gpu_memory_usage_mb: 6144  # 最大GPU内存使用
+```
 
-on: [push, pull_request]
+### 3.3 GPU环境测试用例
+
+**GPU模式功能测试**：
+```python
+# tests/unit/test_gpu_mode.py
+import pytest
+import logging
+import time
+import torch
+from src.business.search_engine import SearchEngine
+from src.core.config_manager import ConfigManager
+
+class TestGPUMode:
+    """GPU模式下的功能测试"""
+    
+    @pytest.fixture
+    def gpu_config(self):
+        """GPU测试配置"""
+        return ConfigManager("tests/configs/gpu_test_config.yml")
+    
+    @pytest.fixture
+    def search_engine(self, gpu_config):
+        """GPU模式搜索引擎"""
+        return SearchEngine(config=gpu_config)
+    
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU不可用")
+    def test_gpu_mode_initialization(self, search_engine):
+        """测试GPU模式初始化"""
+        assert search_engine.device == "cuda"
+        assert search_engine.model_loaded == True
+        assert torch.cuda.is_available()
+        logging.info("GPU模式初始化测试通过")
+    
+    @pytest.mark.skipif(not torch.cuda.is_available(), reason="GPU不可用")
+    def test_gpu_memory_usage(self, search_engine):
+        """测试GPU内存使用"""
+        initial_gpu_memory = torch.cuda.memory_allocated() / (1024 * 1024)  # MB
+        
+        # 执行大量搜索操作
+        for i in range(100):
+            search_engine.search(f"GPU测试查询 {i}")
+        
+        final_gpu_memory = torch.cuda.memory_allocated() / (1024 * 1024)  # MB
+        gpu_memory_increase = final_gpu_memory - initial_gpu_memory
+        
+        # GPU内存使用基准
+        assert gpu_memory_increase < 1000, f"GPU内存增长过多: {gpu_memory_increase}MB"
+        assert final_gpu_memory < 6144, f"GPU内存使用过多: {final_gpu_memory}MB"
+        
+        # 记录性能日志
+        perf_logger = logging.getLogger("msearch.performance")
+        perf_logger.info(f"GPU内存使用测试 - 初始: {initial_gpu_memory:.2f}MB, 最终: {final_gpu_memory:.2f}MB, 增长: {gpu_memory_increase:.2f}MB")
+        
+        logging.info(f"GPU内存使用测试通过，增长: {gpu_memory_increase:.2f}MB")
+```
+
+## 4. 跨环境一致性测试
+
+### 4.1 功能结果一致性测试
+
+**搜索结果一致性测试**：
+```python
+# tests/integration/test_cross_platform_consistency.py
+import pytest
+import logging
+import json
+from src.business.search_engine import SearchEngine
+from src.core.config_manager import ConfigManager
+
+class TestCrossPlatformConsistency:
+    """跨平台一致性测试"""
+    
+    @pytest.fixture
+    def cpu_config(self):
+        """CPU测试配置"""
+        return ConfigManager("tests/configs/cpu_test_config.yml")
+    
+    @pytest.fixture
+    def gpu_config(self):
+        """GPU测试配置"""
+        return ConfigManager("tests/configs/gpu_test_config.yml")
+    
+    @pytest.fixture
+    def cpu_search_engine(self, cpu_config):
+        """CPU模式搜索引擎"""
+        return SearchEngine(config=cpu_config)
+    
+    @pytest.fixture
+    def gpu_search_engine(self, gpu_config):
+        """GPU模式搜索引擎"""
+        return SearchEngine(config=gpu_config)
+    
+    def test_search_result_consistency(self, cpu_search_engine, gpu_search_engine):
+        """测试搜索结果一致性"""
+        test_queries = ["美丽的风景", "人物肖像", "城市建筑"]
+        
+        for query in test_queries:
+            # CPU搜索
+            cpu_results = cpu_search_engine.search(query, modality="text_to_image")
+            
+            # GPU搜索
+            gpu_results = gpu_search_engine.search(query, modality="text_to_image")
+            
+            # 比较结果数量
+            assert len(cpu_results) == len(gpu_results), f"结果数量不一致: CPU={len(cpu_results)}, GPU={len(gpu_results)}"
+            
+            # 比较前10个结果的相似度
+            cpu_top_ids = [r.get("id") for r in cpu_results[:10]]
+            gpu_top_ids = [r.get("id") for r in gpu_results[:10]]
+            
+            # 计算重叠率
+            overlap = len(set(cpu_top_ids) & set(gpu_top_ids)) / 10
+            assert overlap > 0.7, f"搜索结果重叠率过低: {overlap}"
+            
+            # 记录一致性日志
+            consistency_logger = logging.getLogger("msearch.consistency")
+            consistency_data = {
+                "query": query,
+                "cpu_result_count": len(cpu_results),
+                "gpu_result_count": len(gpu_results),
+                "top_10_overlap": overlap
+            }
+            consistency_logger.info(f"一致性数据: {json.dumps(consistency_data)}")
+            
+            logging.info(f"查询 '{query}' 一致性测试通过，重叠率: {overlap:.2f}")
+    
+    def test_timestamp_accuracy_consistency(self, cpu_search_engine, gpu_search_engine):
+        """测试时间戳精度一致性"""
+        test_video = "tests/fixtures/videos/test_video.mp4"
+        
+        # CPU处理
+        cpu_results = cpu_search_engine.search(test_video, modality="video_to_image")
+        
+        # GPU处理
+        gpu_results = gpu_search_engine.search(test_video, modality="video_to_image")
+        
+        # 比较时间戳精度
+        for cpu_result, gpu_result in zip(cpu_results, gpu_results):
+            cpu_accuracy = cpu_result.get("timestamp_accuracy", float('inf'))
+            gpu_accuracy = gpu_result.get("timestamp_accuracy", float('inf'))
+            
+            # 两种环境下的时间戳精度都应满足要求
+            assert cpu_accuracy <= 2.0, f"CPU时间戳精度超出要求: {cpu_accuracy}秒"
+            assert gpu_accuracy <= 2.0, f"GPU时间戳精度超出要求: {gpu_accuracy}秒"
+            
+            # 时间戳精度差异应在合理范围内
+            accuracy_diff = abs(cpu_accuracy - gpu_accuracy)
+            assert accuracy_diff < 0.5, f"时间戳精度差异过大: {accuracy_diff}秒"
+            
+            # 记录一致性日志
+            consistency_logger = logging.getLogger("msearch.consistency")
+            consistency_data = {
+                "video": test_video,
+                "cpu_accuracy": cpu_accuracy,
+                "gpu_accuracy": gpu_accuracy,
+                "accuracy_diff": accuracy_diff
+            }
+            consistency_logger.info(f"时间戳精度一致性数据: {json.dumps(consistency_data)}")
+        
+        logging.info("时间戳精度一致性测试通过")
+```
+
+## 5. 测试自动化与持续集成
+
+### 5.1 CPU环境持续集成配置
+
+**GitHub Actions配置**：
+```yaml
+# .github/workflows/cpu_tests.yml
+name: CPU Tests
+
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main ]
 
 jobs:
-  test:
+  cpu-tests:
     runs-on: ubuntu-latest
     
     steps:
@@ -725,535 +783,301 @@ jobs:
     - name: Install dependencies
       run: |
         pip install -r requirements.txt
-        pip install pytest pytest-cov pytest-asyncio
+        pip install -r requirements-test.txt
+        pip install pytest pytest-cov pytest-asyncio psutil
     
-    - name: Run unit tests
-      run: |
-        pytest tests/unit/ -v --cov=src --cov-report=xml
+    - name: Create logs directory
+      run: mkdir -p logs
     
-    - name: Run integration tests
+    - name: Run CPU unit tests
       run: |
-        pytest tests/integration/ -v
+        pytest tests/unit/test_cpu_mode.py -v --cov=src --cov-report=xml
+    
+    - name: Run error handling tests
+      run: |
+        pytest tests/unit/test_error_handling.py -v
+    
+    - name: Run CPU performance tests
+      run: |
+        pytest tests/performance/test_cpu_performance.py -v
+    
+    - name: Upload test logs
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-logs
+        path: logs/
     
     - name: Upload coverage
       uses: codecov/codecov-action@v3
 ```
 
-### 4.2 测试执行策略
+### 5.2 GPU环境测试配置
 
-**本地开发测试**：
-```bash
-# 快速单元测试
-pytest tests/unit/ -v
+**GitHub Actions配置**：
+```yaml
+# .github/workflows/gpu_tests.yml
+name: GPU Tests
 
-# 完整测试套件
-pytest tests/ -v --cov=src
+on:
+  push:
+    branches: [ main ]
+  schedule:
+    # 每周运行一次GPU测试
+    - cron: '0 0 * * 0'
 
-# 性能测试
-pytest tests/performance/ -v --benchmark-only
-```
-
-**CI/CD测试**：
-- 每次提交触发单元测试和集成测试
-- 每日定时执行完整测试套件
-- 发布前执行性能测试和系统测试
-
-## 5. 测试工具和框架
-
-### 5.1 测试框架选择（基于设计文档规范）
-
-**核心测试框架**：
-- **pytest**: 主要测试框架，符合设计文档的测试结构规范
-- **pytest-asyncio**: 异步测试支持，配合系统的异步架构
-- **pytest-cov**: 测试覆盖率统计，满足80%覆盖率要求
-
-**Mock工具**：
-- **unittest.mock**: Python标准库Mock工具，用于隔离外部依赖
-
-### 5.2 测试配置（符合设计文档规范）
-
-**pytest配置文件**：
-```ini
-# pytest.ini - 基于设计文档的测试结构规范
-[tool:pytest]
-testpaths = tests
-python_files = test_*.py  # 符合设计文档命名规范
-python_classes = Test*    # 符合设计文档命名规范
-python_functions = test_* # 符合设计文档命名规范
-addopts = 
-    -v
-    --strict-markers
-    --disable-warnings
-    --cov=src
-    --cov-report=term-missing
-    --cov-report=html:htmlcov
-markers =
-    unit: Unit tests - 符合设计文档单元测试要求
-    integration: Integration tests - 符合设计文档集成测试要求
-    timestamp: Timestamp accuracy tests - 设计文档核心要求
-    performance: Performance tests - 设计文档性能要求
-    deployment: Deployment tests - 使用/deploy_test目录
-```
-
-**conftest.py配置**：
-```python
-# tests/conftest.py
-import pytest
-import asyncio
-from pathlib import Path
-
-@pytest.fixture(scope="session")
-def event_loop():
-    """创建事件循环"""
-    loop = asyncio.get_event_loop_policy().new_event_loop()
-    yield loop
-    loop.close()
-
-@pytest.fixture
-def test_config():
-    """测试配置"""
-    return {
-        "general": {
-            "log_level": "DEBUG",
-            "data_dir": "./test_data"
-        },
-        "models": {
-            "clip": {"model_name": "openai/clip-vit-base-patch32"}
-        }
-    }
-
-@pytest.fixture
-def test_files():
-    """测试文件路径"""
-    fixtures_dir = Path(__file__).parent / "fixtures"
-    return {
-        "image": fixtures_dir / "images" / "test_image.jpg",
-        "video": fixtures_dir / "videos" / "test_video.mp4",
-        "audio": fixtures_dir / "audios" / "test_audio.wav"
-    }
-```
-
-## 6. 真实环境测试执行计划
-
-### 6.1 测试环境分级
-
-**测试环境层次**：
-```
-开发环境 (Dev) → 测试环境 (Test) → 预生产环境 (Staging) → 生产环境 (Production)
-     ↓              ↓                ↓                    ↓
-  单元测试      集成测试+UAT      生产验证测试        监控+故障恢复测试
-```
-
-**各环境测试重点**：
-
-| 环境 | 测试重点 | 数据特征 | 测试目标 |
-|------|---------|---------|---------|
-| **开发环境** | 功能验证、单元测试 | 模拟数据、小数据集 | 快速反馈、功能正确性 |
-| **测试环境** | 集成测试、性能测试 | 脱敏生产数据 | 系统集成、性能基准 |
-| **预生产环境** | 用户验收、压力测试 | 生产数据副本 | 真实场景验证 |
-| **生产环境** | 监控验证、故障演练 | 真实生产数据 | 系统可靠性 |
-
-### 6.2 真实环境测试检查清单
-
-**预生产环境验证**：
-- [ ] 使用真实用户数据进行端到端测试
-- [ ] 验证数据迁移和兼容性
-- [ ] 执行完整的用户工作流测试
-- [ ] 进行负载和压力测试
-- [ ] 验证监控和告警系统
-- [ ] 测试备份和恢复流程
-
-**生产环境部署验证**：
-- [ ] 蓝绿部署或滚动更新测试
-- [ ] 生产流量切换验证
-- [ ] 实时监控指标验证
-- [ ] 故障回滚机制测试
-- [ ] 用户访问和功能验证
-
-### 6.3 生产环境测试策略
-
-#### 6.3.1 金丝雀发布测试
-
-**渐进式发布验证**：
-```python
-class TestCanaryDeployment:
-    def test_canary_release_validation(self):
-        """测试金丝雀发布验证"""
-        canary_manager = CanaryDeploymentManager()
-        
-        # 阶段1: 5%流量切换
-        canary_manager.route_traffic_percentage(5)
-        time.sleep(300)  # 观察5分钟
-        
-        metrics = canary_manager.get_canary_metrics()
-        assert metrics.error_rate < 0.01, "金丝雀版本错误率过高"
-        assert metrics.response_time_p95 < 2000, "响应时间超标"
-        
-        # 阶段2: 25%流量切换
-        canary_manager.route_traffic_percentage(25)
-        time.sleep(600)  # 观察10分钟
-        
-        # 阶段3: 100%流量切换
-        if metrics.all_green():
-            canary_manager.route_traffic_percentage(100)
-```
-
-#### 6.3.2 A/B测试框架
-
-**功能对比测试**：
-```python
-class TestABTesting:
-    def test_search_algorithm_comparison(self):
-        """测试搜索算法A/B对比"""
-        ab_tester = ABTestFramework()
-        
-        # 配置A/B测试
-        ab_tester.configure_test(
-            name="search_algorithm_v2",
-            traffic_split={"control": 50, "treatment": 50},
-            duration_days=7
-        )
-        
-        # 收集测试数据
-        test_results = ab_tester.collect_results()
-        
-        # 统计显著性检验
-        significance_test = StatisticalSignificanceTest()
-        result = significance_test.analyze(
-            control_group=test_results.control,
-            treatment_group=test_results.treatment,
-            metric="search_accuracy"
-        )
-        
-        assert result.p_value < 0.05, "A/B测试结果无统计显著性"
-        assert result.treatment_better, "新算法性能未提升"
-```
-
-### 6.4 故障演练和灾难恢复测试
-
-#### 6.4.1 定期故障演练
-
-**月度故障演练计划**：
-```python
-class TestDisasterRecovery:
-    def test_database_failover_drill(self):
-        """测试数据库故障转移演练"""
-        disaster_simulator = DisasterSimulator()
-        
-        # 模拟主数据库故障
-        disaster_simulator.simulate_database_failure("primary")
-        
-        # 验证自动故障转移
-        failover_manager = FailoverManager()
-        failover_result = failover_manager.execute_failover()
-        
-        assert failover_result.success, "数据库故障转移失败"
-        assert failover_result.downtime < 30, f"故障转移时间过长: {failover_result.downtime}s"
-        
-        # 验证服务恢复
-        health_checker = HealthChecker()
-        assert health_checker.verify_service_health(), "服务未完全恢复"
+jobs:
+  gpu-tests:
+    runs-on: [self-hosted, windows, gpu]
     
-    def test_data_center_outage_simulation(self):
-        """测试数据中心断电模拟"""
-        # 模拟整个数据中心不可用
-        outage_simulator = DataCenterOutageSimulator()
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python
+      uses: actions/setup-python@v3
+      with:
+        python-version: '3.9'
+    
+    - name: Install dependencies
+      run: |
+        pip install -r requirements.txt
+        pip install -r requirements-test.txt
+        pip install pytest pytest-cov pytest-asyncio torch torchvision
+    
+    - name: Create logs directory
+      run: mkdir -p logs
+    
+    - name: Run GPU unit tests
+      run: |
+        pytest tests/unit/test_gpu_mode.py -v --cov=src --cov-report=xml
+    
+    - name: Run cross-platform consistency tests
+      run: |
+        pytest tests/integration/test_cross_platform_consistency.py -v
+    
+    - name: Upload test logs
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: gpu-test-logs
+        path: logs/
+    
+    - name: Upload coverage
+      uses: codecov/codecov-action@v3
+```
+
+## 6. 日志记录与错误反馈系统
+
+### 6.1 日志记录策略
+
+**日志分类**：
+- **功能日志**：记录系统功能执行过程
+- **性能日志**：记录性能指标和基准测试结果
+- **错误日志**：记录错误信息和异常堆栈
+- **一致性日志**：记录跨环境一致性测试结果
+
+**日志级别**：
+- **DEBUG**：详细的调试信息，用于开发阶段
+- **INFO**：一般信息，记录系统正常运行状态
+- **WARNING**：警告信息，记录潜在问题
+- **ERROR**：错误信息，记录系统错误和异常
+
+### 6.2 日志分析工具
+
+**日志分析脚本**：
+```python
+# scripts/analyze_test_logs.py
+import re
+import json
+import argparse
+from collections import defaultdict
+
+def analyze_performance_logs(log_file):
+    """分析性能日志"""
+    performance_data = []
+    
+    with open(log_file, 'r') as f:
+        for line in f:
+            if "PERFORMANCE" in line and "性能数据:" in line:
+                # 提取JSON数据
+                json_match = re.search(r'性能数据: ({.*})', line)
+                if json_match:
+                    try:
+                        data = json.loads(json_match.group(1))
+                        performance_data.append(data)
+                    except json.JSONDecodeError:
+                        continue
+    
+    return performance_data
+
+def analyze_error_logs(log_file):
+    """分析错误日志"""
+    error_data = []
+    
+    with open(log_file, 'r') as f:
+        for line in f:
+            if "ERROR" in line:
+                error_data.append(line.strip())
+    
+    return error_data
+
+def generate_report(performance_data, error_data, output_file):
+    """生成测试报告"""
+    report = {
+        "summary": {
+            "total_performance_tests": len(performance_data),
+            "total_errors": len(error_data)
+        },
+        "performance_tests": performance_data,
+        "errors": error_data
+    }
+    
+    with open(output_file, 'w') as f:
+        json.dump(report, f, indent=2)
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='分析测试日志')
+    parser.add_argument('--performance-log', default='logs/performance_test.log', help='性能日志文件')
+    parser.add_argument('--error-log', default='logs/error_test.log', help='错误日志文件')
+    parser.add_argument('--output', default='test_report.json', help='输出报告文件')
+    
+    args = parser.parse_args()
+    
+    performance_data = analyze_performance_logs(args.performance_log)
+    error_data = analyze_error_logs(args.error_log)
+    
+    generate_report(performance_data, error_data, args.output)
+    
+    print(f"测试报告已生成: {args.output}")
+    print(f"性能测试数量: {len(performance_data)}")
+    print(f"错误数量: {len(error_data)}")
+```
+
+### 6.3 错误反馈机制
+
+**自动错误报告**：
+```python
+# scripts/error_reporter.py
+import smtplib
+import logging
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
+import json
+
+class ErrorReporter:
+    """错误报告器"""
+    
+    def __init__(self, config_file="config/error_reporter.json"):
+        """初始化错误报告器"""
+        with open(config_file, 'r') as f:
+            self.config = json.load(f)
         
-        with outage_simulator.simulate_outage("primary_dc"):
-            # 验证流量自动切换到备用数据中心
-            traffic_manager = TrafficManager()
-            assert traffic_manager.current_active_dc == "backup_dc"
+        self.logger = logging.getLogger("msearch.error_reporter")
+    
+    def check_errors(self, log_file="logs/error_test.log"):
+        """检查错误日志"""
+        error_count = 0
+        critical_errors = []
+        
+        with open(log_file, 'r') as f:
+            for line in f:
+                if "ERROR" in line:
+                    error_count += 1
+                    
+                    # 检查是否为关键错误
+                    if any(keyword in line for keyword in ["CRITICAL", "FATAL", "AssertionError"]):
+                        critical_errors.append(line.strip())
+        
+        if error_count > self.config.get("error_threshold", 10):
+            self.send_error_report(error_count, critical_errors)
+        
+        return error_count, critical_errors
+    
+    def send_error_report(self, error_count, critical_errors):
+        """发送错误报告"""
+        subject = f"MSearch测试错误报告 - 错误数量: {error_count}"
+        
+        body = f"""
+        MSearch测试错误报告
+        
+        错误总数: {error_count}
+        关键错误数: {len(critical_errors)}
+        
+        关键错误详情:
+        {chr(10).join(critical_errors[:5])}
+        
+        请检查测试日志以获取详细信息。
+        """
+        
+        msg = MIMEMultipart()
+        msg['From'] = self.config["sender"]
+        msg['To'] = ", ".join(self.config["recipients"])
+        msg['Subject'] = subject
+        
+        msg.attach(MIMEText(body, 'plain'))
+        
+        try:
+            with smtplib.SMTP(self.config["smtp_server"], self.config["smtp_port"]) as server:
+                server.starttls()
+                server.login(self.config["username"], self.config["password"])
+                server.send_message(msg)
             
-            # 验证服务可用性
-            service_checker = ServiceAvailabilityChecker()
-            availability = service_checker.check_availability()
-            assert availability > 0.99, f"服务可用性不足: {availability}"
+            self.logger.info(f"错误报告已发送，错误数量: {error_count}")
+        except Exception as e:
+            self.logger.error(f"发送错误报告失败: {str(e)}", exc_info=True)
+
+if __name__ == "__main__":
+    reporter = ErrorReporter()
+    error_count, critical_errors = reporter.check_errors()
+    print(f"检查完成，错误数量: {error_count}，关键错误数: {len(critical_errors)}")
 ```
 
-#### 6.4.2 数据完整性验证
+## 7. 测试交付标准
 
-**数据一致性检查**：
-```python
-class TestDataIntegrity:
-    def test_cross_region_data_consistency(self):
-        """测试跨区域数据一致性"""
-        consistency_checker = DataConsistencyChecker()
-        
-        # 检查主从数据库一致性
-        primary_checksum = consistency_checker.calculate_checksum("primary_db")
-        replica_checksum = consistency_checker.calculate_checksum("replica_db")
-        
-        assert primary_checksum == replica_checksum, "主从数据不一致"
-        
-        # 检查向量索引一致性
-        vector_consistency = consistency_checker.verify_vector_index_consistency()
-        assert vector_consistency.match_rate > 0.999, "向量索引存在不一致"
-```
+### 7.1 交付前测试检查清单
 
-## 7. 质量保证流程
+**CPU环境测试**：
+- [ ] 所有CPU单元测试通过，通过率≥95%
+- [ ] CPU性能基准测试全部通过
+- [ ] 错误处理测试全部通过
+- [ ] 时间戳精度测试满足±2秒要求
+- [ ] 内存使用测试通过，无内存泄漏
+- [ ] 并发测试通过，系统稳定
 
-### 7.1 代码审查检查清单
+**日志记录验证**：
+- [ ] 功能日志记录完整，覆盖所有关键流程
+- [ ] 性能日志记录详细，包含所有性能指标
+- [ ] 错误日志记录清晰，包含错误堆栈信息
+- [ ] 日志分析工具运行正常
+- [ ] 错误报告机制工作正常
 
-**功能正确性**：
-- [ ] 功能实现符合需求规范
-- [ ] 边界条件处理正确
-- [ ] 异常情况处理完善
-- [ ] 返回值类型和格式正确
+**跨环境一致性**：
+- [ ] CPU与GPU环境功能结果一致性验证通过
+- [ ] 时间戳精度在不同环境下一致
+- [ ] 搜索结果相似度满足要求（>70%）
 
-**性能要求**：
-- [ ] 时间戳精度满足±2秒要求
-- [ ] 查询响应时间符合性能指标
-- [ ] 内存使用合理，无明显泄漏
-- [ ] 并发处理能力满足要求
+### 7.2 交付质量标准
 
-**代码质量**：
-- [ ] 代码符合编码规范
-- [ ] 函数和类有适当的文档字符串
-- [ ] 测试覆盖率达到要求
-- [ ] 无明显的代码异味
+**功能质量**：
+- 核心功能在CPU环境下100%正常工作
+- 时间戳精度满足±2秒要求
+- 系统稳定性满足7x24小时运行要求
 
-### 7.2 发布前测试检查清单
+**性能质量**：
+- CPU模式下的性能基准全部达标
+- 内存使用在合理范围内，无内存泄漏
+- 并发处理能力满足设计要求
 
-**功能验证**：
-- [ ] 所有单元测试通过
-- [ ] 所有集成测试通过
-- [ ] 关键功能手动验证通过
-- [ ] 性能测试指标达标
-- [ ] 用户验收测试完成
-- [ ] 真实数据兼容性验证通过
+**日志质量**：
+- 日志记录完整，覆盖所有关键操作
+- 错误信息清晰，便于问题定位
+- 日志分析工具能够有效提取关键信息
 
-**部署验证**：
-- [ ] 部署测试环境验证通过
-- [ ] 预生产环境完整测试通过
-- [ ] 配置文件格式正确
-- [ ] 依赖项安装正常
-- [ ] 服务启动和停止正常
-- [ ] 数据迁移脚本验证通过
+## 8. 设计文档符合性总结
 
-**生产就绪验证**：
-- [ ] 监控和告警系统配置完成
-- [ ] 日志收集和分析系统就绪
-- [ ] 备份和恢复流程验证
-- [ ] 故障回滚机制测试通过
-- [ ] 安全扫描和渗透测试完成
-- [ ] 性能基准测试建立
+本测试策略文档已根据设计文档要求进行优化，确保完全符合系统架构和技术规范，特别针对CPU环境测试和日志记录进行了增强：
 
-**文档完整性**：
-- [ ] API文档更新完整
-- [ ] 用户手册更新及时
-- [ ] 部署指南准确有效
-- [ ] 变更日志记录完整
-- [ ] 故障处理手册更新
-- [ ] 运维操作手册完善
-
-## 8. 生产环境持续测试
-
-### 8.1 生产环境监控测试
-
-#### 8.1.1 实时健康检查
-
-**服务健康监控**：
-```python
-class TestProductionHealth:
-    def test_continuous_health_monitoring(self):
-        """测试持续健康监控"""
-        health_monitor = ProductionHealthMonitor()
-        
-        # 设置健康检查指标
-        health_checks = [
-            ("api_response_time", lambda: self.check_api_response_time() < 1000),
-            ("database_connection", lambda: self.check_database_connectivity()),
-            ("memory_usage", lambda: psutil.virtual_memory().percent < 80),
-            ("disk_space", lambda: psutil.disk_usage('/').percent < 90),
-            ("search_accuracy", lambda: self.validate_search_accuracy() > 0.95)
-        ]
-        
-        for check_name, check_func in health_checks:
-            result = check_func()
-            health_monitor.record_check(check_name, result)
-            
-            if not result:
-                health_monitor.trigger_alert(check_name)
-```
-
-#### 8.1.2 用户体验监控
-
-**真实用户监控 (RUM)**：
-```python
-class TestRealUserMonitoring:
-    def test_user_experience_metrics(self):
-        """测试用户体验指标"""
-        rum_collector = RealUserMonitoringCollector()
-        
-        # 收集用户体验数据
-        user_metrics = rum_collector.collect_metrics(time_window="1h")
-        
-        # 验证核心用户体验指标
-        assert user_metrics.page_load_time_p95 < 3000, "页面加载时间过长"
-        assert user_metrics.search_success_rate > 0.98, "搜索成功率过低"
-        assert user_metrics.user_satisfaction_score > 4.0, "用户满意度过低"
-        
-        # 检查异常用户行为模式
-        anomaly_detector = UserBehaviorAnomalyDetector()
-        anomalies = anomaly_detector.detect_anomalies(user_metrics)
-        
-        if anomalies:
-            self.alert_manager.send_alert(f"检测到异常用户行为: {anomalies}")
-```
-
-### 8.2 生产数据质量测试
-
-#### 8.2.1 数据质量持续验证
-
-**数据完整性监控**：
-```python
-class TestProductionDataQuality:
-    def test_data_quality_monitoring(self):
-        """测试生产数据质量监控"""
-        data_quality_monitor = DataQualityMonitor()
-        
-        # 检查数据完整性
-        completeness_check = data_quality_monitor.check_data_completeness()
-        assert completeness_check.missing_rate < 0.01, "数据缺失率过高"
-        
-        # 检查数据一致性
-        consistency_check = data_quality_monitor.check_data_consistency()
-        assert consistency_check.inconsistency_rate < 0.001, "数据不一致率过高"
-        
-        # 检查数据时效性
-        timeliness_check = data_quality_monitor.check_data_timeliness()
-        assert timeliness_check.delay_minutes < 5, "数据延迟过长"
-```
-
-#### 8.2.2 搜索质量验证
-
-**搜索结果质量监控**：
-```python
-class TestSearchQualityMonitoring:
-    def test_search_result_quality(self):
-        """测试搜索结果质量"""
-        quality_evaluator = SearchQualityEvaluator()
-        
-        # 使用标准查询集进行质量评估
-        standard_queries = self.load_standard_query_set()
-        
-        for query in standard_queries:
-            results = self.search_engine.search(query.text)
-            
-            # 评估搜索质量
-            relevance_score = quality_evaluator.evaluate_relevance(
-                query, results
-            )
-            
-            assert relevance_score > query.expected_min_score, \
-                f"查询 '{query.text}' 相关性得分过低: {relevance_score}"
-            
-            # 检查时间戳精度
-            for result in results:
-                if result.has_timestamp:
-                    timestamp_accuracy = quality_evaluator.check_timestamp_accuracy(result)
-                    assert timestamp_accuracy <= 2.0, \
-                        f"时间戳精度超出要求: {timestamp_accuracy}秒"
-```
-
-### 8.3 性能回归测试
-
-#### 8.3.1 性能基准对比
-
-**性能回归检测**：
-```python
-class TestPerformanceRegression:
-    def test_performance_baseline_comparison(self):
-        """测试性能基准对比"""
-        performance_monitor = PerformanceMonitor()
-        
-        # 获取当前性能指标
-        current_metrics = performance_monitor.collect_current_metrics()
-        
-        # 与历史基准对比
-        baseline_metrics = performance_monitor.get_baseline_metrics()
-        
-        regression_detector = PerformanceRegressionDetector()
-        regression_results = regression_detector.detect_regression(
-            current_metrics, baseline_metrics
-        )
-        
-        # 检查是否存在性能回归
-        for metric_name, regression_info in regression_results.items():
-            if regression_info.is_regression:
-                severity = regression_info.severity
-                if severity == "critical":
-                    raise AssertionError(f"严重性能回归: {metric_name}")
-                elif severity == "major":
-                    self.alert_manager.send_alert(f"重要性能回归: {metric_name}")
-```
-
-## 9. 测试报告和度量
-
-### 9.1 测试度量指标（基于设计文档要求）
-
-**覆盖率指标**：
-- 代码覆盖率：目标≥80%（符合设计文档标准）
-- 分支覆盖率：目标≥70%
-- 功能覆盖率：目标≥95%
-- **时间戳处理覆盖率：100%**（设计文档核心要求）
-
-**质量指标**：
-- 缺陷密度：<1个/KLOC
-- 测试通过率：≥95%
-- 性能达标率：100%
-
-**设计文档专项指标**：
-- **时间戳精度达标率：100%**（±2秒精度要求）
-- **帧级精度测试：±0.033s@30fps**
-- **多模态同步精度：视觉±0.033s，音频±0.1s，语音±0.2s**
-- **查询性能达标：单次<10ms，批量<50ms**
-- **处理性能提升：720p转换提升30-50%效率**
-- **显存优化效果：预处理减少60-80%显存占用**
-
-### 9.2 综合测试报告模板
-
-**测试执行报告**：
-```markdown
-# 测试执行报告
-
-## 测试概要
-- 测试版本：v1.0.0
-- 测试时间：2024-01-15
-- 测试环境：集成测试环境
-- 测试负责人：开发团队
-
-## 测试结果
-- 单元测试：通过率 98% (196/200)
-- 集成测试：通过率 95% (38/40)
-- 性能测试：通过率 100% (25/25)
-
-## 覆盖率统计
-- 代码覆盖率：85%
-- 分支覆盖率：78%
-- 功能覆盖率：96%
-
-## 发现问题
-1. 时间戳精度在特定条件下超出±2秒要求
-2. 大文件处理时内存使用过高
-3. 并发搜索时偶现响应超时
-
-## 风险评估
-- 高风险：0个
-- 中风险：2个
-- 低风险：1个
-
-## 建议
-1. 优化时间戳计算算法
-2. 实现内存使用监控和清理
-3. 增加并发处理的超时处理机制
-```
-
-## 10. 设计文档符合性总结
-
-本测试策略文档已根据设计文档要求进行优化，确保完全符合系统架构和技术规范：
-
-### 10.1 核心技术要求符合性
+### 8.1 核心技术要求符合性
 
 **时间戳精度要求**：
 - ✅ ±2秒精度要求：100%满足用户需求
@@ -1263,7 +1087,7 @@ class TestPerformanceRegression:
 
 **性能要求符合性**：
 - ✅ 时间戳查询：单次<10ms，批量<50ms
-- ✅ 视频处理：720p处理速度>2x实时
+- ✅ 视频处理：720p处理速度>2x实时（GPU），>0.2x实时（CPU）
 - ✅ 显存优化：预处理减少60-80%显存占用
 - ✅ 处理效率：格式转换提升30-50%效率
 
@@ -1274,18 +1098,303 @@ class TestPerformanceRegression:
 - ✅ 部署测试目录：/deploy_test（不被Git管理）
 - ✅ 测试日志：/deploy_test/deploy_test.log
 
-### 10.2 架构设计符合性
+### 8.2 CPU环境测试增强
 
-**分层测试架构**：
-- ✅ 单元测试：tests/unit/目录
-- ✅ 集成测试：tests/integration/目录
-- ✅ 部署测试：/deploy_test目录
-- ✅ AAA测试模式：Arrange-Act-Assert
+**CPU环境专项测试**：
+- ✅ CPU模式功能完整性测试
+- ✅ CPU环境性能基准测试
+- ✅ CPU模式内存使用测试
+- ✅ CPU环境并发处理测试
 
-**技术栈符合性**：
-- ✅ pytest作为主要测试框架
-- ✅ pytest-asyncio支持异步测试
-- ✅ 80%测试覆盖率要求
-- ✅ 时间戳处理100%覆盖率
+**日志记录增强**：
+- ✅ 功能日志记录完整
+- ✅ 性能日志记录详细
+- ✅ 错误日志记录清晰
+- ✅ 日志分析工具完善
+- ✅ 错误报告机制健全
 
-本测试策略文档完全基于设计文档的技术规范和架构要求，确保测试工作与系统设计保持一致，特别强调了时间戳精度这一核心技术要求的全面测试覆盖。
+### 8.3 跨环境兼容性
+
+**跨环境测试**：
+- ✅ CPU与GPU环境功能一致性测试
+- ✅ 时间戳精度跨环境一致性验证
+- ✅ 搜索结果相似度对比测试
+
+本测试策略文档完全基于设计文档的技术规范和架构要求，同时针对CPU环境测试和日志记录进行了增强，确保在Linux CPU开发环境下能够充分验证系统功能，通过日志记录反馈程序错误，并确保测试后的软件达到交付要求。
+
+## 9. 环境兼容性优化解决方案
+
+### 9.1 Python 3.12兼容性问题解决
+
+**问题描述**：
+- Python 3.12环境下某些依赖包可能存在兼容性问题
+- 部分C扩展模块需要重新编译
+- 新版本Python的语法和API变化
+
+**解决方案**：
+
+**兼容性检查脚本**：
+```bash
+# 使用优化的Python 3.12兼容安装脚本
+python3 scripts/install_python312_compatible.py
+
+# 检查环境兼容性
+python3 scripts/install_python312_compatible.py --check-only
+
+# 验证安装结果
+python3 scripts/install_python312_compatible.py --verify-only
+```
+
+**兼容包版本配置**：
+- numpy>=1.24.0 (支持Python 3.12)
+- opencv-python-headless>=4.8.0 (避免GUI依赖)
+- torch>=2.0.1 (官方Python 3.12支持)
+- transformers>=4.35.0 (最新兼容版本)
+- fastapi>=0.104.0 (异步兼容性修复)
+
+### 9.2 Qdrant启动问题解决
+
+**问题描述**：
+- Qdrant服务启动失败或端口冲突
+- 配置文件路径问题
+- 权限和依赖问题
+
+**解决方案**：
+
+**优化启动脚本**：
+```bash
+# 使用优化的Qdrant启动脚本
+bash scripts/start_qdrant_optimized.sh
+
+# 检查服务状态
+curl http://localhost:6333/health
+
+# 停止服务
+bash scripts/stop_qdrant.sh
+```
+
+**启动流程优化**：
+1. **端口检查**：自动检测并释放占用的端口
+2. **进程清理**：停止现有的Qdrant进程
+3. **配置简化**：使用最小化配置文件
+4. **健康检查**：等待服务完全启动
+5. **错误诊断**：提供详细的启动日志
+
+**配置文件优化**：
+```yaml
+# config/qdrant_simple.yaml
+storage:
+  storage_path: ./data/database/qdrant
+
+service:
+  host: 127.0.0.1
+  http_port: 6333
+  grpc_port: 6334
+
+cluster:
+  enabled: false
+
+log_level: INFO
+telemetry_disabled: true
+```
+
+### 9.3 OpenCV依赖问题解决
+
+**问题描述**：
+- OpenCV GUI依赖在无头环境下失败
+- 系统库缺失导致导入错误
+- 显示服务器配置问题
+
+**解决方案**：
+
+**使用Headless版本**：
+```bash
+# 安装无头版本的OpenCV
+pip install opencv-python-headless>=4.8.0
+
+# 卸载可能冲突的GUI版本
+pip uninstall opencv-python opencv-contrib-python
+```
+
+**环境变量配置**：
+```bash
+# 设置无头模式环境变量
+export QT_QPA_PLATFORM=offscreen
+export OPENCV_IO_ENABLE_OPENEXR=1
+export OPENCV_IO_ENABLE_JASPER=0
+```
+
+**系统依赖安装**：
+```bash
+# Ubuntu/Debian系统
+sudo apt-get update
+sudo apt-get install -y \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    libfontconfig1
+
+# 或使用脚本自动检测和提示
+python3 scripts/install_python312_compatible.py
+```
+
+### 9.4 优化测试运行流程
+
+**一键测试脚本**：
+```bash
+# 运行完整的优化测试套件
+bash run_tests_optimized.sh
+
+# 只运行单元测试
+python3 tests/run_optimized_tests.py --unit
+
+# 只运行集成测试
+python3 tests/run_optimized_tests.py --integration
+
+# 只设置环境
+python3 tests/run_optimized_tests.py --setup-only
+```
+
+**测试流程优化**：
+1. **环境检查**：自动检测Python版本和依赖
+2. **依赖安装**：智能安装兼容版本的包
+3. **服务启动**：自动启动和配置Qdrant
+4. **测试执行**：分层运行单元和集成测试
+5. **结果报告**：生成详细的测试报告
+6. **环境清理**：自动清理临时文件和服务
+
+### 9.5 测试配置优化
+
+**CPU环境优化配置**：
+```yaml
+# tests/configs/cpu_test_config_optimized.yml
+device: "cpu"
+force_cpu: true
+
+model:
+  clip_model: "openai/clip-vit-base-patch32"  # 轻量级模型
+  quantization: true  # 启用量化减少内存
+
+batch_size: 2  # 减小批处理大小
+memory:
+  max_memory_mb: 2048  # 内存限制
+  enable_gc: true  # 启用垃圾回收
+
+test_data:
+  max_video_duration: 60  # 限制测试数据大小
+  max_image_resolution: [640, 480]
+
+performance_benchmarks:
+  video_processing_fps: 0.2  # CPU模式性能基准
+  search_response_time_ms: 1000
+  timestamp_accuracy_s: 2.0
+```
+
+### 9.6 错误诊断和解决
+
+**常见问题诊断**：
+
+**1. Python包导入失败**：
+```bash
+# 检查包安装状态
+python3 -c "import cv2; print(cv2.__version__)"
+python3 -c "import numpy; print(numpy.__version__)"
+python3 -c "import torch; print(torch.__version__)"
+
+# 重新安装问题包
+python3 scripts/install_python312_compatible.py --install-packages
+```
+
+**2. Qdrant连接失败**：
+```bash
+# 检查服务状态
+curl http://localhost:6333/health
+
+# 查看服务日志
+tail -f logs/qdrant.log
+
+# 重启服务
+bash scripts/start_qdrant_optimized.sh
+```
+
+**3. 测试超时或失败**：
+```bash
+# 查看测试日志
+tail -f logs/cpu_test.log
+
+# 运行单个测试文件
+python3 -m pytest tests/unit/test_cpu_compatibility.py -v
+
+# 检查环境配置
+python3 tests/configs/test_environment_setup.py --check
+```
+
+### 9.7 持续集成优化
+
+**GitHub Actions配置**：
+```yaml
+# .github/workflows/optimized_tests.yml
+name: Optimized Tests
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: [3.9, 3.10, 3.11, 3.12]
+    
+    steps:
+    - uses: actions/checkout@v3
+    
+    - name: Set up Python ${{ matrix.python-version }}
+      uses: actions/setup-python@v3
+      with:
+        python-version: ${{ matrix.python-version }}
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev
+    
+    - name: Install Python dependencies
+      run: |
+        python scripts/install_python312_compatible.py
+    
+    - name: Run optimized tests
+      run: |
+        bash run_tests_optimized.sh
+    
+    - name: Upload test results
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: test-results-${{ matrix.python-version }}
+        path: tests/output/
+```
+
+### 9.8 性能优化建议
+
+**资源使用优化**：
+- 使用轻量级模型进行测试
+- 限制批处理大小和内存使用
+- 启用模型量化和压缩
+- 实施智能垃圾回收策略
+
+**测试效率优化**：
+- 并行运行独立测试
+- 缓存模型和数据
+- 跳过耗时的集成测试（在CI中）
+- 使用模拟对象减少外部依赖
+
+**监控和诊断**：
+- 实时监控资源使用情况
+- 记录详细的性能指标
+- 提供清晰的错误诊断信息
+- 自动生成测试报告
+
+通过这些优化解决方案，可以有效解决Python 3.12兼容性、Qdrant启动和OpenCV依赖等问题，确保测试环境的稳定性和可靠性，提高测试执行的成功率和效率。

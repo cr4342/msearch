@@ -3,10 +3,15 @@
 测试TemporalLocalizationEngine的核心功能
 """
 
+import sys
+import os
 import unittest
 from unittest.mock import patch, MagicMock
 import asyncio
 from typing import List
+
+# 添加项目根目录到Python路径
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
 from src.business.temporal_localization_engine import (
     TemporalLocalizationEngine,

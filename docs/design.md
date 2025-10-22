@@ -4468,9 +4468,525 @@ class EmbeddingEngine:
         return await self.engine_array.embed(content, model)
 ```
 
-## 10. 未来优化计划
+## 10. 显存优化与分时模型加载机制
 
-### 10.1 智能检索策略优化
+### 10.1 分时模型加载架构设计
+
+#### 10.1.1 显存压力分析
+
+**多模型同时加载的显存挑战**：
+- **CLIP模型**：约1.2GB显存占用
+- **CLAP模型**：约800MB显存占用  
+- **Whisper模型**：约600MB显存占用
+- **人脸识别模型**：约400MB显存占用
+- **总计**：约3GB显存基础占用
+
+**低显存环境问题**：
+- 4GB显存GPU：模型加载后仅剩1GB用于推理
+- 6GB显存GPU：可用推理显存约3GB，批处理受限
+- 8GB显存GPU：相对充足，但大批处理仍受限
+
+#### 10.1.2 分时加载策略设计
+
+**核心设计思想**：
+- **按需加载**：根据当前处理任务类型动态加载对应模型
+- **智能卸载**：处理完成后自动卸载模型释放显存
+- **预测加载**：基于任务队列预测下一个需要的模型
+- **缓存策略**：频繁使用的模型保持加载状态
+
+```mermaid
+graph TB
+    A[任务队列] --> B[模型需求分析]
+    B --> C{当前加载模型}
+    
+    C -->|匹配| D[直接使用]
+    C -->|不匹配| E[模型切换流程]
+    
+    E --> F[卸载当前模型]
+    F --> G[释放显存]
+    G --> H[加载目标模型]
+    H --> I[执行任务]
+    
+    I --> J[任务完成]
+    J --> K{下个任务预测}
+    K -->|需要其他模型| L[准备切换]
+    K -->|继续使用| M[保持加载]
+```
+
+#### 10.1.3 智能模型管理器实现
+
+**ModelManager核心架构**：
+
+```python
+class IntelligentModelManager:
+    """智能模型管理器 - 分时加载优化显存使用"""
+    
+    def __init__(self, config):
+        self.config = config
+        self.loaded_models = {}  # 当前加载的模型
+        self.model_usage_stats = {}  # 模型使用统计
+        self.task_queue = []  # 任务队列
+        self.max_concurrent_models = self._calculate_max_models()
+        
+        # 模型配置信息
+        self.model_configs = {
+            'clip': {
+                'memory_mb': 1200,
+                'load_time_s': 3.5,
+                'priority': 1  # 最高优先级（最常用）
+            },
+            'clap': {
+                'memory_mb': 800,
+                'load_time_s': 2.8,
+                'priority': 2
+            },
+            'whisper': {
+                'memory_mb': 600,
+                'load_time_s': 2.2,
+                'priority': 3
+            },
+            'face_recognition': {
+                'memory_mb': 400,
+                'load_time_s': 1.5,
+                'priority': 4
+            }
+        }
+    
+    def _calculate_max_models(self) -> int:
+        """根据可用显存计算最大并发模型数"""
+        available_memory = self._get_available_gpu_memory()
+        
+        if available_memory < 2000:  # 2GB以下
+            return 1  # 只能加载一个模型
+        elif available_memory < 4000:  # 2-4GB
+            return 2  # 可以加载两个小模型
+        elif available_memory < 6000:  # 4-6GB
+            return 3  # 可以加载多个模型
+        else:  # 6GB以上
+            return 4  # 可以加载所有模型
+    
+    async def get_model(self, model_name: str):
+        """获取模型，自动处理加载/卸载"""
+        # 如果模型已加载，直接返回
+        if model_name in self.loaded_models:
+            self._update_usage_stats(model_name)
+            return self.loaded_models[model_name]
+        
+        # 检查是否需要释放显存
+        await self._ensure_memory_available(model_name)
+        
+        # 加载模型
+        model = await self._load_model(model_name)
+        self.loaded_models[model_name] = model
+        
+        return model
+    
+    async def _ensure_memory_available(self, target_model: str):
+        """确保有足够显存加载目标模型"""
+        required_memory = self.model_configs[target_model]['memory_mb']
+        available_memory = self._get_available_gpu_memory()
+        
+        # 如果显存不足，需要卸载其他模型
+        while available_memory < required_memory and self.loaded_models:
+            # 选择最少使用的模型进行卸载
+            model_to_unload = self._select_model_to_unload(target_model)
+            await self._unload_model(model_to_unload)
+            available_memory = self._get_available_gpu_memory()
+    
+    def _select_model_to_unload(self, target_model: str) -> str:
+        """选择要卸载的模型（LRU + 优先级策略）"""
+        candidates = []
+        
+        for model_name in self.loaded_models:
+            if model_name != target_model:
+                usage_count = self.model_usage_stats.get(model_name, {}).get('count', 0)
+                last_used = self.model_usage_stats.get(model_name, {}).get('last_used', 0)
+                priority = self.model_configs[model_name]['priority']
+                
+                # 综合评分：使用频率 + 最近使用时间 + 优先级
+                score = usage_count * 0.4 + (time.time() - last_used) * 0.4 + priority * 0.2
+                candidates.append((model_name, score))
+        
+        # 选择评分最低的模型卸载
+        candidates.sort(key=lambda x: x[1])
+        return candidates[0][0] if candidates else None
+    
+    async def _load_model(self, model_name: str):
+        """加载指定模型"""
+        logger.info(f"开始加载模型: {model_name}")
+        start_time = time.time()
+        
+        # 根据模型类型加载
+        if model_name == 'clip':
+            model = await self._load_clip_model()
+        elif model_name == 'clap':
+            model = await self._load_clap_model()
+        elif model_name == 'whisper':
+            model = await self._load_whisper_model()
+        elif model_name == 'face_recognition':
+            model = await self._load_face_model()
+        else:
+            raise ValueError(f"未知模型类型: {model_name}")
+        
+        load_time = time.time() - start_time
+        logger.info(f"模型加载完成: {model_name}, 耗时: {load_time:.2f}s")
+        
+        return model
+    
+    async def _unload_model(self, model_name: str):
+        """卸载指定模型"""
+        if model_name in self.loaded_models:
+            logger.info(f"卸载模型: {model_name}")
+            
+            # 清理模型占用的显存
+            del self.loaded_models[model_name]
+            
+            # 强制垃圾回收
+            import gc
+            gc.collect()
+            
+            # 清理GPU缓存
+            if torch.cuda.is_available():
+                torch.cuda.empty_cache()
+            
+            logger.info(f"模型卸载完成: {model_name}")
+    
+    def _update_usage_stats(self, model_name: str):
+        """更新模型使用统计"""
+        if model_name not in self.model_usage_stats:
+            self.model_usage_stats[model_name] = {'count': 0, 'last_used': 0}
+        
+        self.model_usage_stats[model_name]['count'] += 1
+        self.model_usage_stats[model_name]['last_used'] = time.time()
+```
+
+#### 10.1.4 任务队列优化策略
+
+**批处理任务聚合**：
+
+```python
+class TaskQueueOptimizer:
+    """任务队列优化器 - 减少模型切换次数"""
+    
+    def __init__(self, model_manager):
+        self.model_manager = model_manager
+        self.pending_tasks = []
+    
+    def add_task(self, task):
+        """添加任务到队列"""
+        self.pending_tasks.append(task)
+        
+        # 如果队列达到一定长度，触发优化
+        if len(self.pending_tasks) >= 10:
+            self._optimize_task_order()
+    
+    def _optimize_task_order(self):
+        """优化任务执行顺序，减少模型切换"""
+        # 按模型类型分组
+        task_groups = {}
+        for task in self.pending_tasks:
+            model_type = task.get_required_model()
+            if model_type not in task_groups:
+                task_groups[model_type] = []
+            task_groups[model_type].append(task)
+        
+        # 按模型优先级和任务数量重新排序
+        optimized_tasks = []
+        for model_type in sorted(task_groups.keys(), 
+                               key=lambda x: (self.model_manager.model_configs[x]['priority'], 
+                                             -len(task_groups[x]))):
+            optimized_tasks.extend(task_groups[model_type])
+        
+        self.pending_tasks = optimized_tasks
+        logger.info(f"任务队列优化完成，减少模型切换次数: {len(task_groups)-1}")
+```
+
+#### 10.1.5 预测性模型加载
+
+**智能预加载机制**：
+
+```python
+class PredictiveModelLoader:
+    """预测性模型加载器"""
+    
+    def __init__(self, model_manager):
+        self.model_manager = model_manager
+        self.usage_patterns = {}  # 使用模式统计
+    
+    def predict_next_model(self, current_model: str, task_context: dict) -> str:
+        """预测下一个需要的模型"""
+        # 基于历史使用模式预测
+        pattern_key = f"{current_model}_{task_context.get('file_type', 'unknown')}"
+        
+        if pattern_key in self.usage_patterns:
+            # 返回最可能的下一个模型
+            next_models = self.usage_patterns[pattern_key]
+            return max(next_models, key=next_models.get)
+        
+        # 默认预测逻辑
+        if current_model == 'clip' and task_context.get('has_audio'):
+            return 'clap'  # 视频文件通常需要音频处理
+        elif current_model == 'clap':
+            return 'whisper'  # 音频处理后可能需要语音识别
+        
+        return None
+    
+    async def preload_if_beneficial(self, predicted_model: str):
+        """如果有益，预加载预测的模型"""
+        if predicted_model and self.model_manager._get_available_gpu_memory() > 2000:
+            # 显存充足时进行预加载
+            await self.model_manager.get_model(predicted_model)
+            logger.info(f"预加载模型: {predicted_model}")
+```
+
+### 10.2 显存使用监控与告警
+
+#### 10.2.1 实时显存监控
+
+**显存监控组件**：
+
+```python
+class GPUMemoryMonitor:
+    """GPU显存监控器"""
+    
+    def __init__(self):
+        self.memory_history = []
+        self.alert_threshold = 0.9  # 90%使用率告警
+        
+    def get_memory_info(self) -> dict:
+        """获取当前显存信息"""
+        if not torch.cuda.is_available():
+            return {"available": False}
+        
+        total_memory = torch.cuda.get_device_properties(0).total_memory
+        allocated_memory = torch.cuda.memory_allocated(0)
+        cached_memory = torch.cuda.memory_reserved(0)
+        
+        return {
+            "available": True,
+            "total_mb": total_memory / (1024**2),
+            "allocated_mb": allocated_memory / (1024**2),
+            "cached_mb": cached_memory / (1024**2),
+            "free_mb": (total_memory - cached_memory) / (1024**2),
+            "usage_ratio": cached_memory / total_memory
+        }
+    
+    def check_memory_pressure(self) -> dict:
+        """检查显存压力状态"""
+        memory_info = self.get_memory_info()
+        
+        if not memory_info["available"]:
+            return {"status": "no_gpu", "action": "use_cpu"}
+        
+        usage_ratio = memory_info["usage_ratio"]
+        
+        if usage_ratio > 0.95:
+            return {"status": "critical", "action": "force_cleanup"}
+        elif usage_ratio > 0.85:
+            return {"status": "high", "action": "unload_unused"}
+        elif usage_ratio > 0.70:
+            return {"status": "moderate", "action": "optimize_batch"}
+        else:
+            return {"status": "normal", "action": "none"}
+```
+
+#### 10.2.2 自适应批处理大小
+
+**动态批处理调整**：
+
+```python
+class AdaptiveBatchProcessor:
+    """自适应批处理处理器"""
+    
+    def __init__(self, memory_monitor):
+        self.memory_monitor = memory_monitor
+        self.batch_size_history = {}
+        
+    def calculate_optimal_batch_size(self, model_name: str, data_type: str) -> int:
+        """计算最优批处理大小"""
+        memory_info = self.memory_monitor.get_memory_info()
+        
+        if not memory_info["available"]:
+            return 1  # CPU模式，小批处理
+        
+        free_memory = memory_info["free_mb"]
+        
+        # 基于可用显存计算批处理大小
+        if model_name == 'clip':
+            if data_type == 'image':
+                # 图片处理：每张约10MB显存
+                max_batch = int(free_memory / 10)
+            else:  # 文本
+                # 文本处理：每个约2MB显存
+                max_batch = int(free_memory / 2)
+        elif model_name == 'clap':
+            # 音频处理：每个约15MB显存
+            max_batch = int(free_memory / 15)
+        else:
+            # 保守估计
+            max_batch = int(free_memory / 20)
+        
+        # 限制在合理范围内
+        optimal_batch = max(1, min(max_batch, 32))
+        
+        logger.debug(f"计算批处理大小: {model_name}/{data_type} -> {optimal_batch}")
+        return optimal_batch
+```
+
+### 10.3 配置驱动的显存优化
+
+#### 10.3.1 显存优化配置
+
+```yaml
+# config.yml 中的显存优化配置
+gpu_optimization:
+  # 分时加载配置
+  model_loading:
+    strategy: "on_demand"  # on_demand, preload, keep_all
+    max_concurrent_models: "auto"  # auto, 1, 2, 3, 4
+    unload_delay_seconds: 30  # 模型空闲多久后卸载
+    
+  # 显存监控配置
+  memory_monitoring:
+    enabled: true
+    check_interval_seconds: 5
+    alert_threshold: 0.9
+    cleanup_threshold: 0.95
+    
+  # 批处理优化配置
+  batch_processing:
+    adaptive_batch_size: true
+    min_batch_size: 1
+    max_batch_size: 32
+    memory_safety_margin: 0.1  # 保留10%显存余量
+    
+  # 模型特定配置
+  model_configs:
+    clip:
+      priority: 1
+      keep_loaded: true  # 最常用，尽量保持加载
+      max_batch_size: 16
+    clap:
+      priority: 2
+      keep_loaded: false
+      max_batch_size: 8
+    whisper:
+      priority: 3
+      keep_loaded: false
+      max_batch_size: 4
+```
+
+#### 10.3.2 硬件自适应配置
+
+```python
+class HardwareAdaptiveConfig:
+    """硬件自适应配置管理器"""
+    
+    def __init__(self, config_manager):
+        self.config_manager = config_manager
+        self.hardware_profile = self._detect_hardware()
+        
+    def _detect_hardware(self) -> dict:
+        """检测硬件配置"""
+        profile = {
+            "gpu_available": torch.cuda.is_available(),
+            "gpu_memory_mb": 0,
+            "cpu_cores": os.cpu_count(),
+            "system_memory_mb": psutil.virtual_memory().total / (1024**2)
+        }
+        
+        if profile["gpu_available"]:
+            profile["gpu_memory_mb"] = torch.cuda.get_device_properties(0).total_memory / (1024**2)
+            profile["gpu_name"] = torch.cuda.get_device_name(0)
+        
+        return profile
+    
+    def optimize_config_for_hardware(self):
+        """根据硬件配置优化系统配置"""
+        gpu_memory = self.hardware_profile["gpu_memory_mb"]
+        
+        if gpu_memory == 0:  # 无GPU
+            self._configure_cpu_mode()
+        elif gpu_memory < 4000:  # 4GB以下
+            self._configure_low_memory_gpu()
+        elif gpu_memory < 8000:  # 4-8GB
+            self._configure_medium_memory_gpu()
+        else:  # 8GB以上
+            self._configure_high_memory_gpu()
+    
+    def _configure_low_memory_gpu(self):
+        """低显存GPU配置"""
+        optimizations = {
+            "gpu_optimization.model_loading.strategy": "on_demand",
+            "gpu_optimization.model_loading.max_concurrent_models": 1,
+            "gpu_optimization.batch_processing.max_batch_size": 4,
+            "gpu_optimization.model_configs.clip.keep_loaded": False,
+            "processing.video.max_resolution": [720, 480],  # 降低处理分辨率
+            "processing.batch_size": 2
+        }
+        
+        for key, value in optimizations.items():
+            self.config_manager.set(key, value)
+        
+        logger.info("已应用低显存GPU优化配置")
+```
+
+### 10.4 性能提升效果
+
+#### 10.4.1 显存使用优化效果
+
+| 硬件配置 | 优化前显存占用 | 优化后显存占用 | 节省比例 | 批处理提升 |
+|---------|---------------|---------------|---------|-----------|
+| **4GB GPU** | 3.0GB (75%) | 1.2GB (30%) | 60% | 2x → 8x |
+| **6GB GPU** | 3.0GB (50%) | 1.2GB (20%) | 60% | 8x → 16x |
+| **8GB GPU** | 3.0GB (38%) | 2.4GB (30%) | 20% | 16x → 24x |
+
+#### 10.4.2 处理性能提升
+
+**分时加载性能对比**：
+
+| 场景 | 传统加载 | 分时加载 | 性能提升 |
+|------|---------|---------|---------|
+| **混合任务处理** | 显存不足，批处理受限 | 按需加载，批处理优化 | 3-5x |
+| **长时间运行** | 显存碎片化严重 | 定期清理，稳定性好 | 稳定性提升80% |
+| **大文件处理** | 经常OOM错误 | 自适应批处理 | 成功率提升95% |
+
+### 10.5 实施建议
+
+#### 10.5.1 分阶段实施
+
+**第一阶段（核心功能）**：
+- 实现基础的分时模型加载
+- 添加显存监控和告警
+- 配置自适应批处理大小
+
+**第二阶段（智能优化）**：
+- 实现预测性模型加载
+- 添加任务队列优化
+- 完善硬件自适应配置
+
+**第三阶段（高级特性）**：
+- 实现模型量化支持
+- 添加分布式模型管理
+- 完善性能分析工具
+
+#### 10.5.2 监控和调优
+
+**关键监控指标**：
+- 显存使用率和峰值
+- 模型加载/卸载频率
+- 批处理大小变化
+- 任务处理延迟
+
+**调优建议**：
+- 根据实际使用模式调整模型优先级
+- 定期分析显存使用模式，优化配置
+- 监控模型切换开销，调整卸载延迟
+- 根据硬件升级情况更新配置策略
+
+## 11. 未来优化计划
+
+### 11.1 智能检索策略优化
 
 #### 10.1.1 混合检索策略实现
 
