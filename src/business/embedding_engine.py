@@ -1,5 +1,6 @@
 """
 嵌入引擎 - 使用Infinity Python-native模式统一管理AI模型，生成媒体内容向量
+符合design.md中关于michaelfeil/infinity集成的要求
 """
 import numpy as np
 from typing import Dict, Any, List, Union
@@ -17,7 +18,7 @@ except ImportError:
 
 
 class EmbeddingEngine:
-    """嵌入引擎"""
+    """嵌入引擎 - 符合design.md中关于Python-native模式集成的要求"""
     
     def __init__(self, config: Dict[str, Any]):
         """

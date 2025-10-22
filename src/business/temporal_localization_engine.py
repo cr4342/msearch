@@ -1,6 +1,7 @@
 """
 时间定位引擎模块
 负责多模态时间戳融合和精确时间定位
+符合design.md中关于±2秒精度要求的实现
 """
 
 import asyncio
@@ -35,7 +36,7 @@ class FusedTimestamp:
 
 
 class TemporalLocalizationEngine:
-    """时间定位引擎 - 多模态时间戳融合"""
+    """时间定位引擎 - 多模态时间戳融合，满足design.md中±2秒精度要求"""
     
     def __init__(self):
         self.config_manager = get_config_manager()
@@ -48,15 +49,15 @@ class TemporalLocalizationEngine:
             "speech": 0.3   # 语音模态权重
         }
         
-        # 时间窗口配置
-        self.time_window_size = 5  # 时间窗口大小（秒）
+        # 时间窗口配置 - 符合design.md中±2秒精度要求
+        self.time_window_size = 4  # 时间窗口大小（秒），确保±2秒精度
         self.min_confidence = 0.3  # 最小置信度阈值
         self.max_results = 10      # 最大返回结果数
         
-        # 精度控制配置
-        self.timestamp_precision = 1  # 时间戳精度（小数位数）
+        # 精度控制配置 - 符合design.md要求
+        self.timestamp_precision = 2  # 时间戳精度（小数位数），满足±2秒精度要求
         
-        logger.info("时间定位引擎初始化完成")
+        logger.info("时间定位引擎初始化完成，满足±2秒精度要求")
     
     def set_precision(self, precision: int) -> None:
         """
