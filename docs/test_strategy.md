@@ -1,6 +1,6 @@
 # 测试策略文档
 
-> **文档导航**: [文档索引](README.md) | [需求文档](requirements.md) | [设计文档](design.md) | [开发计划](development_plan.md) | [部署指南](deployment_guide.md)
+> **文档导航**: [需求文档](requirements.md) | [设计文档](design.md) | [开发计划](development_plan.md) | [API文档](api_documentation.md) | [技术实现指南](technical_implementation.md) | [用户手册](user_manual.md)
 
 ## 1. 测试策略概述
 

@@ -1,6 +1,6 @@
 # 技术实现指南
 
-> **文档导航**: [文档索引](README.md) | [需求文档](requirements.md) | [设计文档](design.md) | [开发计划](development_plan.md) | [API文档](api_documentation.md) | [开发环境搭建](development_environment.md) | [部署与运维指南](deployment_and_operations.md) | [故障排除指南](troubleshooting.md)
+> **文档导航**: [需求文档](requirements.md) | [设计文档](design.md) | [开发计划](development_plan.md) | [API文档](api_documentation.md) | [测试策略](test_strategy.md) | [开发环境搭建](development_environment.md) | [部署指南](deployment_guide.md)
 
 > **重要技术说明**：本项目采用 **michaelfeil/infinity** (https://github.com/michaelfeil/infinity) 作为核心AI推理引擎。这是一个专为文本嵌入、重排序模型、CLIP、CLAP 和 ColPali 设计的高吞吐量、低延迟服务引擎。
 

@@ -2,6 +2,8 @@
 
 > **重要技术说明**：本项目采用 **michaelfeil/infinity** (https://github.com/michaelfeil/infinity) 作为核心AI推理引擎。Infinity 是一个专为文本嵌入、重排序模型、CLIP、CLAP 和 ColPali 设计的高吞吐量、低延迟服务引擎，支持多种后端（CUDA、OpenVINO、CPU）和 Python-native 集成模式。
 
+> **文档导航**: [需求文档](requirements.md) | [开发计划](development_plan.md) | [API文档](api_documentation.md) | [测试策略](test_strategy.md) | [技术实现指南](technical_implementation.md) | [用户手册](user_manual.md)
+
 ## 1. 项目概述
 
 ### 1.1 项目愿景
@@ -4682,10 +4684,8 @@ msearch/
 ## 12.1 ## 快速导航
 
 ### 🚀 快速开始
-1. 阅读[需求文档](requirements.md)了解系统功能
-2. 查看[设计文档](design.md)了解技术架构和项目结构
-3. 按照[部署指南](deployment_guide.md)安装系统
-4. 参考[用户手册](user_manual.md)开始使用
+1. 按照[部署指南](deployment_guide.md)安装系统
+2. 参考[用户手册](user_manual.md)开始使用
 
 ### 👨‍💻 开发者
 1. 查看[开发计划](development_plan.md)了解开发路线图
@@ -4697,7 +4697,3 @@ msearch/
 1. 按照[部署指南](deployment_guide.md)部署系统
 2. 参考[API文档](api_documentation.md)进行系统监控
 3. 查看[测试策略](test_strategy.md)了解质量保证流程
-
-### 👤 最终用户
-1. 阅读[用户手册](user_manual.md)学习使用方法
-2. 参考[需求文档](requirements.md)了解功能特性
