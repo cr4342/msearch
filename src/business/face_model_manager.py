@@ -1,6 +1,7 @@
 """
 人脸模型管理器模块
 负责管理人脸检测和特征提取模型
+符合design.md中关于人脸识别的要求
 """
 
 import cv2
@@ -20,7 +21,7 @@ logger = get_logger(__name__)
 
 
 class FaceModelManager:
-    """人脸模型管理器 - 负责人脸检测和特征提取"""
+    """人脸模型管理器 - 负责人脸检测和特征提取，符合design.md要求"""
     
     def __init__(self):
         """初始化人脸模型管理器"""

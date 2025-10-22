@@ -283,62 +283,269 @@ download_models() {
     log "${GREEN}          下载和配置AI模型${NC}"
     log "${BLUE}===============================================${NC}"
     
-    # 设置环境变量
+    # 设置环境变量 - 使用镜像加速
     export HF_ENDPOINT="https://hf-mirror.com"
     export HF_HOME="${DEPLOY_MODELS_DIR}/huggingface"
     export TRANSFORMERS_CACHE="${HF_HOME}"
     
+    # 创建模型目录结构
     mkdir -p "${HF_HOME}"
+    mkdir -p "${DEPLOY_MODELS_DIR}/clip"
+    mkdir -p "${DEPLOY_MODELS_DIR}/clap"
+    mkdir -p "${DEPLOY_MODELS_DIR}/whisper"
     
-    # 创建模型下载脚本
+    log "${BLUE}[信息] 模型目录: ${DEPLOY_MODELS_DIR}${NC}"
+    
+    # 创建优化的模型下载脚本
     MODEL_SCRIPT="${DEPLOY_TEST_DIR}/download_models.py"
     cat > "${MODEL_SCRIPT}" << 'EOF'
 import os
 import sys
+import time
 from pathlib import Path
-from transformers import CLIPModel, CLIPProcessor, CLAPModel, CLAPProcessor, WhisperForConditionalGeneration, WhisperProcessor
+from transformers import (
+    CLIPModel, CLIPProcessor, 
+    CLAPModel, CLAPProcessor, 
+    WhisperForConditionalGeneration, WhisperProcessor,
+    AutoModel, AutoProcessor, AutoTokenizer
+)
 import torch
 
-def download_models():
-    models_dir = Path(sys.argv[1])
+def setup_offline_mode():
+    """设置离线模式环境变量"""
+    os.environ["TRANSFORMERS_OFFLINE"] = "1"
+    os.environ["HF_HUB_OFFLINE"] = "1"
+    print("[INFO] 已设置离线模式环境变量")
+
+def download_model(repo_id, local_path, components):
+    """下载单个模型及其组件"""
+    print(f"\n[INFO] 下载模型: {repo_id} 到 {local_path}")
+    
+    # 确保输出目录存在
+    os.makedirs(local_path, exist_ok=True)
+    
+    # 下载模型组件
+    success = True
+    
+    if 'model' in components:
+        try:
+            print("  - 下载模型组件...")
+            model = AutoModel.from_pretrained(repo_id, cache_dir=local_path, trust_remote_code=True)
+            model.save_pretrained(local_path)
+            print("  ✓ 模型组件下载完成")
+        except Exception as e:
+            print(f"  ✗ 模型组件下载失败: {str(e)}")
+            success = False
+    
+    if 'processor' in components:
+        try:
+            print("  - 下载处理器组件...")
+            processor = AutoProcessor.from_pretrained(repo_id, cache_dir=local_path, trust_remote_code=True)
+            processor.save_pretrained(local_path)
+            print("  ✓ 处理器组件下载完成")
+        except Exception as e:
+            print(f"  ✗ 处理器组件下载失败: {str(e)}")
+            success = False
+    
+    if 'tokenizer' in components:
+        try:
+            print("  - 下载分词器组件...")
+            tokenizer = AutoTokenizer.from_pretrained(repo_id, cache_dir=local_path)
+            tokenizer.save_pretrained(local_path)
+            print("  ✓ 分词器组件下载完成")
+        except Exception as e:
+            print(f"  ✗ 分词器组件下载失败: {str(e)}")
+            success = False
+    
+    return success
+
+def download_models(models_dir):
+    """下载所有必要的模型"""
     print(f"[INFO] 模型下载目录: {models_dir}")
     
-    # 下载CLIP模型
-    print("[INFO] 下载CLIP模型...")
-    try:
-        clip_model = CLIPModel.from_pretrained("openai/clip-vit-base-patch32", cache_dir=models_dir / "clip")
-        clip_processor = CLIPProcessor.from_pretrained("openai/clip-vit-base-patch32", cache_dir=models_dir / "clip")
-        print("[SUCCESS] CLIP模型下载完成")
-    except Exception as e:
-        print(f"[WARNING] CLIP模型下载失败: {e}")
+    # 模型列表 - 使用与embedding_engine.py兼容的配置
+    models = [
+        {
+            'name': 'clip',
+            'repo_id': 'openai/clip-vit-base-patch32',
+            'local_path': os.path.join(models_dir, 'clip'),
+            'components': ['model', 'processor']
+        },
+        {
+            'name': 'clap',
+            'repo_id': 'laion/clap-htsat-unfused',
+            'local_path': os.path.join(models_dir, 'clap'),
+            'components': ['model', 'processor']
+        },
+        {
+            'name': 'whisper',
+            'repo_id': 'openai/whisper-base',
+            'local_path': os.path.join(models_dir, 'whisper'),
+            'components': ['model', 'processor']
+        }
+    ]
     
-    # 下载CLAP模型
-    print("[INFO] 下载CLAP模型...")
-    try:
-        clap_model = CLAPModel.from_pretrained("laion/clap-htsat-fused", cache_dir=models_dir / "clap")
-        clap_processor = CLAPProcessor.from_pretrained("laion/clap-htsat-fused", cache_dir=models_dir / "clap")
-        print("[SUCCESS] CLAP模型下载完成")
-    except Exception as e:
-        print(f"[WARNING] CLAP模型下载失败: {e}")
+    # 下载每个模型
+    success_count = 0
+    total_count = len(models)
     
-    # 下载Whisper模型
-    print("[INFO] 下载Whisper模型...")
-    try:
-        whisper_model = WhisperForConditionalGeneration.from_pretrained("openai/whisper-base", cache_dir=models_dir / "whisper")
-        whisper_processor = WhisperProcessor.from_pretrained("openai/whisper-base", cache_dir=models_dir / "whisper")
-        print("[SUCCESS] Whisper模型下载完成")
-    except Exception as e:
-        print(f"[WARNING] Whisper模型下载失败: {e}")
+    for i, model_info in enumerate(models, 1):
+        print(f"\n[{i}/{total_count}] 开始下载 {model_info['name']}...")
+        
+        # 检查是否已存在
+        if os.path.exists(os.path.join(model_info['local_path'], 'config.json')):
+            print(f"[INFO] {model_info['name']} 模型已存在，跳过下载")
+            success_count += 1
+            continue
+        
+        # 尝试下载，最多3次重试
+        max_retries = 3
+        for retry in range(max_retries):
+            if download_model(
+                model_info['repo_id'],
+                model_info['local_path'],
+                model_info['components']
+            ):
+                success_count += 1
+                break
+            else:
+                if retry < max_retries - 1:
+                    wait_time = (retry + 1) * 5
+                    print(f"[WARNING] 下载失败，{wait_time}秒后重试 ({retry + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    print(f"[ERROR] {model_info['name']} 模型下载失败，达到最大重试次数")
     
-    print("[INFO] 模型下载完成")
+    print(f"\n[INFO] 模型下载完成: {success_count}/{total_count} 个模型成功")
+    
+    # 创建模型配置信息文件
+    config_info = os.path.join(models_dir, 'model_config_info.txt')
+    with open(config_info, 'w', encoding='utf-8') as f:
+        f.write("MSearch 模型配置信息\n")
+        f.write(f"生成时间: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        f.write(f"成功下载: {success_count}/{total_count} 个模型\n\n")
+        
+        for model_info in models:
+            local_path = model_info['local_path']
+            exists = os.path.exists(os.path.join(local_path, 'config.json'))
+            status = "成功" if exists else "失败"
+            f.write(f"{model_info['name']}: {status}")
+            f.write(f" (路径: {local_path})\n")
+    
+    print(f"[INFO] 配置信息已保存到: {config_info}")
+    
+    return success_count == total_count
 
 if __name__ == "__main__":
-    download_models()
+    if len(sys.argv) < 2:
+        print("[ERROR] 缺少模型目录参数")
+        sys.exit(1)
+    
+    models_dir = sys.argv[1]
+    success = download_models(models_dir)
+    sys.exit(0 if success else 1)
 EOF
     
     # 执行模型下载
     log "${BLUE}[步骤1] 执行模型下载...${NC}"
-    python3 "${MODEL_SCRIPT}" "${DEPLOY_MODELS_DIR}" || log "${YELLOW}[警告] 部分模型下载失败，但继续安装${NC}"
+    python3 "${MODEL_SCRIPT}" "${DEPLOY_MODELS_DIR}"
+    DOWNLOAD_RESULT=$?
+    
+    if [ $DOWNLOAD_RESULT -eq 0 ]; then
+        log "${GREEN}[成功] 所有模型下载完成${NC}"
+        
+        # 创建配置更新脚本，确保配置使用本地模型
+        CONFIG_UPDATE_SCRIPT="${DEPLOY_TEST_DIR}/update_config_for_local_models.py"
+        cat > "${CONFIG_UPDATE_SCRIPT}" << 'EOF'
+import os
+import yaml
+from pathlib import Path
+
+def update_config_for_local_models(config_file, models_dir):
+    """更新配置文件以使用本地模型"""
+    print(f"[INFO] 更新配置文件: {config_file}")
+    
+    # 确保配置文件存在
+    if not os.path.exists(config_file):
+        print(f"[WARNING] 配置文件不存在: {config_file}")
+        return False
+    
+    # 读取配置
+    try:
+        with open(config_file, 'r', encoding='utf-8') as f:
+            config = yaml.safe_load(f) or {}
+        
+        # 确保models部分存在
+        if 'models' not in config:
+            config['models'] = {}
+        
+        # 添加模型存储配置
+        config['models']['storage'] = {
+            'local_model_root': models_dir.replace(os.path.sep, '/'),
+            'offline_mode': True,
+            'force_local': True
+        }
+        
+        # 更新各模型配置
+        model_mapping = {
+            'clip': {'path': os.path.join(models_dir, 'clip'), 'repo': 'openai/clip-vit-base-patch32'},
+            'clap': {'path': os.path.join(models_dir, 'clap'), 'repo': 'laion/clap-htsat-unfused'},
+            'whisper': {'path': os.path.join(models_dir, 'whisper'), 'repo': 'openai/whisper-base'}
+        }
+        
+        for model_name, model_info in model_mapping.items():
+            model_path = model_info['path'].replace(os.path.sep, '/')
+            
+            if model_name not in config['models']:
+                config['models'][model_name] = {}
+            
+            # 设置本地路径
+            config['models'][model_name]['local_path'] = model_path
+            config['models'][model_name]['model_name'] = model_path
+            config['models'][model_name]['allow_download'] = False
+            config['models'][model_name]['device'] = 'auto'
+            
+            print(f"[INFO] 已配置 {model_name} 模型路径: {model_path}")
+        
+        # 保存更新后的配置
+        with open(config_file, 'w', encoding='utf-8') as f:
+            yaml.dump(config, f, default_flow_style=False, allow_unicode=True, sort_keys=False)
+        
+        print(f"[SUCCESS] 配置文件已更新为使用本地模型")
+        return True
+        
+    except Exception as e:
+        print(f"[ERROR] 更新配置文件失败: {str(e)}")
+        return False
+
+if __name__ == "__main__":
+    import sys
+    
+    if len(sys.argv) < 3:
+        print("[ERROR] 缺少参数: config_file models_dir")
+        sys.exit(1)
+    
+    config_file = sys.argv[1]
+    models_dir = sys.argv[2]
+    
+    success = update_config_for_local_models(config_file, models_dir)
+    sys.exit(0 if success else 1)
+EOF
+        
+        # 执行配置更新
+        log "${BLUE}[步骤2] 更新配置文件以使用本地模型...${NC}"
+        python3 "${CONFIG_UPDATE_SCRIPT}" "${DEPLOY_CONFIG_DIR}/config.yml" "${DEPLOY_MODELS_DIR}"
+        
+        # 设置模型目录权限
+        chmod -R 755 "${DEPLOY_MODELS_DIR}"
+        
+        log "${GREEN}[成功] 模型部署完成，已配置为使用本地模型${NC}"
+    else:
+        log "${YELLOW}[警告] 部分模型下载失败，请检查网络连接${NC}"
+        log "${YELLOW}[警告] 继续安装，但API服务可能无法正常工作${NC}"
+    
+    # 清理临时脚本
+    rm -f "${MODEL_SCRIPT}" "${CONFIG_UPDATE_SCRIPT}"
     
     log "${GREEN}AI模型配置完成！${NC}"
 }

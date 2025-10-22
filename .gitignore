@@ -72,8 +72,8 @@ testdata/
 tests/fixtures
 
 # 部署测试目录（真机测试）
-deploy_test/
-msearch_package/
+deployment_test/
+release/
 # 离线模型和依赖（避免重复下载）
 offline/
 
