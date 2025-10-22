@@ -1,4 +1,4 @@
-# msearch API文档
+# MSearch API文档
 
 ## 1. API概述
 
@@ -12,7 +12,16 @@
 
 **字符编码**: UTF-8
 
-### 11.2 通用响应格式
+### 1.2 技术架构
+
+MSearch API基于以下技术栈构建：
+- **后端框架**: FastAPI
+- **AI推理引擎**: michaelfeil/infinity (集成CLIP、CLAP、Whisper等模型)
+- **向量数据库**: Qdrant
+- **多模态处理**: 支持文本、图像、视频、音频的向量化处理
+- **时间定位机制**: 基于帧级时间戳的精确时间定位（±2秒精度）
+
+### 1.3 通用响应格式
 
 **成功响应**：
 ```json
@@ -34,7 +43,21 @@
 }
 ```
 
-### 1.3 HTTP状态码
+### 1.3 时间定位机制
+
+MSearch系统实现了精确的时间定位机制，支持视频和音频内容的精确时间戳定位：
+
+- **帧级时间戳计算**: 基于帧率的精确时间计算（±0.033s@30fps）
+- **多模态时间同步**: 视觉、音频、语音统一时间基准
+- **精确时间检索**: 支持±2秒精度保证的时间范围搜索
+- **场景感知切片**: 避免在场景中间进行时间切分
+
+在API响应中，时间相关信息通过以下字段表示：
+- `start_time_ms`: 开始时间（毫秒）
+- `end_time_ms`: 结束时间（毫秒）
+- `frame_index`: 帧索引（视频内容）
+
+### 1.4 HTTP状态码
 
 | 状态码 | 说明 | 使用场景 |
 |--------|------|---------|
@@ -292,7 +315,7 @@
 
 **端点**: `POST /api/v1/search/timeline`
 
-**描述**: 按时间范围搜索媒体文件
+**描述**: 按时间范围搜索媒体文件，支持精确时间定位（±2秒精度）
 
 **请求参数**：
 ```json
@@ -300,12 +323,22 @@
   "query": "会议",
   "time_range": {
     "start": "2024-01-01T00:00:00Z",
-    "end": "2024-01-31T23:59:59Z"
+    "end": "2024-01-31T23:59:59Z",
+    "start_time_ms": 25000,
+    "end_time_ms": 30000
   },
   "file_types": ["video", "audio"],
-  "limit": 20
+  "limit": 20,
+  "time_accurate": true
 }
 ```
+
+**请求参数说明**：
+- `time_range.start`: 开始时间（ISO 8601格式）
+- `time_range.end`: 结束时间（ISO 8601格式）
+- `time_range.start_time_ms`: 媒体文件内开始时间（毫秒，可选）
+- `time_range.end_time_ms`: 媒体文件内结束时间（毫秒，可选）
+- `time_accurate`: 是否启用精确时间检索（默认true）
 
 **响应示例**：
 ```json
@@ -316,9 +349,12 @@
     "query": "会议",
     "time_range": {
       "start": "2024-01-01T00:00:00Z",
-      "end": "2024-01-31T23:59:59Z"
+      "end": "2024-01-31T23:59:59Z",
+      "start_time_ms": 25000,
+      "end_time_ms": 30000
     },
     "file_types": ["video", "audio"],
+    "time_accurate": true,
     "results": [
       {
         "id": "point_1",
@@ -328,6 +364,7 @@
         "created_at": "2024-01-15T10:00:00Z",
         "start_time_ms": 25000,
         "end_time_ms": 30000,
+        "time_precision": "±2s",
         "metadata": {
           "file_id": "file_001",
           "file_path": "/path/to/meeting.mp4",
@@ -337,7 +374,8 @@
             "file_id": "file_001",
             "file_path": "/path/to/meeting.mp4",
             "file_type": "video",
-            "created_at": "2024-01-15T10:00:00Z"
+            "created_at": "2024-01-15T10:00:00Z",
+            "time_precision": "±2s"
           }
         }
       }
