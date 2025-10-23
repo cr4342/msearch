@@ -3657,7 +3657,7 @@ msearch/
   - 集成配置验证机制，确保配置完整性和正确性
 
 - `logger_manager.py`: 多级别日志管理，支持动态调整和硬件自适应
-  - 实现分级日志输出（DEBUG、INFO、WARNING、ERROR、CRITICAL）
+  - 实现分级日志输出（DEBUG、INFO、WARNING、ERROR、CRITICAL） 
   - 支持多处理器日志（控制台、文件、远程）
   - 提供性能日志和错误日志分离机制
   - 集成日志轮转和压缩功能，避免日志文件过大
