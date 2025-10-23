@@ -73,6 +73,24 @@ def create_package():
         
         print(f"已创建版本信息文件: {version_file}")
         
+        # 复制安装脚本和README到临时目录
+        install_sh = project_root / "releases" / "install.sh"
+        install_bat = project_root / "releases" / "install.bat"
+        readme_md = project_root / "releases" / "README.md"
+        release_notes = project_root / "releases" / "RELEASE_NOTES.md"
+        
+        additional_files = [
+            (install_sh, "install.sh"),
+            (install_bat, "install.bat"),
+            (readme_md, "README.md"),
+            (release_notes, "RELEASE_NOTES.md")
+        ]
+        
+        for source_file, dest_name in additional_files:
+            if source_file.exists():
+                shutil.copy2(source_file, temp_dir / dest_name)
+                print(f"已复制: {dest_name}")
+        
         # 创建打包日期戳
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         
@@ -116,24 +134,6 @@ def create_package():
         
         print(f"ZIP包大小: {zip_size / (1024*1024):.2f} MB")
         print(f"TAR.GZ包大小: {tar_size / (1024*1024):.2f} MB")
-        
-        # 复制安装脚本和README到临时目录
-        install_sh = project_root / "releases" / "install.sh"
-        install_bat = project_root / "releases" / "install.bat"
-        readme_md = project_root / "releases" / "README.md"
-        release_notes = project_root / "releases" / "RELEASE_NOTES.md"
-        
-        additional_files = [
-            (install_sh, "install.sh"),
-            (install_bat, "install.bat"),
-            (readme_md, "README.md"),
-            (release_notes, "RELEASE_NOTES.md")
-        ]
-        
-        for source_file, dest_name in additional_files:
-            if source_file.exists():
-                shutil.copy2(source_file, temp_dir / dest_name)
-                print(f"已复制: {dest_name}")
         
         # 创建打包信息文件
         package_info = {

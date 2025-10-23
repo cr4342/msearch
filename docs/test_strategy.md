@@ -1135,9 +1135,717 @@ if __name__ == "__main__":
 
 本测试策略文档完全基于设计文档的技术规范和架构要求，同时针对CPU环境测试和日志记录进行了增强，确保在Linux CPU开发环境下能够充分验证系统功能，通过日志记录反馈程序错误，并确保测试后的软件达到交付要求。
 
-## 9. 环境兼容性优化解决方案
+## 9. 真实模型与真实数据测试
+### 9.1 真实模型测试策略
+#### 9.1.1 真实模型下载与部署测试
+**模型下载验证**：
+- 验证从HuggingFace Hub下载真实模型的完整性
+- 测试模型文件的MD5/SHA256校验
+- 验证模型格式兼容性（safetensors、pytorch_model.bin等）
+- 测试网络中断时的断点续传功能
 
-### 9.1 Python 3.12兼容性问题解决
+**真实模型部署测试**：
+```python
+# tests/real_model/test_model_deployment.py
+import pytest
+import os
+import hashlib
+from pathlib import Path
+from src.business.embedding_engine import EmbeddingEngine
+from src.core.config_manager import ConfigManager
+
+class TestRealModelDeployment:
+    """真实模型部署测试"""
+    
+    @pytest.fixture
+    def real_model_config(self):
+        """真实模型配置"""
+        return {
+            'embedding': {
+                'models_dir': './data/models',
+                'models': {
+                    'clip': 'openai/clip-vit-base-patch32',
+                    'clap': 'laion/clap-htsat-fused', 
+                    'whisper': 'openai/whisper-base'
+                }
+            },
+            'device': 'cpu'
+        }
+    
+    def test_clip_model_download_and_load(self, real_model_config):
+        """测试CLIP模型下载和加载"""
+        model_path = Path(real_model_config['embedding']['models_dir']) / 'clip'
+        
+        # 如果模型不存在，触发下载
+        if not model_path.exists():
+            embedding_engine = EmbeddingEngine(config=real_model_config)
+            
+            # 验证模型文件存在
+            assert model_path.exists(), "CLIP模型下载失败"
+            
+            # 验证关键文件
+            required_files = ['config.json', 'pytorch_model.bin']
+            for file_name in required_files:
+                file_path = model_path / file_name
+                assert file_path.exists(), f"缺少模型文件: {file_name}"
+        
+        # 测试模型加载
+        embedding_engine = EmbeddingEngine(config=real_model_config)
+        assert embedding_engine.clip_model is not None
+        
+        # 测试模型推理
+        test_text = "a beautiful landscape"
+        vector = embedding_engine.embed_text(test_text)
+        assert len(vector) == 512, "CLIP向量维度错误"
+        assert not all(v == 0 for v in vector), "CLIP向量全为零"
+    
+    def test_model_file_integrity(self, real_model_config):
+        """测试模型文件完整性"""
+        models_dir = Path(real_model_config['embedding']['models_dir'])
+        
+        for model_name in ['clip', 'clap', 'whisper']:
+            model_path = models_dir / model_name
+            if model_path.exists():
+                # 检查模型文件大小
+                for model_file in model_path.glob('*.bin'):
+                    file_size = model_file.stat().st_size
+                    assert file_size > 1024 * 1024, f"模型文件过小: {model_file}"
+                
+                # 检查配置文件
+                config_file = model_path / 'config.json'
+                if config_file.exists():
+                    import json
+                    with open(config_file, 'r') as f:
+                        config = json.load(f)
+                    assert 'model_type' in config or 'architectures' in config
+```
+
+#### 9.1.2 真实模型性能基准测试
+**真实模型推理性能测试**：
+```python
+# tests/real_model/test_real_model_performance.py
+import pytest
+import time
+import numpy as np
+from src.business.embedding_engine import EmbeddingEngine
+
+class TestRealModelPerformance:
+    """真实模型性能测试"""
+    
+    @pytest.fixture
+    def real_embedding_engine(self):
+        """真实模型嵌入引擎"""
+        config = {
+            'embedding': {
+                'models_dir': './data/models',
+                'models': {
+                    'clip': 'openai/clip-vit-base-patch32',
+                    'clap': 'laion/clap-htsat-fused'
+                }
+            },
+            'device': 'cpu',
+            'processing': {'batch_size': 8}
+        }
+        return EmbeddingEngine(config=config)
+    
+    def test_clip_text_encoding_performance(self, real_embedding_engine):
+        """测试CLIP文本编码性能"""
+        test_texts = [
+            "a beautiful sunset over the ocean",
+            "a cat sitting on a windowsill", 
+            "modern architecture in the city",
+            "children playing in the park",
+            "delicious food on the table"
+        ]
+        
+        # 单次推理性能测试
+        start_time = time.time()
+        for text in test_texts:
+            vector = real_embedding_engine.embed_text(text)
+            assert len(vector) == 512
+        single_inference_time = (time.time() - start_time) / len(test_texts)
+        
+        # 批量推理性能测试
+        start_time = time.time()
+        batch_vectors = real_embedding_engine.embed_text_batch(test_texts)
+        batch_inference_time = (time.time() - start_time) / len(test_texts)
+        
+        # 验证性能要求
+        assert single_inference_time < 1.0, f"单次推理时间过长: {single_inference_time:.3f}s"
+        assert batch_inference_time < 0.5, f"批量推理时间过长: {batch_inference_time:.3f}s"
+        
+        # 批量推理应该更快
+        assert batch_inference_time < single_inference_time, "批量推理未提升性能"
+        
+        print(f"CLIP文本编码性能 - 单次: {single_inference_time:.3f}s, 批量: {batch_inference_time:.3f}s")
+    
+    def test_clip_image_encoding_performance(self, real_embedding_engine):
+        """测试CLIP图像编码性能"""
+        # 创建测试图像数据
+        test_images = [np.random.rand(224, 224, 3).astype(np.float32) for _ in range(5)]
+        
+        # 图像推理性能测试
+        start_time = time.time()
+        for image in test_images:
+            vector = real_embedding_engine.embed_image(image)
+            assert len(vector) == 512
+        image_inference_time = (time.time() - start_time) / len(test_images)
+        
+        # 验证性能要求
+        assert image_inference_time < 2.0, f"图像推理时间过长: {image_inference_time:.3f}s"
+        
+        print(f"CLIP图像编码性能 - 单次: {image_inference_time:.3f}s")
+    
+    def test_memory_usage_with_real_models(self, real_embedding_engine):
+        """测试真实模型内存使用"""
+        import psutil
+        import os
+        
+        process = psutil.Process(os.getpid())
+        initial_memory = process.memory_info().rss / (1024 * 1024)  # MB
+        
+        # 执行大量推理操作
+        for i in range(100):
+            text = f"test query {i}"
+            vector = real_embedding_engine.embed_text(text)
+        
+        final_memory = process.memory_info().rss / (1024 * 1024)  # MB
+        memory_increase = final_memory - initial_memory
+        
+        # 验证内存使用合理
+        assert memory_increase < 500, f"内存增长过多: {memory_increase}MB"
+        
+        print(f"真实模型内存使用 - 增长: {memory_increase:.2f}MB")
+```
+
+### 9.2 真实数据测试策略
+#### 9.2.1 真实媒体文件测试
+**真实媒体文件处理测试**：
+```python
+# tests/real_data/test_real_media_processing.py
+import pytest
+import os
+from pathlib import Path
+from src.business.processing_orchestrator import ProcessingOrchestrator
+from src.business.media_processor import MediaProcessor
+
+class TestRealMediaProcessing:
+    """真实媒体文件处理测试"""
+    
+    @pytest.fixture
+    def real_media_files(self):
+        """真实媒体文件路径"""
+        # 这些文件需要在测试环境中准备
+        return {
+            'images': [
+                'tests/real_data/images/landscape.jpg',
+                'tests/real_data/images/portrait.png', 
+                'tests/real_data/images/architecture.webp'
+            ],
+            'videos': [
+                'tests/real_data/videos/short_clip.mp4',
+                'tests/real_data/videos/long_video.avi'
+            ],
+            'audios': [
+                'tests/real_data/audios/music.mp3',
+                'tests/real_data/audios/speech.wav'
+            ]
+        }
+    
+    def test_real_image_processing(self, real_media_files):
+        """测试真实图片处理"""
+        media_processor = MediaProcessor()
+        
+        for image_path in real_media_files['images']:
+            if os.path.exists(image_path):
+                result = media_processor.process_image(image_path)
+                
+                # 验证处理结果
+                assert result['status'] == 'success'
+                assert 'processed_image' in result
+                assert 'metadata' in result
+                
+                # 验证元数据
+                metadata = result['metadata']
+                assert metadata['width'] > 0
+                assert metadata['height'] > 0
+                assert metadata['format'] in ['JPEG', 'PNG', 'WEBP']
+                
+                print(f"成功处理图片: {image_path}, 尺寸: {metadata['width']}x{metadata['height']}")
+    
+    def test_real_video_processing(self, real_media_files):
+        """测试真实视频处理"""
+        media_processor = MediaProcessor()
+        
+        for video_path in real_media_files['videos']:
+            if os.path.exists(video_path):
+                result = media_processor.process_video(video_path)
+                
+                # 验证处理结果
+                assert result['status'] == 'success'
+                assert 'visual_frames' in result
+                assert 'metadata' in result
+                
+                # 验证视频元数据
+                metadata = result['metadata']
+                assert metadata['duration'] > 0
+                assert metadata['fps'] > 0
+                assert len(result['visual_frames']) > 0
+                
+                # 验证时间戳精度
+                for frame in result['visual_frames']:
+                    assert 'timestamp' in frame
+                    assert 0 <= frame['timestamp'] <= metadata['duration']
+                
+                print(f"成功处理视频: {video_path}, 时长: {metadata['duration']}s, 帧数: {len(result['visual_frames'])}")
+    
+    def test_real_audio_processing(self, real_media_files):
+        """测试真实音频处理"""
+        media_processor = MediaProcessor()
+        
+        for audio_path in real_media_files['audios']:
+            if os.path.exists(audio_path):
+                result = media_processor.process_audio(audio_path)
+                
+                # 验证处理结果
+                assert result['status'] == 'success'
+                assert 'audio_segments' in result
+                assert 'metadata' in result
+                
+                # 验证音频元数据
+                metadata = result['metadata']
+                assert metadata['duration'] > 0
+                assert metadata['sample_rate'] > 0
+                assert len(result['audio_segments']) > 0
+                
+                # 验证音频分类
+                for segment in result['audio_segments']:
+                    assert 'audio_type' in segment
+                    assert segment['audio_type'] in ['music', 'speech', 'mixed']
+                
+                print(f"成功处理音频: {audio_path}, 时长: {metadata['duration']}s, 片段数: {len(result['audio_segments'])}")
+```
+
+#### 9.2.2 端到端真实数据测试
+**完整流程真实数据测试**：
+```python
+# tests/real_data/test_end_to_end_real_data.py
+import pytest
+import asyncio
+import os
+from src.business.processing_orchestrator import ProcessingOrchestrator
+from src.business.smart_retrieval import SmartRetrievalEngine
+
+class TestEndToEndRealData:
+    """端到端真实数据测试"""
+    
+    @pytest.fixture
+    def real_data_config(self):
+        """真实数据测试配置"""
+        return {
+            'embedding': {
+                'models_dir': './data/models',
+                'models': {
+                    'clip': 'openai/clip-vit-base-patch32',
+                    'clap': 'laion/clap-htsat-fused',
+                    'whisper': 'openai/whisper-base'
+                }
+            },
+            'processing': {
+                'batch_size': 4,
+                'max_concurrent_tasks': 2
+            },
+            'device': 'cpu'
+        }
+    
+    @pytest.mark.asyncio
+    async def test_complete_workflow_with_real_data(self, real_data_config):
+        """测试完整工作流程与真实数据"""
+        orchestrator = ProcessingOrchestrator(config=real_data_config)
+        retrieval_engine = SmartRetrievalEngine(config=real_data_config)
+        
+        # 准备真实测试文件
+        test_files = [
+            'tests/real_data/images/sunset.jpg',
+            'tests/real_data/videos/nature_documentary.mp4',
+            'tests/real_data/audios/classical_music.mp3'
+        ]
+        
+        processed_files = []
+        
+        # 处理真实文件
+        for file_path in test_files:
+            if os.path.exists(file_path):
+                print(f"处理文件: {file_path}")
+                result = await orchestrator.process_file(file_path)
+                
+                assert result['status'] == 'success'
+                assert 'file_id' in result
+                
+                processed_files.append({
+                    'file_path': file_path,
+                    'file_id': result['file_id'],
+                    'vectors_count': result.get('total_vectors', 0)
+                })
+        
+        # 等待处理完成
+        await asyncio.sleep(2)
+        
+        # 测试真实查询
+        real_queries = [
+            "beautiful sunset over water",
+            "animals in nature",
+            "classical music performance"
+        ]
+        
+        for query in real_queries:
+            print(f"执行查询: {query}")
+            search_results = await retrieval_engine.smart_search(query)
+            
+            # 验证搜索结果
+            assert len(search_results) > 0, f"查询 '{query}' 无结果"
+            
+            # 验证结果质量
+            for result in search_results[:3]:  # 检查前3个结果
+                assert 'file_id' in result
+                assert 'score' in result
+                assert result['score'] > 0.1  # 相似度阈值
+                
+                # 如果是视频结果，验证时间戳
+                if 'timestamp' in result:
+                    assert result['timestamp'] >= 0
+                    if 'timestamp_accuracy' in result:
+                        assert result['timestamp_accuracy'] <= 2.0
+            
+            print(f"查询 '{query}' 返回 {len(search_results)} 个结果")
+    
+    def test_real_data_performance_benchmarks(self, real_data_config):
+        """真实数据性能基准测试"""
+        import time
+        orchestrator = ProcessingOrchestrator(config=real_data_config)
+        
+        # 测试不同大小的真实文件
+        test_cases = [
+            {
+                'file': 'tests/real_data/images/small_image.jpg',
+                'expected_time': 5.0,  # 5秒内完成
+                'type': 'image'
+            },
+            {
+                'file': 'tests/real_data/videos/short_video.mp4', 
+                'expected_time': 30.0,  # 30秒内完成
+                'type': 'video'
+            },
+            {
+                'file': 'tests/real_data/audios/short_audio.mp3',
+                'expected_time': 15.0,  # 15秒内完成
+                'type': 'audio'
+            }
+        ]
+        
+        for test_case in test_cases:
+            if os.path.exists(test_case['file']):
+                start_time = time.time()
+                result = orchestrator.process_file(test_case['file'])
+                processing_time = time.time() - start_time
+                
+                # 验证处理时间
+                assert processing_time < test_case['expected_time'], \
+                    f"{test_case['type']}处理时间过长: {processing_time:.2f}s > {test_case['expected_time']}s"
+                
+                # 验证处理结果
+                assert result['status'] == 'success'
+                
+                print(f"{test_case['type']}处理性能 - 文件: {test_case['file']}, 耗时: {processing_time:.2f}s")
+```
+
+### 9.3 真实场景压力测试
+#### 9.3.1 大规模真实数据测试
+**大规模数据处理测试**：
+```python
+# tests/real_data/test_large_scale_processing.py
+import pytest
+import asyncio
+import os
+import time
+from pathlib import Path
+from src.business.processing_orchestrator import ProcessingOrchestrator
+
+class TestLargeScaleProcessing:
+    """大规模真实数据处理测试"""
+    
+    @pytest.fixture
+    def large_dataset_path(self):
+        """大规模数据集路径"""
+        return Path('tests/real_data/large_dataset')
+    
+    @pytest.mark.slow
+    def test_batch_processing_real_files(self, large_dataset_path):
+        """测试批量处理真实文件"""
+        if not large_dataset_path.exists():
+            pytest.skip("大规模数据集不存在")
+        
+        orchestrator = ProcessingOrchestrator()
+        
+        # 收集所有媒体文件
+        media_files = []
+        for ext in ['*.jpg', '*.png', '*.mp4', '*.avi', '*.mp3', '*.wav']:
+            media_files.extend(large_dataset_path.glob(f'**/{ext}'))
+        
+        if len(media_files) < 10:
+            pytest.skip("媒体文件数量不足")
+        
+        # 限制测试文件数量
+        test_files = media_files[:50]  # 测试前50个文件
+        print(f"开始批量处理 {len(test_files)} 个真实文件")
+        
+        successful_count = 0
+        failed_count = 0
+        total_processing_time = 0
+        
+        for file_path in test_files:
+            try:
+                start_time = time.time()
+                result = orchestrator.process_file(str(file_path))
+                processing_time = time.time() - start_time
+                
+                if result['status'] == 'success':
+                    successful_count += 1
+                else:
+                    failed_count += 1
+                
+                total_processing_time += processing_time
+                
+            except Exception as e:
+                print(f"处理文件失败: {file_path}, 错误: {e}")
+                failed_count += 1
+        
+        # 验证批量处理结果
+        success_rate = successful_count / len(test_files)
+        avg_processing_time = total_processing_time / len(test_files)
+        
+        assert success_rate > 0.8, f"成功率过低: {success_rate:.2%}"
+        assert avg_processing_time < 10.0, f"平均处理时间过长: {avg_processing_time:.2f}s"
+        
+        print(f"批量处理结果 - 成功: {successful_count}, 失败: {failed_count}, 成功率: {success_rate:.2%}")
+        print(f"平均处理时间: {avg_processing_time:.2f}s")
+    
+    @pytest.mark.slow
+    def test_concurrent_real_file_processing(self):
+        """测试并发处理真实文件"""
+        orchestrator = ProcessingOrchestrator()
+        
+        # 准备并发测试文件
+        test_files = [
+            'tests/real_data/concurrent/file_1.jpg',
+            'tests/real_data/concurrent/file_2.mp4',
+            'tests/real_data/concurrent/file_3.mp3',
+            'tests/real_data/concurrent/file_4.png',
+            'tests/real_data/concurrent/file_5.wav'
+        ]
+        
+        # 过滤存在的文件
+        existing_files = [f for f in test_files if os.path.exists(f)]
+        if len(existing_files) < 3:
+            pytest.skip("并发测试文件不足")
+        
+        async def process_file_async(file_path):
+            """异步处理文件"""
+            try:
+                result = await orchestrator.process_file_async(file_path)
+                return {'file': file_path, 'success': result['status'] == 'success'}
+            except Exception as e:
+                return {'file': file_path, 'success': False, 'error': str(e)}
+        
+        # 并发处理
+        async def run_concurrent_test():
+            tasks = [process_file_async(file_path) for file_path in existing_files]
+            results = await asyncio.gather(*tasks, return_exceptions=True)
+            return results
+        
+        # 执行并发测试
+        start_time = time.time()
+        results = asyncio.run(run_concurrent_test())
+        total_time = time.time() - start_time
+        
+        # 验证并发处理结果
+        successful_results = [r for r in results if isinstance(r, dict) and r.get('success')]
+        success_rate = len(successful_results) / len(existing_files)
+        
+        assert success_rate > 0.7, f"并发处理成功率过低: {success_rate:.2%}"
+        assert total_time < len(existing_files) * 5, "并发处理未提升效率"
+        
+        print(f"并发处理结果 - 文件数: {len(existing_files)}, 成功率: {success_rate:.2%}, 总耗时: {total_time:.2f}s")
+```
+
+### 9.4 真实用户场景测试
+#### 9.4.1 用户工作流测试
+**真实用户场景模拟**：
+```python
+# tests/real_data/test_user_scenarios.py
+import pytest
+from src.business.smart_retrieval import SmartRetrievalEngine
+
+class TestRealUserScenarios:
+    """真实用户场景测试"""
+    
+    def test_photographer_workflow(self):
+        """摄影师工作流测试"""
+        retrieval_engine = SmartRetrievalEngine()
+        
+        # 摄影师常见查询
+        photographer_queries = [
+            "golden hour landscape photography",
+            "portrait with shallow depth of field", 
+            "black and white street photography",
+            "macro flower photography",
+            "sunset silhouette"
+        ]
+        
+        for query in photographer_queries:
+            results = retrieval_engine.smart_search(query)
+            
+            # 验证结果质量
+            assert len(results) > 0, f"摄影师查询 '{query}' 无结果"
+            
+            # 验证结果相关性
+            top_results = results[:5]
+            avg_score = sum(r['score'] for r in top_results) / len(top_results)
+            assert avg_score > 0.3, f"查询 '{query}' 结果相关性过低: {avg_score:.3f}"
+    
+    def test_video_editor_workflow(self):
+        """视频编辑师工作流测试"""
+        retrieval_engine = SmartRetrievalEngine()
+        
+        # 视频编辑师常见查询
+        editor_queries = [
+            "action scene with fast movement",
+            "peaceful nature b-roll footage",
+            "talking head interview setup",
+            "time-lapse city traffic",
+            "slow motion water splash"
+        ]
+        
+        for query in editor_queries:
+            results = retrieval_engine.smart_search(query)
+            
+            # 验证视频结果
+            video_results = [r for r in results if r.get('file_type') == 'video']
+            assert len(video_results) > 0, f"视频查询 '{query}' 无视频结果"
+            
+            # 验证时间戳精度
+            for result in video_results[:3]:
+                if 'timestamp' in result:
+                    assert 'timestamp_accuracy' in result
+                    assert result['timestamp_accuracy'] <= 2.0
+    
+    def test_music_producer_workflow(self):
+        """音乐制作人工作流测试"""
+        retrieval_engine = SmartRetrievalEngine()
+        
+        # 音乐制作人常见查询
+        producer_queries = [
+            "upbeat electronic dance music",
+            "acoustic guitar melody",
+            "dramatic orchestral music",
+            "ambient background music",
+            "jazz piano improvisation"
+        ]
+        
+        for query in producer_queries:
+            results = retrieval_engine.smart_search(query)
+            
+            # 验证音频结果
+            audio_results = [r for r in results if r.get('file_type') == 'audio']
+            assert len(audio_results) > 0, f"音频查询 '{query}' 无音频结果"
+            
+            # 验证音频分类
+            for result in audio_results[:3]:
+                assert 'audio_type' in result
+                assert result['audio_type'] in ['music', 'speech', 'mixed']
+```
+
+### 9.5 真实数据质量验证
+#### 9.5.1 数据质量检查
+**真实数据质量验证测试**：
+```python
+# tests/real_data/test_data_quality.py
+import pytest
+import numpy as np
+from src.business.embedding_engine import EmbeddingEngine
+
+class TestRealDataQuality:
+    """真实数据质量验证"""
+    
+    def test_vector_quality_with_real_data(self):
+        """测试真实数据生成的向量质量"""
+        embedding_engine = EmbeddingEngine()
+        
+        # 真实文本样本
+        real_texts = [
+            "The quick brown fox jumps over the lazy dog",
+            "Machine learning is transforming artificial intelligence",
+            "Beautiful sunset over the mountain landscape",
+            "Classical music concert in the symphony hall"
+        ]
+        
+        vectors = []
+        for text in real_texts:
+            vector = embedding_engine.embed_text(text)
+            vectors.append(vector)
+            
+            # 验证向量质量
+            assert len(vector) == 512, "向量维度错误"
+            assert not np.allclose(vector, 0), "向量全为零"
+            assert np.isfinite(vector).all(), "向量包含无效值"
+            
+            # 验证向量范数
+            norm = np.linalg.norm(vector)
+            assert 0.8 < norm < 1.2, f"向量范数异常: {norm}"
+        
+        # 验证向量差异性
+        for i in range(len(vectors)):
+            for j in range(i+1, len(vectors)):
+                similarity = np.dot(vectors[i], vectors[j])
+                # 不同文本的向量不应该完全相同
+                assert similarity < 0.99, f"向量过于相似: {similarity}"
+    
+    def test_semantic_consistency_with_real_data(self):
+        """测试真实数据的语义一致性"""
+        embedding_engine = EmbeddingEngine()
+        
+        # 语义相似的文本对
+        similar_pairs = [
+            ("dog running in the park", "canine playing outdoors"),
+            ("beautiful mountain landscape", "scenic mountain view"),
+            ("classical music performance", "orchestra concert")
+        ]
+        
+        # 语义不同的文本对
+        different_pairs = [
+            ("dog running in the park", "airplane flying in the sky"),
+            ("beautiful mountain landscape", "busy city street"),
+            ("classical music performance", "computer programming")
+        ]
+        
+        # 测试相似文本对
+        for text1, text2 in similar_pairs:
+            vec1 = embedding_engine.embed_text(text1)
+            vec2 = embedding_engine.embed_text(text2)
+            similarity = np.dot(vec1, vec2)
+            assert similarity > 0.5, f"相似文本相似度过低: '{text1}' vs '{text2}' = {similarity:.3f}"
+        
+        # 测试不同文本对
+        for text1, text2 in different_pairs:
+            vec1 = embedding_engine.embed_text(text1)
+            vec2 = embedding_engine.embed_text(text2)
+            similarity = np.dot(vec1, vec2)
+            assert similarity < 0.7, f"不同文本相似度过高: '{text1}' vs '{text2}' = {similarity:.3f}"
+```
+
+## 10. 环境兼容性优化解决方案
+
+### 10.1 Python 3.12兼容性问题解决
 
 **问题描述**：
 - Python 3.12环境下某些依赖包可能存在兼容性问题
@@ -1165,7 +1873,7 @@ python3 scripts/install_python312_compatible.py --verify-only
 - transformers>=4.35.0 (最新兼容版本)
 - fastapi>=0.104.0 (异步兼容性修复)
 
-### 9.2 Qdrant启动问题解决
+### 10.2 Qdrant启动问题解决
 
 **问题描述**：
 - Qdrant服务启动失败或端口冲突
@@ -1211,7 +1919,7 @@ log_level: INFO
 telemetry_disabled: true
 ```
 
-### 9.3 OpenCV依赖问题解决
+### 10.3 OpenCV依赖问题解决
 
 **问题描述**：
 - OpenCV GUI依赖在无头环境下失败
@@ -1254,7 +1962,7 @@ sudo apt-get install -y \
 python3 scripts/install_python312_compatible.py
 ```
 
-### 9.4 优化测试运行流程
+### 10.4 优化测试运行流程
 
 **一键测试脚本**：
 ```bash
@@ -1279,7 +1987,7 @@ python3 tests/run_optimized_tests.py --setup-only
 5. **结果报告**：生成详细的测试报告
 6. **环境清理**：自动清理临时文件和服务
 
-### 9.5 测试配置优化
+### 10.5 测试配置优化
 
 **CPU环境优化配置**：
 ```yaml
@@ -1306,7 +2014,7 @@ performance_benchmarks:
   timestamp_accuracy_s: 2.0
 ```
 
-### 9.6 错误诊断和解决
+### 10.6 错误诊断和解决
 
 **常见问题诊断**：
 
@@ -1345,7 +2053,7 @@ python3 -m pytest tests/unit/test_cpu_compatibility.py -v
 python3 tests/configs/test_environment_setup.py --check
 ```
 
-### 9.7 持续集成优化
+### 10.7 持续集成优化
 
 **GitHub Actions配置**：
 ```yaml
@@ -1390,7 +2098,7 @@ jobs:
         path: tests/output/
 ```
 
-### 9.8 性能优化建议
+### 10.8 性能优化建议
 
 **资源使用优化**：
 - 使用轻量级模型进行测试
