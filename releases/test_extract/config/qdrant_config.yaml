@@ -1,0 +1,12 @@
+storage:
+  storage_path: ./data/database/qdrant
+
+service:
+  host: 127.0.0.1
+  http_port: 6333
+  grpc_port: 6334
+
+cluster:
+  enabled: false
+
+log_level: INFO

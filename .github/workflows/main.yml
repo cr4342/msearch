@@ -1,109 +1,150 @@
-name: MSearch CI/CD Pipeline
+name: CI/CD Pipeline
 
 on:
   push:
-    branches: [ main, master ]
+    branches: [ main, develop ]
   pull_request:
-    branches: [ main, master ]
+    branches: [ main ]
 
 jobs:
   test:
-    name: Test on ${{ matrix.os }} with Python ${{ matrix.python-version }}
     runs-on: ${{ matrix.os }}
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
-        python-version: [3.9, '3.10', 3.11]
-      fail-fast: false
-
+        python-version: [3.8, 3.9]
+        
     steps:
     - uses: actions/checkout@v3
+    
     - name: Set up Python ${{ matrix.python-version }}
       uses: actions/setup-python@v4
       with:
         python-version: ${{ matrix.python-version }}
-        cache: 'pip'
+    
+    # 安装系统依赖
+    - name: Install system dependencies (Linux)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libopencv-dev python3-opencv ffmpeg libmagic1
+    
+    - name: Install system dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install ffmpeg libmagic
+    
+    - name: Install system dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        choco install ffmpeg
+    
+    # 设置CPU测试环境变量
+    - name: Set CPU test environment
+      run: |
+        echo "FORCE_CPU=True" >> $GITHUB_ENV
+        echo "USE_QDRANT_MOCK=1" >> $GITHUB_ENV
+        echo "OPENCV_IO_ENABLE_OPENEXR=1" >> $GITHUB_ENV
     
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install pytest pytest-cov pytest-mock
-        if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
-        if [ -f requirements-dev.txt ]; then pip install -r requirements-dev.txt; fi
+        # 优先安装OpenCV headless版本，避免GUI依赖
+        pip install opencv-python-headless
+        pip install -r requirements.txt
+        pip install pytest pytest-cov flake8 black isort
     
-    - name: Run tests
+    # 验证OpenCV安装
+    - name: Verify OpenCV installation
       run: |
-        pytest --cov=src --cov-report=xml tests/
+        python -c "import cv2; print(f'OpenCV version: {cv2.__version__}'); print('OpenCV installed successfully')"
+    
+    - name: Run tests with pytest
+      run: |
+        # 使用CPU测试配置文件
+        export TEST_CONFIG_FILE=tests/configs/ci_test_config.yml
+        pytest tests/ -v --cov=. --cov-report=xml --cov-report=term-missing
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
         file: ./coverage.xml
         flags: unittests
-        env_vars: OS,PYTHON
-        name: codecov-${{ matrix.os }}-${{ matrix.python-version }}
-        fail_ci_if_error: false
-  
+        name: codecov-umbrella
+
   lint:
-    name: Lint
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v3
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: 3.9
     
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install flake8 black isort
     
-    - name: Run flake8
-      run: flake8 src --count --select=E9,F63,F7,F82 --show-source --statistics
+    - name: Lint with flake8
+      run: |
+        flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+        flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=127 --statistics
     
-    - name: Check formatting with black
-      run: black --check src tests
+    - name: Check code formatting with black
+      run: |
+        black --check src/ tests/
     
-    - name: Check imports with isort
-      run: isort --check-only src tests
+    - name: Check import sorting with isort
+      run: |
+        isort --check-only src/ tests/
 
   build:
-    name: Build
-    needs: [test, lint]
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-    
+    needs: [test, lint]
     steps:
     - uses: actions/checkout@v3
+    
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
-        python-version: '3.10'
+        python-version: 3.9
+    
+    - name: Install system dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libopencv-dev python3-opencv ffmpeg libmagic1
     
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install setuptools wheel
+        pip install opencv-python-headless
+        pip install -r requirements.txt
+        pip install pytest pytest-cov
     
     - name: Build package
       run: |
         python setup.py sdist bdist_wheel
     
-    - name: Upload artifacts
-      uses: actions/upload-artifact@v3
-      with:
-        name: msearch-package
-        path: dist/
-
-    - name: Test with pytest
-      shell: bash
+    - name: Run integration tests
       run: |
-        # 设置测试环境变量
-        export PYTHONPATH=$(pwd)
-        # 设置模拟模式以提高测试稳定性
+        # 设置CPU测试环境
+        export FORCE_CPU=True
         export USE_QDRANT_MOCK=1
-        # 运行集成测试
-        python tests/run_integration_tests.py
-        # 运行单元测试
-        pytest --cov=src --cov-report=xml tests/unit
+        export OPENCV_IO_ENABLE_OPENEXR=1
+        # 使用CPU测试配置文件
+        export TEST_CONFIG_FILE=tests/configs/ci_test_config.yml
+        # 运行CI专用测试脚本
+        python tests/run_ci_tests.py
+    
+    - name: Run unit tests
+      run: |
+        # 设置CPU测试环境
+        export FORCE_CPU=True
+        export USE_QDRANT_MOCK=1
+        export OPENCV_IO_ENABLE_OPENEXR=1
+        # 使用CPU测试配置文件
+        export TEST_CONFIG_FILE=tests/configs/ci_test_config.yml
+        pytest tests/unit/ -v --cov=src --cov-report=xml --cov-report=term-missing

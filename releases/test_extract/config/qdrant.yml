@@ -1,0 +1,52 @@
+# Qdrant向量数据库配置文件
+# 用于本地嵌入式部署
+
+# 存储配置
+storage:
+  # 数据存储路径
+  storage_path: ./data/database/qdrant
+  
+  # 性能优化设置
+  performance:
+    # 最大搜索线程数
+    max_search_threads: 4
+    # 最大优化线程数
+    max_optimization_threads: 2
+    # 内存映射阈值
+    mmap_threshold_kb: 1024
+
+# 服务配置
+service:
+  # 监听地址
+  host: 0.0.0.0
+  # 监听端口
+  http_port: 6333
+  # GRPC端口
+  grpc_port: 6334
+  
+  # API访问控制
+  api_key: null  # 禁用API密钥认证（本地使用）
+  
+  # 跨域配置
+  cors:
+    enabled: true
+    allow_origin:
+      - "*"
+
+# 集群配置（单机模式）
+cluster:
+  # 节点启用
+  enabled: false
+  # 节点URL
+  url: http://localhost:6335
+  
+# 日志配置
+log_level: INFO
+
+# 快照配置
+snapshots:
+  # 快照存储路径
+  snapshots_path: ./data/database/qdrant/snapshots
+
+# TLS配置（禁用）
+tls: null

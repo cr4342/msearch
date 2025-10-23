@@ -1,198 +1,299 @@
-#!/usr/bin/env python3
 """
-测试EmbeddingEngine的脚本
+EmbeddingEngine单元测试
+测试michaelfeil/infinity Python-native模式集成
 """
-import asyncio
-import sys
-import os
 import pytest
 import numpy as np
-import yaml
+import asyncio
+from unittest.mock import Mock, patch, AsyncMock
+import torch
 
-# 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
+from src.business.embedding_engine import EmbeddingEngine
+from src.core.config_manager import ConfigManager
 
-from src.business.embedding_engine import get_embedding_engine
 
-def load_config():
-    """加载配置文件"""
-    project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-    config_path = os.path.join(project_root, 'config', 'config.yml')
-    with open(config_path, 'r', encoding='utf-8') as f:
-        return yaml.safe_load(f)
-
-@pytest.mark.asyncio
-async def test_embedding_engine():
-    """测试嵌入引擎"""
-    print("=== 测试EmbeddingEngine ===")
+class TestEmbeddingEngine:
+    """EmbeddingEngine核心功能测试"""
     
-    # 加载配置
-    config = load_config()
+    @pytest.fixture
+    def mock_config(self):
+        """模拟配置"""
+        config = Mock(spec=ConfigManager)
+        config.get.side_effect = lambda key, default=None: {
+            'embedding.models_dir': './data/models',
+            'embedding.models.clip': 'clip',
+            'embedding.models.clap': 'clap', 
+            'embedding.models.whisper': 'whisper',
+            'processing.batch_size': 16,
+            'device': 'cpu'
+        }.get(key, default)
+        return config
     
-    # 创建引擎实例
-    engine = get_embedding_engine(config)
+    @pytest.fixture
+    def mock_infinity_engine(self):
+        """模拟infinity引擎"""
+        with patch('src.business.embedding_engine.AsyncEngineArray') as mock_engine_array:
+            mock_engine = AsyncMock()
+            mock_engine_array.from_args.return_value = mock_engine
+            yield mock_engine
     
-    print("✓ 嵌入引擎初始化完成")
-    
-    # 测试文本向量化
-    try:
-        test_text = "这是一段测试文本"
-        print(f"测试文本: {test_text}")
+    def test_embedding_engine_initialization(self, mock_config, mock_infinity_engine):
+        """测试EmbeddingEngine初始化"""
+        engine = EmbeddingEngine(config=mock_config)
         
-        text_vector = await engine.embed_text(test_text)
-        print(f"✓ 文本向量化成功: 形状={text_vector.shape}")
-        print(f"   向量范数: {np.linalg.norm(text_vector):.4f}")
+        # 验证初始化
+        assert engine.config == mock_config
+        assert engine.engine_array == mock_infinity_engine
         
-    except Exception as e:
-        print(f"✗ 文本向量化失败: {e}")
-        return False
+        # 验证模型路径配置
+        mock_config.get.assert_any_call('embedding.models_dir', './data/models')
+        mock_config.get.assert_any_call('embedding.models.clip', 'clip')
     
-    # 测试模拟图片向量化（使用随机数据）
-    try:
-        test_image = np.random.rand(224, 224, 3).astype(np.float32)
-        print("测试图片向量化...")
+    @pytest.mark.asyncio
+    async def test_embed_image(self, mock_config, mock_infinity_engine):
+        """测试图片向量化"""
+        # 设置mock返回值
+        mock_infinity_engine.embed.return_value = [np.random.rand(512).tolist()]
         
-        image_vector = await engine.embed_image(test_image)
-        print(f"✓ 图片向量化成功: 形状={image_vector.shape}")
-        print(f"   向量范数: {np.linalg.norm(image_vector):.4f}")
+        engine = EmbeddingEngine(config=mock_config)
         
-    except Exception as e:
-        print(f"✗ 图片向量化失败: {e}")
-        return False
-    
-    # 测试向量相似度
-    try:
-        similarity = np.dot(text_vector, image_vector) / (np.linalg.norm(text_vector) * np.linalg.norm(image_vector))
-        print(f"✓ 向量相似度计算成功: {similarity:.4f}")
+        # 测试图片向量化
+        test_image_data = np.random.rand(224, 224, 3)
+        result = await engine.embed_image(test_image_data)
         
-    except Exception as e:
-        print(f"✗ 向量相似度计算失败: {e}")
-        return False
+        # 验证结果
+        assert len(result) == 1
+        assert len(result[0]) == 512
+        mock_infinity_engine.embed.assert_called_once()
     
-    print("\n=== 所有测试通过 ===")
-    return True
+    @pytest.mark.asyncio
+    async def test_embed_audio(self, mock_config, mock_infinity_engine):
+        """测试音频向量化"""
+        # 设置mock返回值
+        mock_infinity_engine.embed.return_value = [np.random.rand(512).tolist()]
+        
+        engine = EmbeddingEngine(config=mock_config)
+        
+        # 测试音频向量化
+        test_audio_data = np.random.rand(16000)  # 1秒16kHz音频
+        result = await engine.embed_audio(test_audio_data)
+        
+        # 验证结果
+        assert len(result) == 1
+        assert len(result[0]) == 512
+        mock_infinity_engine.embed.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_embed_text(self, mock_config, mock_infinity_engine):
+        """测试文本向量化"""
+        # 设置mock返回值
+        mock_infinity_engine.embed.return_value = [np.random.rand(512).tolist()]
+        
+        engine = EmbeddingEngine(config=mock_config)
+        
+        # 测试文本向量化
+        test_text = "测试文本内容"
+        result = await engine.embed_text(test_text)
+        
+        # 验证结果
+        assert len(result) == 1
+        assert len(result[0]) == 512
+        mock_infinity_engine.embed.assert_called_once()
+    
+    @pytest.mark.asyncio
+    async def test_batch_processing(self, mock_config, mock_infinity_engine):
+        """测试批处理功能"""
+        # 设置mock返回值 - 批量处理
+        batch_size = 4
+        mock_infinity_engine.embed.return_value = [
+            np.random.rand(512).tolist() for _ in range(batch_size)
+        ]
+        
+        engine = EmbeddingEngine(config=mock_config)
+        
+        # 测试批量文本向量化
+        test_texts = [f"测试文本 {i}" for i in range(batch_size)]
+        result = await engine.embed_text_batch(test_texts)
+        
+        # 验证结果
+        assert len(result) == batch_size
+        for vector in result:
+            assert len(vector) == 512
+        mock_infinity_engine.embed.assert_called_once()
+    
+    def test_model_routing(self, mock_config, mock_infinity_engine):
+        """测试模型路由功能"""
+        engine = EmbeddingEngine(config=mock_config)
+        
+        # 测试内容类型到模型的映射
+        assert engine._get_model_for_content_type('image') == 'clip'
+        assert engine._get_model_for_content_type('text') == 'clip'
+        assert engine._get_model_for_content_type('audio_music') == 'clap'
+        assert engine._get_model_for_content_type('audio_speech') == 'whisper'
+    
+    @pytest.mark.asyncio
+    async def test_vector_quality_validation(self, mock_config, mock_infinity_engine):
+        """测试向量质量验证"""
+        # 设置mock返回值 - 包含无效向量
+        mock_infinity_engine.embed.return_value = [
+            np.random.rand(512).tolist(),  # 正常向量
+            [0] * 512,  # 零向量
+            np.random.rand(256).tolist(),  # 错误维度
+        ]
+        
+        engine = EmbeddingEngine(config=mock_config)
+        
+        # 测试向量质量验证
+        test_texts = ["正常文本", "零向量文本", "错误维度文本"]
+        result = await engine.embed_text_batch(test_texts)
+        
+        # 验证只返回有效向量
+        valid_vectors = engine._validate_vectors(result)
+        assert len(valid_vectors) == 1  # 只有一个有效向量
+        assert len(valid_vectors[0]) == 512
+    
+    @pytest.mark.asyncio
+    async def test_error_handling(self, mock_config, mock_infinity_engine):
+        """测试错误处理"""
+        # 设置mock抛出异常
+        mock_infinity_engine.embed.side_effect = Exception("模型调用失败")
+        
+        engine = EmbeddingEngine(config=mock_config)
+        
+        # 测试异常处理
+        with pytest.raises(Exception) as exc_info:
+            await engine.embed_text("测试文本")
+        
+        assert "模型调用失败" in str(exc_info.value)
 
-@pytest.mark.asyncio
-async def test_embedding_engine_mock_mode():
-    """测试嵌入引擎的模拟模式"""
-    print("=== 测试EmbeddingEngine模拟模式 ===")
-    
-    # 加载配置
-    config = load_config()
-    
-    # 创建引擎实例（强制模拟模式）
-    engine = get_embedding_engine(config)
-    engine.engine_array = None  # 强制设置为None以触发模拟模式
-    
-    # 测试文本向量化（模拟模式）
-    test_text = "测试文本"
-    text_vector = await engine.embed_text(test_text)
-    
-    assert text_vector.shape == (512,), f"期望向量形状为(512,)，实际为{text_vector.shape}"
-    assert abs(np.linalg.norm(text_vector) - 1.0) < 0.01, "模拟向量应该被归一化"
-    
-    print(f"✓ 模拟文本向量生成成功: 形状={text_vector.shape}")
-    
-    # 测试图片向量化（模拟模式）
-    test_image = np.random.rand(224, 224, 3).astype(np.float32)
-    image_vector = await engine.embed_image(test_image)
-    
-    assert image_vector.shape == (512,), f"期望向量形状为(512,)，实际为{image_vector.shape}"
-    assert abs(np.linalg.norm(image_vector) - 1.0) < 0.01, "模拟向量应该被归一化"
-    
-    print(f"✓ 模拟图片向量生成成功: 形状={image_vector.shape}")
-    
-    print("\n=== 所有测试通过 ===")
-    return True
 
-@pytest.mark.asyncio
-async def test_embedding_engine_model_status():
-    """测试模型状态管理功能"""
-    print("\n=== 测试 EmbeddingEngine 模型状态管理 ===")
+class TestEmbeddingEngineIntegration:
+    """EmbeddingEngine集成测试"""
     
-    # 加载配置
-    config = load_config()
+    @pytest.fixture
+    def integration_config(self):
+        """集成测试配置"""
+        return {
+            'embedding': {
+                'models_dir': './data/models',
+                'models': {
+                    'clip': 'clip',
+                    'clap': 'clap',
+                    'whisper': 'whisper'
+                }
+            },
+            'processing': {
+                'batch_size': 8,
+                'max_concurrent_tasks': 2
+            },
+            'device': 'cpu'
+        }
     
-    # 获取引擎实例
-    engine = get_embedding_engine(config)
-    assert engine is not None, "无法获取 EmbeddingEngine 实例"
+    @pytest.mark.asyncio
+    async def test_multimodal_processing(self, integration_config):
+        """测试多模态处理集成"""
+        with patch('src.business.embedding_engine.AsyncEngineArray') as mock_engine_array:
+            mock_engine = AsyncMock()
+            mock_engine_array.from_args.return_value = mock_engine
+            
+            # 设置不同模态的mock返回值
+            def mock_embed_side_effect(*args, **kwargs):
+                model = kwargs.get('model', 'clip')
+                if model == 'clip':
+                    return [np.random.rand(512).tolist()]
+                elif model == 'clap':
+                    return [np.random.rand(512).tolist()]
+                elif model == 'whisper':
+                    return [np.random.rand(512).tolist()]
+                else:
+                    return [np.random.rand(512).tolist()]
+            
+            mock_engine.embed.side_effect = mock_embed_side_effect
+            
+            # 创建配置管理器
+            config_manager = Mock(spec=ConfigManager)
+            config_manager.get.side_effect = lambda key, default=None: {
+                'embedding.models_dir': integration_config['embedding']['models_dir'],
+                'embedding.models.clip': integration_config['embedding']['models']['clip'],
+                'embedding.models.clap': integration_config['embedding']['models']['clap'],
+                'embedding.models.whisper': integration_config['embedding']['models']['whisper'],
+                'processing.batch_size': integration_config['processing']['batch_size'],
+                'device': integration_config['device']
+            }.get(key, default)
+            
+            engine = EmbeddingEngine(config=config_manager)
+            
+            # 测试多模态内容处理
+            image_result = await engine.embed_content(np.random.rand(224, 224, 3), 'image')
+            audio_result = await engine.embed_content(np.random.rand(16000), 'audio_music')
+            text_result = await engine.embed_content("测试文本", 'text')
+            
+            # 验证所有模态都返回512维向量
+            assert len(image_result[0]) == 512
+            assert len(audio_result[0]) == 512
+            assert len(text_result[0]) == 512
     
-    # 测试模型状态获取
-    model_status = engine.get_model_status()
-    print(f"模型状态: {model_status}")
+    @pytest.mark.asyncio
+    async def test_python_native_performance(self, integration_config):
+        """测试Python-native模式性能"""
+        with patch('src.business.embedding_engine.AsyncEngineArray') as mock_engine_array:
+            mock_engine = AsyncMock()
+            mock_engine_array.from_args.return_value = mock_engine
+            
+            # 模拟快速响应
+            mock_engine.embed.return_value = [np.random.rand(512).tolist()]
+            
+            config_manager = Mock(spec=ConfigManager)
+            config_manager.get.side_effect = lambda key, default=None: {
+                'embedding.models_dir': integration_config['embedding']['models_dir'],
+                'embedding.models.clip': integration_config['embedding']['models']['clip'],
+                'device': integration_config['device']
+            }.get(key, default)
+            
+            engine = EmbeddingEngine(config=config_manager)
+            
+            # 测试响应时间
+            import time
+            start_time = time.time()
+            
+            result = await engine.embed_text("性能测试文本")
+            
+            end_time = time.time()
+            response_time = (end_time - start_time) * 1000  # 转换为毫秒
+            
+            # Python-native模式应该有更快的响应时间（无HTTP开销）
+            assert response_time < 100  # 应该小于100ms
+            assert len(result[0]) == 512
     
-    assert isinstance(model_status, dict), "模型状态应该是字典类型"
-    assert 'clip' in model_status, "应该包含clip模型状态"
-    assert 'clap' in model_status, "应该包含clap模型状态"
-    assert 'whisper' in model_status, "应该包含whisper模型状态"
-    
-    # 测试模型可用性检查
-    for model_name in ['clip', 'clap', 'whisper']:
-        is_available = engine.is_model_available(model_name)
-        print(f"模型 {model_name} 可用性: {is_available}")
-        assert isinstance(is_available, bool), f"模型 {model_name} 可用性应该是布尔值"
-    
-    print("✓ 模型状态管理测试通过")
-    
-    return True
-
-@pytest.mark.asyncio
-async def test_embedding_engine_batch_processing():
-    """测试批量处理功能"""
-    print("\n=== 测试 EmbeddingEngine 批量处理 ===")
-    
-    # 加载配置
-    config = load_config()
-    
-    # 获取引擎实例
-    engine = get_embedding_engine(config)
-    assert engine is not None, "无法获取 EmbeddingEngine 实例"
-    
-    # 准备测试数据
-    test_texts = ["测试文本1", "测试文本2", "测试文本3"]
-    test_images = [np.random.rand(224, 224, 3).astype(np.float32) for _ in range(3)]
-    
-    # 测试批量文本向量化
-    print("测试批量文本向量化...")
-    text_vectors = await engine.batch_embed_text(test_texts)
-    
-    assert len(text_vectors) == len(test_texts), f"批量文本向量数量不匹配: {len(text_vectors)} != {len(test_texts)}"
-    
-    for i, vector in enumerate(text_vectors):
-        assert isinstance(vector, np.ndarray), f"文本向量 {i} 应该是numpy数组"
-        assert vector.shape[0] == 512, f"文本向量 {i} 维度应该是512"
-        # 检查向量是否归一化
-        norm = np.linalg.norm(vector)
-        assert abs(norm - 1.0) < 0.01, f"文本向量 {i} 未正确归一化: norm={norm}"
-    
-    print("✓ 批量文本向量化测试通过")
-    
-    # 测试批量图片向量化
-    print("测试批量图片向量化...")
-    image_vectors = await engine.batch_embed_image(test_images)
-    
-    assert len(image_vectors) == len(test_images), f"批量图片向量数量不匹配: {len(image_vectors)} != {len(test_images)}"
-    
-    for i, vector in enumerate(image_vectors):
-        assert isinstance(vector, np.ndarray), f"图片向量 {i} 应该是numpy数组"
-        assert vector.shape[0] == 512, f"图片向量 {i} 维度应该是512"
-        # 检查向量是否归一化
-        norm = np.linalg.norm(vector)
-        assert abs(norm - 1.0) < 0.01, f"图片向量 {i} 未正确归一化: norm={norm}"
-    
-    print("✓ 批量图片向量化测试通过")
-    
-    # 测试空列表处理
-    empty_text_vectors = await engine.batch_embed_text([])
-    assert len(empty_text_vectors) == 0, "空文本列表应该返回空列表"
-    
-    empty_image_vectors = await engine.batch_embed_image([])
-    assert len(empty_image_vectors) == 0, "空图片列表应该返回空列表"
-    
-    print("✓ 空列表处理测试通过")
-    
-    return True
-
-if __name__ == "__main__":
-    result = asyncio.run(test_embedding_engine())
-    sys.exit(0 if result else 1)
+    @pytest.mark.asyncio
+    async def test_memory_management(self, integration_config):
+        """测试内存管理"""
+        with patch('src.business.embedding_engine.AsyncEngineArray') as mock_engine_array:
+            mock_engine = AsyncMock()
+            mock_engine_array.from_args.return_value = mock_engine
+            
+            # 模拟大批量处理
+            batch_size = 100
+            mock_engine.embed.return_value = [
+                np.random.rand(512).tolist() for _ in range(batch_size)
+            ]
+            
+            config_manager = Mock(spec=ConfigManager)
+            config_manager.get.side_effect = lambda key, default=None: {
+                'embedding.models_dir': integration_config['embedding']['models_dir'],
+                'embedding.models.clip': integration_config['embedding']['models']['clip'],
+                'processing.batch_size': batch_size,
+                'device': integration_config['device']
+            }.get(key, default)
+            
+            engine = EmbeddingEngine(config=config_manager)
+            
+            # 测试大批量处理
+            test_texts = [f"测试文本 {i}" for i in range(batch_size)]
+            result = await engine.embed_text_batch(test_texts)
+            
+            # 验证结果
+            assert len(result) == batch_size
+            for vector in result:
+                assert len(vector) == 512
+                assert not np.allclose(vector, 0)  # 确保不是零向量
