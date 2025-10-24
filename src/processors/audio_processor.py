@@ -37,8 +37,7 @@ class AudioProcessor:
             处理结果字典
         """
         try:
-            logger.debug(f"开始处理音频: {audio_path}")
-            
+            logger.debug(f"开始处理音频: {audio_path}")            
             # 使用异步执行器处理CPU密集型操作
             import asyncio
             loop = asyncio.get_event_loop()
@@ -122,35 +121,83 @@ class AudioProcessor:
         Returns:
             分类结果字典
         """
-        # 这里应该使用inaSpeechSegmenter或其他音频分类模型
-        # 暂时使用简单的启发式方法进行分类
-        
-        duration = metadata['duration']
-        
-        # 简单的分类逻辑：
-        # - 短音频（<5秒）可能是噪音或语音片段
-        # - 长音频（>30秒）可能是音乐
-        # - 中等长度音频需要进一步分析
-        
-        if duration < 5:
-            primary_type = 'noise'
-            confidence = 0.7
-        elif duration > 30:
-            primary_type = 'music'
-            confidence = 0.8
-        else:
-            primary_type = 'speech'
-            confidence = 0.6
-        
-        return {
-            'primary_type': primary_type,
-            'confidence': confidence,
-            'details': {
-                'music': 0.3 if primary_type != 'music' else 0.8,
-                'speech': 0.3 if primary_type != 'speech' else 0.8,
-                'noise': 0.3 if primary_type != 'noise' else 0.8
+        try:
+            # 使用inaSpeechSegmenter进行音频分类
+            from src.processors.audio_classifier import AudioClassifier
+            classifier = AudioClassifier()
+            segments = classifier.classify_audio(audio_path)
+            
+            if segments:
+                # 统计各类别的时间占比
+                total_duration = sum(seg['duration'] for seg in segments)
+                type_durations = {}
+                
+                for segment in segments:
+                    seg_type = segment['type']
+                    if seg_type not in type_durations:
+                        type_durations[seg_type] = 0
+                    type_durations[seg_type] += segment['duration']
+                
+                # 计算各类别的占比
+                type_ratios = {k: v / total_duration for k, v in type_durations.items()}
+                
+                # 确定主要类型
+                primary_type = max(type_ratios, key=type_ratios.get)
+                confidence = type_ratios[primary_type]
+                
+                return {
+                    'primary_type': primary_type,
+                    'confidence': confidence,
+                    'details': type_ratios,
+                    'segments': segments
+                }
+            else:
+                # 如果分类失败，使用启发式方法
+                duration = metadata['duration']
+                
+                if duration < 5:
+                    primary_type = 'noise'
+                    confidence = 0.7
+                elif duration > 30:
+                    primary_type = 'music'
+                    confidence = 0.8
+                else:
+                    primary_type = 'speech'
+                    confidence = 0.6
+                
+                return {
+                    'primary_type': primary_type,
+                    'confidence': confidence,
+                    'details': {
+                        'music': 0.3 if primary_type != 'music' else 0.8,
+                        'speech': 0.3 if primary_type != 'speech' else 0.8,
+                        'noise': 0.3 if primary_type != 'noise' else 0.8
+                    }
+                }
+        except Exception as e:
+            logger.error(f"音频分类失败: {e}")
+            # 使用启发式方法作为回退
+            duration = metadata['duration']
+            
+            if duration < 5:
+                primary_type = 'noise'
+                confidence = 0.7
+            elif duration > 30:
+                primary_type = 'music'
+                confidence = 0.8
+            else:
+                primary_type = 'speech'
+                confidence = 0.6
+            
+            return {
+                'primary_type': primary_type,
+                'confidence': confidence,
+                'details': {
+                    'music': 0.3 if primary_type != 'music' else 0.8,
+                    'speech': 0.3 if primary_type != 'speech' else 0.8,
+                    'noise': 0.3 if primary_type != 'noise' else 0.8
+                }
             }
-        }
     
     def _standardize_format(self, audio_path: str) -> np.ndarray:
         """
@@ -246,6 +293,77 @@ class AudioProcessor:
         quality_score = (energy_score + zero_crossing_score) / 2.0
         
         return quality_score
+    
+    async def transcribe_speech(self, audio_path: str) -> str:
+        """
+        使用Whisper模型将语音转换为文本
+        
+        Args:
+            audio_path: 音频文件路径
+            
+        Returns:
+            转录文本
+        """
+        try:
+            import asyncio
+            import librosa
+            
+            # 加载音频数据
+            loop = asyncio.get_event_loop()
+            # 修复librosa.load调用
+            audio_data, sample_rate = await loop.run_in_executor(
+                None, lambda: librosa.load(audio_path, sr=self.target_sample_rate)
+            )
+            
+            # 使用嵌入引擎进行语音转文本
+            from src.business.embedding_engine import get_embedding_engine
+            from src.core.config_manager import get_config_manager
+            
+            # 获取配置
+            config = get_config_manager().config
+            engine = get_embedding_engine(config)
+            
+            # 确保Whisper模型可用
+            if not engine.is_model_available('whisper'):
+                raise RuntimeError("Whisper模型不可用")
+            
+            # 进行语音转文本
+            transcribed_text = await engine.transcribe_speech(audio_data)
+            
+            return transcribed_text
+            
+        except Exception as e:
+            logger.error(f"语音转文本失败: {audio_path}, 错误: {e}")
+            return ""
+    
+    def get_audio_segments_by_type(self, audio_path: str) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        获取按类型分类的音频段
+        
+        Args:
+            audio_path: 音频文件路径
+            
+        Returns:
+            按类型分类的音频段字典
+        """
+        try:
+            # 使用inaSpeechSegmenter进行音频分类
+            from src.processors.audio_classifier import AudioClassifier
+            classifier = AudioClassifier()
+            segments = classifier.classify_audio(audio_path)
+            
+            # 按类型分组
+            segments_by_type = {}
+            for segment in segments:
+                seg_type = segment['type']
+                if seg_type not in segments_by_type:
+                    segments_by_type[seg_type] = []
+                segments_by_type[seg_type].append(segment)
+            
+            return segments_by_type
+        except Exception as e:
+            logger.error(f"获取音频段失败: {e}")
+            return {}
 
 
 # 示例使用

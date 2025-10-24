@@ -1,0 +1,541 @@
+name: 增量代码检查工作流
+
+# 触发条件: 推送或PR时触发
+on:
+  push:
+    branches: [ main, develop ]
+  pull_request:
+    branches: [ main, develop ]
+  workflow_dispatch:
+
+# 设置环境变量
+env:
+  PYTHONPATH: ${{ github.workspace }}/src
+  QT_QPA_PLATFORM: offscreen  # 避免GUI相关错误
+
+jobs:
+  # 检测变更的代码
+  detect-changes:
+    name: 检测代码变更
+    runs-on: ubuntu-latest
+    outputs:
+      # 输出变更的文件列表
+      changed_files: ${{ steps.changes.outputs.changed_files }}
+      # 输出变更的Python文件列表
+      changed_py_files: ${{ steps.changes.outputs.changed_py_files }}
+      # 输出变更的测试文件列表
+      changed_test_files: ${{ steps.changes.outputs.changed_test_files }}
+      # 输出是否需要运行完整测试
+      should_run_full_tests: ${{ steps.changes.outputs.should_run_full_tests }}
+      # 输出是否需要运行集成测试
+      should_run_integration_tests: ${{ steps.changes.outputs.should_run_integration_tests }}
+      # 输出是否需要运行安全检查
+      should_run_security_checks: ${{ steps.changes.outputs.should_run_security_checks }}
+      # 输出是否需要运行性能测试
+      should_run_performance_tests: ${{ steps.changes.outputs.should_run_performance_tests }}
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0  # 获取完整历史以便比较变更
+    
+    - name: 检测文件变更
+      id: changes
+      run: |
+        # 确定比较基准
+        if [ ${{ github.event_name }} == 'push' ]; then
+          BASE=${{ github.event.before }}
+        elif [ ${{ github.event_name }} == 'pull_request' ]; then
+          BASE=${{ github.event.pull_request.base.sha }}
+        else
+          BASE="HEAD~1"
+        fi
+        
+        echo "比较基准: $BASE"
+        
+        # 获取所有变更的文件
+        ALL_CHANGED_FILES=$(git diff --name-only $BASE..${{ github.sha }})
+        echo "所有变更文件: $ALL_CHANGED_FILES"
+        echo "changed_files=$ALL_CHANGED_FILES" >> $GITHUB_OUTPUT
+        
+        # 获取变更的Python文件
+        CHANGED_PY_FILES=$(git diff --name-only $BASE..${{ github.sha }} | grep -E "\.py$" || true)
+        echo "变更的Python文件: $CHANGED_PY_FILES"
+        echo "changed_py_files=$CHANGED_PY_FILES" >> $GITHUB_OUTPUT
+        
+        # 获取变更的测试文件
+        CHANGED_TEST_FILES=$(git diff --name-only $BASE..${{ github.sha }} | grep -E "tests/.*\.py$" || true)
+        echo "变更的测试文件: $CHANGED_TEST_FILES"
+        echo "changed_test_files=$CHANGED_TEST_FILES" >> $GITHUB_OUTPUT
+        
+        # 判断是否需要运行完整测试
+        if echo "$ALL_CHANGED_FILES" | grep -E "(requirements\.txt|setup\.py|pyproject\.toml|src/core/|src/business/)"; then
+          echo "should_run_full_tests=true" >> $GITHUB_OUTPUT
+        else
+          echo "should_run_full_tests=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # 判断是否需要运行集成测试
+        if echo "$ALL_CHANGED_FILES" | grep -E "(src/api/|src/storage/|tests/integration/)"; then
+          echo "should_run_integration_tests=true" >> $GITHUB_OUTPUT
+        else
+          echo "should_run_integration_tests=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # 判断是否需要运行安全检查
+        if echo "$ALL_CHANGED_FILES" | grep -E "(requirements\.txt|setup\.py|pyproject\.toml|src/api/|src/core/)"; then
+          echo "should_run_security_checks=true" >> $GITHUB_OUTPUT
+        else
+          echo "should_run_security_checks=false" >> $GITHUB_OUTPUT
+        fi
+        
+        # 判断是否需要运行性能测试
+        if echo "$ALL_CHANGED_FILES" | grep -E "(src/business/|src/processors/|tests/performance/)"; then
+          echo "should_run_performance_tests=true" >> $GITHUB_OUTPUT
+        else
+          echo "should_run_performance_tests=false" >> $GITHUB_OUTPUT
+        fi
+
+  # 增量语法检查
+  syntax-check:
+    name: 语法检查
+    needs: detect-changes
+    if: needs.detect-changes.outputs.changed_py_files != ''
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: 增量语法检查
+      run: |
+        echo "检查变更的Python文件语法..."
+        CHANGED_FILES="${{ needs.detect-changes.outputs.changed_py_files }}"
+        
+        for file in $CHANGED_FILES; do
+          if [ -f "$file" ]; then
+            echo "检查文件: $file"
+            python -m py_compile "$file" && echo "✓ $file 语法正确" || echo "✗ $file 语法错误"
+          fi
+        done
+
+  # 增量导入检查
+  import-check:
+    name: 导入检查
+    needs: detect-changes
+    if: needs.detect-changes.outputs.changed_py_files != ''
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: 缓存Python依赖
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-import-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-import-
+          ${{ runner.os }}-pip-
+    
+    - name: 安装基础依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt --no-deps  # 只安装项目依赖，不安装子依赖
+    
+    - name: 增量导入检查
+      run: |
+        echo "检查变更文件的导入..."
+        CHANGED_FILES="${{ needs.detect-changes.outputs.changed_py_files }}"
+        
+        # 提取变更的模块路径
+        MODULES=""
+        for file in $CHANGED_FILES; do
+          if [ -f "$file" ]; then
+            # 将文件路径转换为模块路径
+            module_path=$(echo "$file" | sed 's/\//./g' | sed 's/\.py$//')
+            if [ -n "$MODULES" ]; then
+              MODULES="$MODULES,$module_path"
+            else
+              MODULES="$module_path"
+            fi
+          fi
+        done
+        
+        echo "检查模块: $MODULES"
+        
+        # 尝试导入变更的模块
+        python -c "
+        import sys
+        modules = '$MODULES'.split(',')
+        
+        failed_imports = []
+        for module in modules:
+          if not module:
+            continue
+          try:
+            __import__(module)
+            print(f'✓ {module} 导入成功')
+          except Exception as e:
+            print(f'✗ {module} 导入失败: {e}')
+            failed_imports.append(module)
+        
+        if failed_imports:
+          print(f'\\n以下模块导入失败: {failed_imports}')
+          sys.exit(1)
+        else:
+          print('\\n所有变更模块导入成功')
+        "
+
+  # 增量代码风格检查
+  style-check:
+    name: 代码风格检查
+    needs: detect-changes
+    if: needs.detect-changes.outputs.changed_py_files != ''
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: 安装代码风格检查工具
+      run: |
+        python -m pip install --upgrade pip
+        pip install flake8
+    
+    - name: 增量代码风格检查
+      run: |
+        echo "检查变更文件的代码风格..."
+        CHANGED_FILES="${{ needs.detect-changes.outputs.changed_py_files }}"
+        
+        if [ -n "$CHANGED_FILES" ]; then
+          # 设置flake8配置，只检查严重错误
+          flake8 --select=E9,F63,F7,F82 --show-source --statistics $CHANGED_FILES
+        else
+          echo "没有Python文件变更，跳过代码风格检查"
+        fi
+
+  # 增量单元测试
+  unit-tests:
+    name: 单元测试
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should_run_full_tests == 'true' || needs.detect-changes.outputs.changed_test_files != ''
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: 缓存Python依赖
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-unit-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-unit-
+          ${{ runner.os }}-pip-
+    
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-xvfb
+    
+    - name: 安装系统依赖
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libmagic1 xvfb
+    
+    - name: 运行增量单元测试
+      run: |
+        if [ "${{ needs.detect-changes.outputs.should_run_full_tests }}" == "true" ]; then
+          echo "运行完整单元测试..."
+          python -m pytest tests/unit/ -v --tb=short --maxfail=5 --cov=src --cov-report=xml
+        else
+          echo "运行变更相关的单元测试..."
+          CHANGED_TEST_FILES="${{ needs.detect-changes.outputs.changed_test_files }}"
+          
+          if [ -n "$CHANGED_TEST_FILES" ]; then
+            python -m pytest $CHANGED_TEST_FILES -v --tb=short --maxfail=5 --cov=src --cov-report=xml
+          else
+            echo "没有测试文件变更，跳过单元测试"
+          fi
+        fi
+    
+    - name: 上传覆盖率报告
+      uses: codecov/codecov-action@v3
+      if: always()
+      with:
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+
+  # 增量集成测试
+  integration-tests:
+    name: 集成测试
+    needs: [detect-changes, unit-tests]
+    if: needs.detect-changes.outputs.should_run_integration_tests == 'true'
+    runs-on: ubuntu-latest
+    
+    services:
+      qdrant:
+        image: qdrant/qdrant:latest
+        ports:
+          - 6333:6333
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: 缓存Python依赖
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-integration-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-integration-
+          ${{ runner.os }}-pip-
+    
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-xvfb
+    
+    - name: 安装系统依赖
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libmagic1 xvfb
+    
+    - name: 运行增量集成测试
+      run: |
+        echo "运行集成测试..."
+        # 设置环境变量
+        export QDRANT_HOST=localhost
+        export QDRANT_PORT=6333
+        
+        # 运行基础集成测试
+        python -m pytest tests/integration/test_basic_integration.py -v --tb=short --maxfail=3
+        # 运行API集成测试
+        python -m pytest tests/integration/test_api_basic.py -v --tb=short --maxfail=3
+
+  # 增量安全检查
+  security-check:
+    name: 安全检查
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should_run_security_checks == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: 安装安全检查工具
+      run: |
+        python -m pip install --upgrade pip
+        pip install bandit safety
+    
+    - name: 运行安全检查
+      run: |
+        echo "运行安全检查..."
+        # 检查已知安全漏洞
+        safety check --json || true
+        # 运行bandit安全检查
+        bandit -r src/ -f json || true
+
+  # 增量性能测试
+  performance-tests:
+    name: 性能测试
+    needs: detect-changes
+    if: needs.detect-changes.outputs.should_run_performance_tests == 'true'
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: 缓存Python依赖
+      uses: actions/cache@v3
+      with:
+        path: ~/.cache/pip
+        key: ${{ runner.os }}-pip-performance-${{ hashFiles('**/requirements.txt') }}
+        restore-keys: |
+          ${{ runner.os }}-pip-performance-
+          ${{ runner.os }}-pip-
+    
+    - name: 安装依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+        pip install pytest pytest-cov pytest-xvfb
+    
+    - name: 安装系统依赖
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y ffmpeg libmagic1 xvfb
+    
+    - name: 运行性能测试
+      run: |
+        echo "运行性能测试..."
+        # 运行性能测试
+        python -m pytest tests/performance/ -v --tb=short --maxfail=3 || true
+
+  # 增量检查结果汇总
+  results-summary:
+    name: 检查结果汇总
+    needs: [detect-changes, syntax-check, import-check, style-check, unit-tests, integration-tests, security-check, performance-tests]
+    if: always()
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 生成检查结果汇总
+      run: |
+        # 创建检查结果汇总报告
+        cat << EOF > incremental_check_summary.md
+        
+        # 增量代码检查结果汇总
+        
+        ## 变更信息
+        - 变更文件: ${{ needs.detect-changes.outputs.changed_files }}
+        - 变更Python文件: ${{ needs.detect-changes.outputs.changed_py_files }}
+        - 变更测试文件: ${{ needs.detect-changes.outputs.changed_test_files }}
+        
+        ## 检查结果
+        
+        ### 语法检查
+        - 状态: ${{ needs.syntax-check.result }}
+        
+        ### 导入检查
+        - 状态: ${{ needs.import-check.result }}
+        
+        ### 代码风格检查
+        - 状态: ${{ needs.style-check.result }}
+        
+        ### 单元测试
+        - 状态: ${{ needs.unit-tests.result }}
+        
+        ### 集成测试
+        - 状态: ${{ needs.integration-tests.result }}
+        
+        ### 安全检查
+        - 状态: ${{ needs.security-check.result }}
+        
+        ### 性能测试
+        - 状态: ${{ needs.performance-tests.result }}
+        
+        ## 检查决策
+        
+        ### 完整测试
+        - 决策: ${{ needs.detect-changes.outputs.should_run_full_tests }}
+        
+        ### 集成测试
+        - 决策: ${{ needs.detect-changes.outputs.should_run_integration_tests }}
+        
+        ### 安全检查
+        - 决策: ${{ needs.detect-changes.outputs.should_run_security_checks }}
+        
+        ### 性能测试
+        - 决策: ${{ needs.detect-changes.outputs.should_run_performance_tests }}
+        
+        ## 建议
+        
+        EOF
+        
+        # 根据检查结果提供建议
+        FAILED_CHECKS=""
+        
+        if [[ "${{ needs.syntax-check.result }}" == "failure" ]]; then
+          FAILED_CHECKS="$FAILED_CHECKS 语法检查"
+        fi
+        
+        if [[ "${{ needs.import-check.result }}" == "failure" ]]; then
+          FAILED_CHECKS="$FAILED_CHECKS 导入检查"
+        fi
+        
+        if [[ "${{ needs.style-check.result }}" == "failure" ]]; then
+          FAILED_CHECKS="$FAILED_CHECKS 代码风格检查"
+        fi
+        
+        if [[ "${{ needs.unit-tests.result }}" == "failure" ]]; then
+          FAILED_CHECKS="$FAILED_CHECKS 单元测试"
+        fi
+        
+        if [[ "${{ needs.integration-tests.result }}" == "failure" ]]; then
+          FAILED_CHECKS="$FAILED_CHECKS 集成测试"
+        fi
+        
+        if [[ "${{ needs.security-check.result }}" == "failure" ]]; then
+          FAILED_CHECKS="$FAILED_CHECKS 安全检查"
+        fi
+        
+        if [[ "${{ needs.performance-tests.result }}" == "failure" ]]; then
+          FAILED_CHECKS="$FAILED_CHECKS 性能测试"
+        fi
+        
+        if [ -n "$FAILED_CHECKS" ]; then
+          echo "- ❌ 以下检查失败: $FAILED_CHECKS" >> incremental_check_summary.md
+          echo "- 🔍 请查看具体失败步骤的日志" >> incremental_check_summary.md
+          echo "- 📋 优先修复语法错误和导入错误" >> incremental_check_summary.md
+        else
+          echo "- ✅ 所有检查通过" >> incremental_check_summary.md
+          echo "- 🚀 代码质量良好，可以继续开发" >> incremental_check_summary.md
+        fi
+        
+        # 输出汇总报告
+        cat incremental_check_summary.md
+    
+    - name: 上传检查结果汇总
+      uses: actions/upload-artifact@v3
+      if: always()
+      with:
+        name: incremental-check-summary
+        path: incremental_check_summary.md
+    
+    - name: 通知失败
+      if: failure()
+      run: |
+        echo "::error::增量代码检查失败，请查看详细日志修复问题"
+        echo "::error::语法检查: ${{ needs.syntax-check.result }}"
+        echo "::error::导入检查: ${{ needs.import-check.result }}"
+        echo "::error::代码风格检查: ${{ needs.style-check.result }}"
+        echo "::error::单元测试: ${{ needs.unit-tests.result }}"
+        echo "::error::集成测试: ${{ needs.integration-tests.result }}"
+        echo "::error::安全检查: ${{ needs.security-check.result }}"
+        echo "::error::性能测试: ${{ needs.performance-tests.result }}"

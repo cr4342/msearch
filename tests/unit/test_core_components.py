@@ -10,7 +10,7 @@ import asyncio
 import logging
 from src.core.config_manager import get_config_manager
 from src.business.embedding_engine import EmbeddingEngine
-from src.business.processing_orchestrator import ProcessingOrchestrator
+from src.business.orchestrator import ProcessingOrchestrator
 from src.business.smart_retrieval import SmartRetrievalEngine
 from src.business.multimodal_fusion_engine import MultiModalFusionEngine
 
@@ -36,17 +36,20 @@ def test_embedding_engine():
         config_manager = get_config_manager()
         config = config_manager.config
         
-        # 测试配置
+        # 测试配置 - 使用本地模型路径（只启用CLIP模型）
         test_config = {
             'features': {
                 'enable_clip': True,
-                'enable_clap': True,
-                'enable_whisper': True
+                'enable_clap': False,  # 禁用CLAP模型
+                'enable_whisper': False  # 禁用Whisper模型
             },
             'models': {
-                'clip_model': 'openai/clip-vit-base-patch32',
-                'clap_model': 'laion/clap-htsat-fused',
-                'whisper_model': 'openai/whisper-base'
+                'clip': {
+                    'model_name': './data/models/clip-vit-base-patch32',
+                    'local_path': './data/models/clip-vit-base-patch32',
+                    'device': 'cpu',
+                    'batch_size': 16
+                }
             },
             'device': 'cpu'
         }
@@ -133,13 +136,16 @@ async def test_embedding_functions_async():
         test_config = {
             'features': {
                 'enable_clip': True,
-                'enable_clap': True,
-                'enable_whisper': True
+                'enable_clap': False,  # 禁用CLAP模型
+                'enable_whisper': False  # 禁用Whisper模型
             },
             'models': {
-                'clip_model': 'openai/clip-vit-base-patch32',
-                'clap_model': 'laion/clap-htsat-fused',
-                'whisper_model': 'openai/whisper-base'
+                'clip': {
+                    'model_name': './data/models/clip-vit-base-patch32',
+                    'local_path': './data/models/clip-vit-base-patch32',
+                    'device': 'cpu',
+                    'batch_size': 16
+                }
             },
             'device': 'cpu'
         }

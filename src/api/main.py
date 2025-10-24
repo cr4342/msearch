@@ -20,7 +20,7 @@ from typing import List, Dict, Optional
 from src.core.config import load_config
 from src.core.logging_config import setup_logging, get_logger
 from src.core.config_manager import get_config_manager
-from src.business.processing_orchestrator import ProcessingOrchestrator
+from src.business.orchestrator import ProcessingOrchestrator
 from src.business.embedding_engine import get_embedding_engine
 
 # 创建FastAPI应用实例

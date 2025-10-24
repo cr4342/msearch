@@ -18,16 +18,33 @@ class TestEmbeddingEngine:
     @pytest.fixture
     def mock_config(self):
         """模拟配置"""
-        config = Mock(spec=ConfigManager)
-        config.get.side_effect = lambda key, default=None: {
-            'embedding.models_dir': './data/models',
-            'embedding.models.clip': 'clip',
-            'embedding.models.clap': 'clap', 
-            'embedding.models.whisper': 'whisper',
-            'processing.batch_size': 16,
-            'device': 'cpu'
-        }.get(key, default)
-        return config
+        return {
+            'models_storage': {
+                'models_dir': './data/models',
+                'offline_mode': True,
+                'force_local': True
+            },
+            'models': {
+                'clip': {
+                    'model_name': './data/models/clip-vit-base-patch32',
+                    'local_path': './data/models/clip-vit-base-patch32',
+                    'device': 'cpu',
+                    'batch_size': 16
+                },
+                'clap': {
+                    'model_name': './data/models/clap-htsat-fused',
+                    'local_path': './data/models/clap-htsat-fused',
+                    'device': 'cpu',
+                    'batch_size': 8
+                },
+                'whisper': {
+                    'model_name': './data/models/whisper-base',
+                    'local_path': './data/models/whisper-base',
+                    'device': 'cpu',
+                    'batch_size': 4
+                }
+            }
+        }
     
     @pytest.fixture
     def mock_infinity_engine(self):
@@ -46,8 +63,8 @@ class TestEmbeddingEngine:
         assert engine.engine_array == mock_infinity_engine
         
         # 验证模型路径配置
-        mock_config.get.assert_any_call('embedding.models_dir', './data/models')
-        mock_config.get.assert_any_call('embedding.models.clip', 'clip')
+        assert mock_config['models_storage']['models_dir'] == './data/models'
+        assert mock_config['models']['clip']['model_name'] == './data/models/clip-vit-base-patch32'
     
     @pytest.mark.asyncio
     async def test_embed_image(self, mock_config, mock_infinity_engine):

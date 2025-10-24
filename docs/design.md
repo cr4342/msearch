@@ -3481,8 +3481,7 @@ msearch/
 │
 ├── config/                            # 配置文件目录
 │   ├── config.yml                     # 主配置文件
-│   ├── config.example.yml             # 配置文件示例
-│   └── logging.yml                    # 日志配置文件
+│   └──config.example.yml              # 日志配置文件
 │
 ├── src/                               # 源代码目录
 │   ├── __init__.py
@@ -3568,11 +3567,10 @@ msearch/
 ├── scripts/                           # 脚本文件
 │   ├── start.py                       # 应用启动脚本
 │   ├── setup_environment.py          # 环境初始化脚本
-│   ├── download_model_resources.sh   # 模型资源下载到offline/models/
-│   ├── download_model_resources.bat  # Windows模型资源下载脚本
+│   ├── download_all_resources.sh   # 模型资源下载到offline/models/
+│   ├── download_all_resources.bat  # Windows模型资源下载脚本
 │   ├── install_auto.sh               # Linux/Mac离线安装
 │   ├── install_auto.bat              # Windows离线安装
-│   ├── download_models.py            # 模型下载脚本
 │   └── database_init.py              # 数据库初始化脚本
 │
 ├── tests/                             # 测试文件
@@ -3591,7 +3589,7 @@ msearch/
 │   │   ├── test_api_endpoints.py      # API端点测试
 │   │   ├── test_search_workflow.py    # 检索流程测试
 │   │   └── test_processing_pipeline.py # 处理流程测试
-│   └── fixtures/                      # 测试数据
+│   └── test_data/                      # 测试数据
 │       ├── images/                    # 测试图片
 │       ├── videos/                    # 测试视频
 │       ├── audios/                    # 测试音频
@@ -5097,94 +5095,382 @@ async def adaptive_person_search(self, query: str):
 
 # 11 部署说明
 
-## 11.1 统一目录结构设计
+## 11.1 开发环境 vs 生产环境目录结构
 
-### 11.1.1 目录结构一致性
+### 11.1.1 开发环境完整目录结构
 
-为了简化开发和部署流程，系统采用**统一的目录结构**设计原则：
-
-- **开发环境**和**部署环境**使用**相同的目录结构**
-- **配置文件位置统一**：无论开发还是部署，配置文件始终位于`config/`目录
-- **部署时选择性包含文件**：部署包不包含开发专用文件
-
-### 11.1.2 统一目录结构
+开发环境包含完整的项目文件，用于开发、测试和文档维护：
 
 ```
-msearch/
-├── config/                # 配置文件（开发和部署统一位置）
-│   └── config.yml         # 主配置文件
-├── data/                  # 数据存储目录
-│   └── models/            # 系统运行时模型路径，包含clip、clap、whisper等子目录
-├── logs/                  # 日志文件目录
-├── offline/               # 离线资源目录（仅在部署时下载缓存使用，部署完成后自动删除）
-│   └── models/            # 模型文件临时缓存目录
-├── src/                   # 源代码
-└── scripts/               # 部署和维护脚本
+msearch-development/
+├── README.md                           # 项目说明文档
+├── requirements.txt                    # Python依赖包列表
+├── requirements-dev.txt                # 开发环境依赖
+├── setup.py                           # 项目安装配置
+├── pyproject.toml                     # 现代Python项目配置
+├── .gitignore                         # Git忽略文件配置
+├── .env.example                       # 环境变量示例文件
+│
+├── config/                            # 配置文件目录
+│   ├── config.yml                     # 主配置文件
+│   └── config.example.yml             # 配置示例文件
+│
+├── src/                               # 源代码目录
+│   ├── core/                          # 核心组件
+│   ├── api/                           # API服务层
+│   ├── business/                      # 业务逻辑层
+│   ├── processors/                    # 专业处理器
+│   ├── storage/                       # 存储层
+│   ├── models/                        # 数据模型
+│   ├── utils/                         # 工具函数
+│   └── ui/                            # 用户界面层
+│
+├── scripts/                           # 脚本文件
+│   ├── start.py                       # 应用启动脚本
+│   ├── setup_environment.py          # 环境初始化脚本
+│   ├── download_all_resources.sh      # 模型资源下载脚本
+│   ├── install_auto.sh                # 自动安装脚本
+│   └── database_init.py               # 数据库初始化脚本
+│
+├── tests/                             # 测试文件（开发专用）
+│   ├── unit/                          # 单元测试
+│   ├── integration/                   # 集成测试
+│   └── test_data/                     # 测试数据
+│
+├── examples/                          # 示例代码（开发专用）
+│   ├── logging_examples.py           # 日志系统使用示例
+│   ├── search_examples.py            # 检索功能示例
+│   └── processing_examples.py        # 处理流程示例
+│
+├── docs/                              # 文档目录（开发专用）
+│   ├── design.md                      # 设计文档
+│   ├── development_plan.md            # 开发计划
+│   ├── api_documentation.md           # API文档
+│   └── user_manual.md                 # 用户手册
+│
+├── offline/                           # 离线部署资源缓存
+│   ├── models/                        # 离线安装时的模型缓存文件
+│   ├── packages/                      # 离线Python依赖包
+│   └── bin/                           # 二进制执行文件
+│
+├── data/                              # 数据目录（运行时创建）
+│   ├── database/                      # 数据库文件
+│   ├── models/                        # 系统运行时使用的AI模型存储
+│   ├── temp/                          # 临时文件
+│   └── logs/                          # 日志文件
+│
+└── deploy_test/                       # 部署测试目录（不纳入Git）
 ```
 
-### 11.1.3 目录职责说明
+### 11.1.2 生产环境部署目录结构
 
-| 目录 | 职责 | 可持久化 |
-|------|------|----------|
-| `config/` | 系统配置 | ✅ |
-| `data/` | 数据库和索引 | ✅ |
-| `logs/` | 运行日志 | ✅ |
-| `offline/` | 离线资源 | ✅ |
-| `src/` | 源代码 | ✅ |
-| `scripts/` | 运维脚本 | 仅包含安装运行必要脚本 |
-| `venv/` | 虚拟环境 | 重新部署时需重建 |
+生产环境只包含运行必需的文件，排除开发和测试相关文件：
 
-## 11.2 部署文件选择
+```
+msearch-production/
+├── README.md                          # 基础说明文档
+├── requirements.txt                   # 生产环境依赖
+│
+├── config/                            # 配置文件目录
+│   ├── config.yml                     # 主配置文件
+│   └── config.example.yml             # 配置示例文件
+│
+├── src/                               # 源代码目录（与开发环境一致）
+│   ├── core/                          # 核心组件
+│   ├── api/                           # API服务层
+│   ├── business/                      # 业务逻辑层
+│   ├── processors/                    # 专业处理器
+│   ├── storage/                       # 存储层
+│   ├── models/                        # 数据模型
+│   ├── utils/                         # 工具函数
+│   └── ui/                            # 用户界面层
+│
+├── scripts/                           # 部署和运维脚本（精简版）
+│   ├── start.py                       # 应用启动脚本
+│   ├── install_auto.sh                # 自动安装脚本
+│   └── database_init.py               # 数据库初始化脚本
+│
+├── offline/                           # 离线资源（部署时使用）
+│   ├── models/                        # 离线模型文件
+│   ├── packages/                      # 离线依赖包
+│   └── bin/                           # 二进制文件
+│
+├── data/                              # 运行时数据目录（部署时创建）
+│   ├── database/                      # 数据库文件目录
+│   ├── models/                        # AI模型存储目录
+│   ├── temp/                          # 临时文件目录
+│   └── logs/                          # 日志文件目录
+│
+└── deployment_guide.md                # 部署指南（从docs/复制）
+```
 
-### 11.2.1 部署时应包含的文件
+### 11.1.3 开发环境 vs 生产环境对比
 
-- **config/**：配置文件目录（开发和部署统一位置）
-- **src/**：编译后的源代码
-- **scripts/**：部署和维护脚本
-- **offline/**：离线资源和预下载的模型
-- **data/**：空目录，用于运行时存储数据（可根据需要预先创建）
-- **logs/**：空目录，用于运行时存储日志（可根据需要预先创建）
+| 目录/文件 | 开发环境 | 生产环境 | 说明 |
+|----------|---------|---------|------|
+| **src/** | ✅ | ✅ | 源代码，两环境一致 |
+| **config/** | ✅ | ✅ | 配置文件，两环境一致 |
+| **scripts/** | ✅ | ✅ 精简版 | 仅包含部署运维必需脚本 |
+| **offline/** | ✅ | ✅ | 离线资源，两环境一致 |
+| **data/** | ✅ | ✅ | 运行时数据，两环境一致 |
+| **tests/** | ✅ | ❌ | 测试文件，生产环境不需要 |
+| **docs/** | ✅ | ❌ | 文档文件，生产环境不需要 |
+| **examples/** | ✅ | ❌ | 示例代码，生产环境不需要 |
+| **.github/** | ✅ | ❌ | CI/CD配置，生产环境不需要 |
+| **requirements-dev.txt** | ✅ | ❌ | 开发依赖，生产环境不需要 |
+| **deploy_test/** | ✅ | ❌ | 部署测试，生产环境不需要 |
 
-### 11.2.2 部署时应排除的开发文件
+## 11.2 部署打包策略
 
-- **tests/**：测试文件和测试数据
-- **docs/**：文档文件（除部署指南外）
-- **examples/**：示例代码
-- **.github/**：CI/CD配置
-- **pytest.ini**, **.coveragerc**：测试配置
-- **requirements-dev.txt**, **requirements-test.txt**：开发依赖
-- **venv/**：虚拟环境（应在部署环境重新创建）
-- **.git/**：版本控制文件
+### 11.2.1 自动化部署打包脚本
 
-## 11.3 部署流程
-
-### 11.3.1 快速部署
-
-使用提供的自动化脚本进行一键部署：
+创建部署打包脚本，确保交付包的一致性：
 
 ```bash
-# Linux/Mac
-./scripts/install_auto.sh
+#!/bin/bash
+# scripts/build_deployment_package.sh
 
-# Windows
-./scripts/install_auto.bat
+echo "构建生产环境部署包..."
+
+# 创建部署目录
+DEPLOY_DIR="dist/msearch-production"
+mkdir -p "$DEPLOY_DIR"
+
+echo "复制核心文件..."
+# 复制必要文件
+cp README.md "$DEPLOY_DIR/"
+cp requirements.txt "$DEPLOY_DIR/"
+
+# 复制源代码
+cp -r src/ "$DEPLOY_DIR/"
+
+# 复制配置文件
+cp -r config/ "$DEPLOY_DIR/"
+
+# 复制离线资源
+cp -r offline/ "$DEPLOY_DIR/"
+
+# 复制精简版脚本
+mkdir -p "$DEPLOY_DIR/scripts/"
+cp scripts/start.py "$DEPLOY_DIR/scripts/"
+cp scripts/install_auto.sh "$DEPLOY_DIR/scripts/"
+cp scripts/install_auto.bat "$DEPLOY_DIR/scripts/"
+cp scripts/database_init.py "$DEPLOY_DIR/scripts/"
+
+# 创建运行时目录
+mkdir -p "$DEPLOY_DIR/data/database/"
+mkdir -p "$DEPLOY_DIR/data/models/"
+mkdir -p "$DEPLOY_DIR/data/temp/"
+mkdir -p "$DEPLOY_DIR/data/logs/"
+
+# 复制部署指南
+cp docs/deployment_guide.md "$DEPLOY_DIR/"
+
+echo "清理不必要的文件..."
+# 清理开发文件
+find "$DEPLOY_DIR" -name "*.pyc" -delete
+find "$DEPLOY_DIR" -name "__pycache__" -type d -exec rm -rf {} + 2>/dev/null || true
+find "$DEPLOY_DIR" -name ".pytest_cache" -type d -exec rm -rf {} + 2>/dev/null || true
+
+echo "生成部署包信息..."
+cat > "$DEPLOY_DIR/DEPLOYMENT_INFO.txt" << EOF
+msearch 生产环境部署包
+构建时间: $(date)
+版本: $(git describe --tags --always 2>/dev/null || echo "unknown")
+包含文件:
+- src/: 源代码
+- config/: 配置文件
+- scripts/: 部署脚本
+- offline/: 离线资源
+- data/: 运行时数据目录（空）
+
+排除文件:
+- tests/: 测试文件
+- docs/: 文档文件（除部署指南）
+- examples/: 示例代码
+- .github/: CI/CD配置
+- requirements-dev.txt: 开发依赖
+
+安装说明:
+1. 解压部署包到目标目录
+2. 运行 ./scripts/install_auto.sh 进行自动安装
+3. 参考 deployment_guide.md 进行配置和启动
+EOF
+
+echo "部署包构建完成: $DEPLOY_DIR/"
+echo "包大小: $(du -sh "$DEPLOY_DIR" | cut -f1)"
 ```
 
-### 11.3.2 手动部署步骤
+### 11.2.2 部署包验证脚本
 
-1. **准备环境**：安装Python 3.8+和依赖
-2. **创建目录结构**：按照统一目录结构创建部署目录
-3. **配置管理**：确保config/目录包含正确的配置文件
-4. **模型下载**：下载所需AI模型到offline/models/
-5. **启动服务**：启动API服务和Web UI
+```bash
+#!/bin/bash
+# scripts/validate_deployment_package.sh
 
-### 11.3.3 部署后验证
+DEPLOY_DIR="dist/msearch-production"
 
-部署完成后，建议执行以下验证：
+echo "验证部署包完整性..."
 
-- 检查API服务是否正常启动（默认端口8000）
-- 验证UI是否可访问（默认端口3000）
-- 运行基础功能测试确保系统正常工作
+# 检查必要文件
+required_files=(
+    "README.md"
+    "requirements.txt"
+    "config/config.yml"
+    "src/core/__init__.py"
+    "src/api/main.py"
+    "scripts/start.py"
+    "scripts/install_auto.sh"
+    "deployment_guide.md"
+)
+
+missing_files=()
+for file in "${required_files[@]}"; do
+    if [[ ! -f "$DEPLOY_DIR/$file" ]]; then
+        missing_files+=("$file")
+    fi
+done
+
+if [[ ${#missing_files[@]} -gt 0 ]]; then
+    echo "❌ 缺少必要文件:"
+    printf '%s\n' "${missing_files[@]}"
+    exit 1
+fi
+
+# 检查不应存在的开发文件
+dev_files=(
+    "tests/"
+    "docs/design.md"
+    "examples/"
+    ".github/"
+    "requirements-dev.txt"
+    "pytest.ini"
+)
+
+found_dev_files=()
+for file in "${dev_files[@]}"; do
+    if [[ -e "$DEPLOY_DIR/$file" ]]; then
+        found_dev_files+=("$file")
+    fi
+done
+
+if [[ ${#found_dev_files[@]} -gt 0 ]]; then
+    echo "⚠️  发现开发文件（应排除）:"
+    printf '%s\n' "${found_dev_files[@]}"
+fi
+
+# 检查目录结构
+required_dirs=(
+    "src/core"
+    "src/api"
+    "src/business"
+    "config"
+    "scripts"
+    "data/database"
+    "data/models"
+    "data/logs"
+)
+
+missing_dirs=()
+for dir in "${required_dirs[@]}"; do
+    if [[ ! -d "$DEPLOY_DIR/$dir" ]]; then
+        missing_dirs+=("$dir")
+    fi
+done
+
+if [[ ${#missing_dirs[@]} -gt 0 ]]; then
+    echo "❌ 缺少必要目录:"
+    printf '%s\n' "${missing_dirs[@]}"
+    exit 1
+fi
+
+echo "✅ 部署包验证通过"
+echo "📦 部署包信息:"
+cat "$DEPLOY_DIR/DEPLOYMENT_INFO.txt"
+```
+
+## 11.3 部署验证清单
+
+### 11.3.1 文件完整性检查
+
+部署前验证清单：
+
+- [ ] **config/config.yml** 存在且配置正确
+- [ ] **src/** 目录包含所有必要的源代码模块
+- [ ] **scripts/** 目录包含部署脚本（start.py, install_auto.sh, database_init.py）
+- [ ] **offline/models/** 包含所需的AI模型文件
+- [ ] **requirements.txt** 包含正确的生产环境依赖版本
+- [ ] **data/** 目录结构完整（database/, models/, logs/, temp/）
+
+### 11.3.2 目录权限检查
+
+- [ ] **data/** 目录及子目录可写（用于数据库、索引、日志）
+- [ ] **config/** 目录可读（用于配置加载）
+- [ ] **scripts/** 目录中的脚本文件可执行
+- [ ] **offline/** 目录可读（用于离线资源访问）
+
+### 11.3.3 功能验证
+
+部署后验证清单：
+
+- [ ] **API服务正常启动**（默认端口8000）
+- [ ] **基础检索功能正常**（文本查询返回结果）
+- [ ] **模型加载成功**（CLIP、CLAP、Whisper模型正常工作）
+- [ ] **数据库连接正常**（SQLite和Qdrant连接成功）
+- [ ] **日志系统工作正常**（日志文件正常生成）
+
+## 11.4 部署最佳实践
+
+### 11.4.1 部署环境准备
+
+1. **系统要求**：
+   - Python 3.8+ 
+   - 4GB+ 内存（推荐8GB+）
+   - 10GB+ 磁盘空间
+   - GPU支持（可选，提升性能）
+
+2. **依赖检查**：
+   ```bash
+   # 检查Python版本
+   python --version
+   
+   # 检查pip版本
+   pip --version
+   
+   # 检查磁盘空间
+   df -h
+   ```
+
+### 11.4.2 部署后维护
+
+1. **日志监控**：
+   - 定期检查 `data/logs/` 目录下的日志文件
+   - 监控错误日志和性能日志
+   - 设置日志轮转避免磁盘空间不足
+
+2. **数据备份**：
+   - 定期备份 `data/database/` 目录
+   - 备份重要配置文件
+   - 制定数据恢复策略
+
+3. **性能监控**：
+   - 监控API响应时间
+   - 检查内存和CPU使用率
+   - 定期清理临时文件
+
+## 11.5 总结
+
+通过明确区分开发环境和生产环境的目录结构，我们解决了以下问题：
+
+1. **交付一致性**：明确定义了生产环境应包含的文件和目录
+2. **部署简化**：排除不必要的开发文件，减少部署包大小
+3. **维护便利**：提供自动化打包和验证脚本
+4. **质量保证**：建立完整的部署验证清单
+
+这样的设计确保了：
+- ✅ **开发效率**：开发环境包含完整的开发工具和文档
+- ✅ **部署简洁**：生产环境只包含运行必需的文件
+- ✅ **维护便利**：统一的目录结构便于运维管理
+- ✅ **质量保证**：自动化验证确保部署包完整性
 
 
 # 12 相关文档及资料参考

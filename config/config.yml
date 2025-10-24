@@ -52,15 +52,20 @@ models_storage:
   force_local: true
   # 离线缓存路径（仅安装脚本使用）
   offline_cache: "./offline/models"
+  # 模型下载源配置（仅安装脚本使用）
+  download_sources:
+    clip: "openai/clip-vit-base-patch32"
+    clap: "laion/clap-htsat-fused"
+    whisper: "openai/whisper-base"
 
 # 模型配置
 models:
   # CLIP模型配置 - 用于图像处理和图像检索时的文本向量化
   clip:
     # 使用本地模型路径（不是模型名称）
-    model_name: "./data/models/clip"
+    model_name: "./data/models/clip-vit-base-patch32"
     # 本地路径（与model_name相同）
-    local_path: "./data/models/clip"
+    local_path: "./data/models/clip-vit-base-patch32"
     # 不允许下载
     allow_download: false
     device: "auto"  # auto, cpu, cuda
@@ -71,9 +76,9 @@ models:
   # CLAP模型配置 - 用于音频处理和音频检索时的文本向量化
   clap:
     # 使用本地模型路径（不是模型名称）
-    model_name: "./data/models/clap"
+    model_name: "./data/models/clap-htsat-fused"
     # 本地路径（与model_name相同）
-    local_path: "./data/models/clap"
+    local_path: "./data/models/clap-htsat-fused"
     # 不允许下载
     allow_download: false
     device: "auto"
@@ -84,9 +89,9 @@ models:
   # Whisper模型配置 - 用于语音转文本和语音检索时的文本向量化
   whisper:
     # 使用本地模型路径（不是模型名称）
-    model_name: "./data/models/whisper"
+    model_name: "./data/models/whisper-base"
     # 本地路径（与model_name相同）
-    local_path: "./data/models/whisper"
+    local_path: "./data/models/whisper-base"
     # 不允许下载
     allow_download: false
     device: "auto"

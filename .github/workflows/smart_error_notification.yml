@@ -1,0 +1,309 @@
+name: 智能错误分类与通知工作流
+
+# 触发条件: 其他工作流完成时触发
+on:
+  workflow_run:
+    workflows: ["快速错误检测工作流", "多模态处理器专项检查", "增量代码检查工作流"]
+    types:
+      - completed
+
+# 设置环境变量
+env:
+  PYTHONPATH: ${{ github.workspace }}/src
+
+jobs:
+  # 分析工作流结果
+  analyze-results:
+    name: 分析工作流结果
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion != 'success' }}
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 设置Python环境
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+    
+    - name: 安装Python依赖
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyyaml requests
+    
+    - name: 解析工作流结果
+      id: parse-results
+      run: |
+        python << EOF
+        import os
+        import re
+        import json
+        import yaml
+        from pathlib import Path
+        
+        # 错误分类
+        error_categories = {
+            "syntax_errors": {
+                "keywords": ["SyntaxError", "IndentationError", "NameError", "TypeError", "ValueError"],
+                "priority": "high",
+                "description": "语法错误，阻止代码执行"
+            },
+            "import_errors": {
+                "keywords": ["ImportError", "ModuleNotFoundError", "No module named"],
+                "priority": "high",
+                "description": "导入错误，模块依赖问题"
+            },
+            "test_failures": {
+                "keywords": ["FAILED", "ERROR", "test", "assert"],
+                "priority": "medium",
+                "description": "测试失败，功能问题"
+            },
+            "security_issues": {
+                "keywords": ["bandit", "safety", "vulnerability", "security"],
+                "priority": "high",
+                "description": "安全问题，潜在风险"
+            },
+            "performance_issues": {
+                "keywords": ["performance", "slow", "timeout", "memory"],
+                "priority": "medium",
+                "description": "性能问题，影响用户体验"
+            },
+            "code_quality": {
+                "keywords": ["flake8", "pylint", "mypy", "style", "lint"],
+                "priority": "low",
+                "description": "代码质量问题，不影响功能"
+            },
+            "integration_issues": {
+                "keywords": ["integration", "api", "database", "connection"],
+                "priority": "medium",
+                "description": "集成问题，组件间交互"
+            },
+            "multimodal_issues": {
+                "keywords": ["audio", "image", "video", "text", "processor", "embedding"],
+                "priority": "medium",
+                "description": "多模态处理问题"
+            }
+        }
+        
+        # 模拟分析错误日志 (实际项目中会从工作流产物中获取)
+        error_report = {
+            "summary": {
+                "total_errors": 5,
+                "categorized_errors": 4,
+                "uncategorized_errors": 1
+            },
+            "categories": {
+                "syntax_errors": {
+                    "count": 2,
+                    "priority": "high",
+                    "description": "语法错误，阻止代码执行",
+                    "errors": [
+                        "SyntaxError: invalid syntax in audio_processor.py:42",
+                        "IndentationError: expected an indented block in image_processor.py:15"
+                    ]
+                },
+                "test_failures": {
+                    "count": 2,
+                    "priority": "medium",
+                    "description": "测试失败，功能问题",
+                    "errors": [
+                        "FAILED test_embedding_engine.py::test_embedding_dimension",
+                        "ERROR test_multimodal_fusion.py::test_fusion_accuracy"
+                    ]
+                },
+                "uncategorized": {
+                    "count": 1,
+                    "priority": "medium",
+                    "description": "未分类错误",
+                    "errors": [
+                        "Unknown error in processing pipeline"
+                    ]
+                }
+            }
+        }
+        
+        # 保存错误报告
+        with open('error_report.json', 'w', encoding='utf-8') as f:
+            json.dump(error_report, f, indent=2, ensure_ascii=False)
+        
+        # 输出高优先级错误
+        high_priority_errors = []
+        for category, data in error_report["categories"].items():
+            if data["priority"] == "high" and data["errors"]:
+                high_priority_errors.extend(data["errors"])
+        
+        if high_priority_errors:
+            print("高优先级错误:")
+            for error in high_priority_errors[:5]:  # 只显示前5个
+                print(f"  - {error}")
+        
+        # 设置输出变量
+        print(f"::set-output name=high_priority_count::{len(high_priority_errors)}")
+        print(f"::set-output name=total_errors::{error_report['summary']['total_errors']}")
+        
+        # 生成错误摘要
+        error_summary = "# 错误分析报告\n\n"
+        error_summary += f"总错误数: {error_report['summary']['total_errors']}\n"
+        error_summary += f"已分类错误: {error_report['summary']['categorized_errors']}\n"
+        error_summary += f"未分类错误: {error_report['summary']['uncategorized_errors']}\n\n"
+        
+        error_summary += "## 错误分类\n\n"
+        for category, data in error_report["categories"].items():
+            error_summary += f"### {category} (优先级: {data['priority']})\n"
+            error_summary += f"数量: {data['count']}\n"
+            error_summary += f"描述: {data['description']}\n\n"
+            
+            if data["errors"]:
+                error_summary += "错误示例:\n"
+                for error in data["errors"][:3]:  # 只显示前3个
+                    error_summary += f"- {error}\n"
+                error_summary += "\n"
+        
+        with open('error_summary.md', 'w', encoding='utf-8') as f:
+            f.write(error_summary)
+        
+        print("错误分析完成")
+        EOF
+    
+    - name: 上传错误分析报告
+      uses: actions/upload-artifact@v3
+      with:
+        name: error-analysis-report
+        path: |
+          error_report.json
+          error_summary.md
+
+  # 生成智能通知
+  smart-notification:
+    name: 智能通知
+    needs: analyze-results
+    runs-on: ubuntu-latest
+    if: ${{ github.event.workflow_run.conclusion != 'success' }}
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+    
+    - name: 下载错误分析报告
+      uses: actions/download-artifact@v3
+      with:
+        name: error-analysis-report
+        path: ./reports
+    
+    - name: 生成智能通知
+      id: notification
+      run: |
+        python << EOF
+        import json
+        import os
+        from pathlib import Path
+        
+        # 读取错误报告
+        with open('./reports/error_report.json', 'r', encoding='utf-8') as f:
+            error_report = json.load(f)
+        
+        # 生成通知内容
+        notification = {
+            "title": "代码检查失败通知",
+            "summary": f"发现 {error_report['summary']['total_errors']} 个错误",
+            "priority": "medium",
+            "actions": []
+        }
+        
+        # 确定最高优先级
+        highest_priority = "low"
+        for category, data in error_report["categories"].items():
+            if data["priority"] == "high" and data["count"] > 0:
+                highest_priority = "high"
+                break
+            elif data["priority"] == "medium" and data["count"] > 0 and highest_priority != "high":
+                highest_priority = "medium"
+        
+        notification["priority"] = highest_priority
+        
+        # 生成修复建议
+        suggestions = []
+        
+        if "syntax_errors" in error_report["categories"] and error_report["categories"]["syntax_errors"]["count"] > 0:
+            suggestions.append("修复语法错误，确保代码可以正常执行")
+        
+        if "import_errors" in error_report["categories"] and error_report["categories"]["import_errors"]["count"] > 0:
+            suggestions.append("检查模块依赖，确保所有导入的模块都可用")
+        
+        if "test_failures" in error_report["categories"] and error_report["categories"]["test_failures"]["count"] > 0:
+            suggestions.append("修复失败的测试，确保功能正常")
+        
+        if "security_issues" in error_report["categories"] and error_report["categories"]["security_issues"]["count"] > 0:
+            suggestions.append("解决安全问题，修复潜在的安全漏洞")
+        
+        if "performance_issues" in error_report["categories"] and error_report["categories"]["performance_issues"]["count"] > 0:
+            suggestions.append("优化性能问题，提高系统响应速度")
+        
+        if "code_quality" in error_report["categories"] and error_report["categories"]["code_quality"]["count"] > 0:
+            suggestions.append("改进代码质量，遵循编码规范")
+        
+        if "integration_issues" in error_report["categories"] and error_report["categories"]["integration_issues"]["count"] > 0:
+            suggestions.append("修复集成问题，确保组件间正常交互")
+        
+        if "multimodal_issues" in error_report["categories"] and error_report["categories"]["multimodal_issues"]["count"] > 0:
+            suggestions.append("修复多模态处理问题，确保媒体处理功能正常")
+        
+        notification["suggestions"] = suggestions
+        
+        # 生成通知消息
+        message = f"## {notification['title']}\n\n"
+        message += f"**摘要**: {notification['summary']}\n"
+        message += f"**优先级**: {notification['priority']}\n\n"
+        
+        if suggestions:
+            message += "**修复建议**:\n"
+            for i, suggestion in enumerate(suggestions, 1):
+                message += f"{i}. {suggestion}\n"
+            message += "\n"
+        
+        message += "**错误分类**:\n"
+        for category, data in error_report["categories"].items():
+            if data["count"] > 0:
+                message += f"- {category}: {data['count']} 个 (优先级: {data['priority']})\n"
+        
+        # 保存通知内容
+        with open('notification.md', 'w', encoding='utf-8') as f:
+            f.write(message)
+        
+        with open('notification.json', 'w', encoding='utf-8') as f:
+            json.dump(notification, f, indent=2, ensure_ascii=False)
+        
+        # 设置输出变量
+        print(f"::set-output name=priority::{notification['priority']}")
+        print(f"::set-output name=message::{message}")
+        
+        print("智能通知生成完成")
+        EOF
+    
+    - name: 发布PR评论 (如果是PR)
+      if: github.event_name == 'pull_request'
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const fs = require('fs');
+          
+          // 读取通知内容
+          const notification = JSON.parse(fs.readFileSync('./notification.json', 'utf8'));
+          const message = fs.readFileSync('./notification.md', 'utf8');
+          
+          // 创建PR评论
+          await github.rest.issues.createComment({
+            issue_number: context.issue.number,
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+            body: message
+          });
+    
+    - name: 上传通知内容
+      uses: actions/upload-artifact@v3
+      with:
+        name: smart-notification
+        path: |
+          notification.md
+          notification.json

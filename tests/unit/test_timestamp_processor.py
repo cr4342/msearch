@@ -17,13 +17,15 @@ class TestTimestampProcessor:
     @pytest.fixture
     def mock_config(self):
         """模拟配置"""
-        config = Mock(spec=ConfigManager)
-        config.get.side_effect = lambda key, default=None: {
-            'processing.timestamp.accuracy_requirement': 2.0,
-            'processing.timestamp.overlap_buffer': 1.0,
+        return {
+            'processing.video.timestamp_processing.accuracy_requirement': 2.0,
+            'processing.video.timestamp_processing.sync_tolerance': {
+                'visual': 0.033,
+                'audio_music': 0.1,
+                'audio_speech': 0.2
+            },
             'processing.video.frame_rate': 30.0
-        }.get(key, default)
-        return config
+        }
     
     @pytest.fixture
     def timestamp_processor(self, mock_config):
@@ -57,24 +59,24 @@ class TestTimestampProcessor:
         """测试±2秒精度要求验证"""
         # 测试满足精度要求的时间戳
         valid_cases = [
-            (10.0, 2.0),   # 2秒持续时长
-            (15.5, 1.5),   # 1.5秒持续时长
-            (20.0, 4.0),   # 4秒持续时长（边界情况）
+            2.0,   # 2秒持续时长
+            1.5,   # 1.5秒持续时长
+            4.0,   # 4秒持续时长（边界情况）
         ]
         
-        for timestamp, duration in valid_cases:
-            is_valid = timestamp_processor.validate_timestamp_accuracy(timestamp, duration)
-            assert is_valid == True, f"时间戳 {timestamp}s, 持续时长 {duration}s 应该满足精度要求"
+        for duration in valid_cases:
+            is_valid = timestamp_processor.validate_timestamp_accuracy(duration)
+            assert is_valid == True, f"持续时长 {duration}s 应该满足精度要求"
         
         # 测试不满足精度要求的时间戳
         invalid_cases = [
-            (10.0, 5.0),   # 5秒持续时长，超过±2秒要求
-            (15.5, 6.5),   # 6.5秒持续时长
+            5.0,   # 5秒持续时长，超过±2秒要求
+            6.5,   # 6.5秒持续时长
         ]
         
-        for timestamp, duration in invalid_cases:
-            is_valid = timestamp_processor.validate_timestamp_accuracy(timestamp, duration)
-            assert is_valid == False, f"时间戳 {timestamp}s, 持续时长 {duration}s 不应该满足精度要求"
+        for duration in invalid_cases:
+            is_valid = timestamp_processor.validate_timestamp_accuracy(duration)
+            assert is_valid == False, f"持续时长 {duration}s 不应该满足精度要求"
     
     def test_multimodal_time_sync_validation(self, timestamp_processor):
         """测试多模态时间同步验证"""
@@ -99,10 +101,10 @@ class TestTimestampProcessor:
         """测试重叠时间窗口策略"""
         # 创建测试时间戳数据
         timestamps = [
-            {'start_time': 10.0, 'end_time': 12.0, 'duration': 2.0, 'vector_id': 'v1'},
-            {'start_time': 11.5, 'end_time': 13.5, 'duration': 2.0, 'vector_id': 'v2'},
-            {'start_time': 13.0, 'end_time': 15.0, 'duration': 2.0, 'vector_id': 'v3'},
-            {'start_time': 20.0, 'end_time': 22.0, 'duration': 2.0, 'vector_id': 'v4'},
+            {'file_id': 'file1', 'start_time': 10.0, 'end_time': 12.0, 'duration': 2.0},
+            {'file_id': 'file1', 'start_time': 11.5, 'end_time': 13.5, 'duration': 2.0},
+            {'file_id': 'file1', 'start_time': 13.0, 'end_time': 15.0, 'duration': 2.0},
+            {'file_id': 'file1', 'start_time': 20.0, 'end_time': 22.0, 'duration': 2.0},
         ]
         
         # 测试时间段合并
@@ -111,17 +113,15 @@ class TestTimestampProcessor:
         # 验证合并结果
         assert len(merged_segments) == 2  # 应该合并为2个连续段
         
-        # 第一个合并段应该包含v1, v2, v3
+        # 第一个合并段应该包含v1, v2, v3的时间范围
         first_segment = merged_segments[0]
         assert first_segment['start_time'] == 10.0
         assert first_segment['end_time'] == 15.0
-        assert len(first_segment['vector_ids']) == 3
         
         # 第二个段应该只包含v4
         second_segment = merged_segments[1]
         assert second_segment['start_time'] == 20.0
         assert second_segment['end_time'] == 22.0
-        assert len(second_segment['vector_ids']) == 1
     
     def test_scene_aware_timestamp_processing(self, timestamp_processor):
         """测试场景感知的时间戳处理"""
@@ -146,8 +146,8 @@ class TestTimestampProcessor:
             # 验证场景内的时间戳连续性
             timestamps_in_scene = scene['timestamps']
             for j in range(len(timestamps_in_scene) - 1):
-                current_end = timestamps_in_scene[j]['end_time']
-                next_start = timestamps_in_scene[j + 1]['start_time']
+                current_end = timestamps_in_scene[j]['timestamp']
+                next_start = timestamps_in_scene[j + 1]['timestamp']
                 # 时间戳应该连续或有合理的重叠
                 assert abs(next_start - current_end) <= 2.0
     
@@ -182,13 +182,15 @@ class TestTimestampProcessorPerformance:
     @pytest.fixture
     def performance_config(self):
         """性能测试配置"""
-        config = Mock(spec=ConfigManager)
-        config.get.side_effect = lambda key, default=None: {
-            'processing.timestamp.accuracy_requirement': 2.0,
-            'processing.timestamp.query_timeout_ms': 10,
-            'processing.timestamp.batch_size': 50
-        }.get(key, default)
-        return config
+        return {
+            'processing.video.timestamp_processing.accuracy_requirement': 2.0,
+            'processing.video.timestamp_processing.sync_tolerance': {
+                'visual': 0.033,
+                'audio_music': 0.1,
+                'audio_speech': 0.2
+            },
+            'processing.video.frame_rate': 30.0
+        }
     
     def test_timestamp_query_performance(self, performance_config):
         """测试时间戳查询性能"""

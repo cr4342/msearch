@@ -290,9 +290,9 @@ download_models() {
     
     # 创建模型目录结构
     mkdir -p "${HF_HOME}"
-    mkdir -p "${DEPLOY_MODELS_DIR}/clip"
-    mkdir -p "${DEPLOY_MODELS_DIR}/clap"
-    mkdir -p "${DEPLOY_MODELS_DIR}/whisper"
+    mkdir -p "${DEPLOY_MODELS_DIR}/clip-vit-base-patch32"
+    mkdir -p "${DEPLOY_MODELS_DIR}/clap-htsat-fused"
+    mkdir -p "${DEPLOY_MODELS_DIR}/whisper-base"
     
     log "${BLUE}[信息] 模型目录: ${DEPLOY_MODELS_DIR}${NC}"
     
@@ -368,19 +368,19 @@ def download_models(models_dir):
         {
             'name': 'clip',
             'repo_id': 'openai/clip-vit-base-patch32',
-            'local_path': os.path.join(models_dir, 'clip'),
+            'local_path': os.path.join(models_dir, 'clip-vit-base-patch32'),
             'components': ['model', 'processor']
         },
         {
             'name': 'clap',
             'repo_id': 'laion/clap-htsat-unfused',
-            'local_path': os.path.join(models_dir, 'clap'),
+            'local_path': os.path.join(models_dir, 'clap-htsat-fused'),
             'components': ['model', 'processor']
         },
         {
             'name': 'whisper',
             'repo_id': 'openai/whisper-base',
-            'local_path': os.path.join(models_dir, 'whisper'),
+            'local_path': os.path.join(models_dir, 'whisper-base'),
             'components': ['model', 'processor']
         }
     ]
@@ -488,9 +488,9 @@ def update_config_for_local_models(config_file, models_dir):
         
         # 更新各模型配置
         model_mapping = {
-            'clip': {'path': os.path.join(models_dir, 'clip'), 'repo': 'openai/clip-vit-base-patch32'},
-            'clap': {'path': os.path.join(models_dir, 'clap'), 'repo': 'laion/clap-htsat-unfused'},
-            'whisper': {'path': os.path.join(models_dir, 'whisper'), 'repo': 'openai/whisper-base'}
+            'clip': {'path': os.path.join(models_dir, 'clip-vit-base-patch32'), 'repo': 'openai/clip-vit-base-patch32'},
+            'clap': {'path': os.path.join(models_dir, 'clap-htsat-fused'), 'repo': 'laion/clap-htsat-unfused'},
+            'whisper': {'path': os.path.join(models_dir, 'whisper-base'), 'repo': 'openai/whisper-base'}
         }
         
         for model_name, model_info in model_mapping.items():
@@ -792,6 +792,8 @@ export KMP_DUPLICATE_LIB_OK=TRUE
 export CUDA_LAUNCH_BLOCKING=1
 export HF_HOME="${DEPLOY_MODELS}/huggingface"
 export TRANSFORMERS_CACHE="${DEPLOY_MODELS}/huggingface"
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 
 echo "启动MSearch API服务..."
 echo "API地址: http://localhost:8000"
@@ -831,6 +833,8 @@ export PYTHONWARNINGS=ignore
 export KMP_DUPLICATE_LIB_OK=TRUE
 export HF_HOME="${DEPLOY_ROOT}/models/huggingface"
 export TRANSFORMERS_CACHE="${DEPLOY_ROOT}/models/huggingface"
+export HF_HUB_OFFLINE=1
+export TRANSFORMERS_OFFLINE=1
 
 # 检查是否有正在运行的服务
 if pgrep -f "uvicorn src.api.main:app" > /dev/null; then

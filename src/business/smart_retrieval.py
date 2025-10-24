@@ -30,7 +30,7 @@ class SmartRetrievalEngine:
         self.fusion_engine = MultiModalFusionEngine(config)
         
         # FaceDatabase需要数据库路径，从配置中获取
-        db_path = config.get('database', {}).get('sqlite', {}).get('path', './data/db/msearch.db')
+        db_path = config.get('database', {}).get('sqlite', {}).get('path', './data/msearch.db')
         self.face_database = FaceDatabase(db_path)
         self.face_manager = FaceManager(config, self.face_database, None)
         

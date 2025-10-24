@@ -91,7 +91,7 @@ def test_basic_functionality():
         print("✓ 嵌入引擎类检查通过")
         
         # 测试处理编排器类（不初始化）
-        from src.business.processing_orchestrator import ProcessingOrchestrator
+        from src.business.orchestrator import ProcessingOrchestrator
         assert hasattr(ProcessingOrchestrator, '__init__'), "处理编排器类缺少__init__方法"
         print("✓ 处理编排器类检查通过")
         

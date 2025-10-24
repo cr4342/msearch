@@ -14,7 +14,7 @@ import numpy as np
 project_root = os.path.join(os.path.dirname(__file__), '..', '..')
 sys.path.insert(0, project_root)
 
-from src.business.processing_orchestrator import ProcessingOrchestrator
+from src.business.orchestrator import ProcessingOrchestrator
 
 
 class TestProcessingOrchestratorEnhanced(unittest.IsolatedAsyncioTestCase):

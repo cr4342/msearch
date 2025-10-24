@@ -23,7 +23,7 @@ class FaceDatabase:
         self.config = self.config_manager.config
         
         if db_path is None:
-            db_path = self.config_manager.get('database.sqlite.path', './data/db/msearch.db')
+            db_path = self.config_manager.get('database.sqlite.path', './data/msearch.db')
         
         self.db_path = db_path
         self._init_database()
@@ -34,7 +34,7 @@ class FaceDatabase:
     def _reload_config(self, key: str, value: Any) -> None:
         """重新加载配置"""
         if 'database.sqlite.path' in key:
-            self.db_path = self.config_manager.get('database.sqlite.path', './data/db/msearch.db')
+            self.db_path = self.config_manager.get('database.sqlite.path', './data/msearch.db')
             self._init_database()
         
         logger.info(f"人脸数据库配置已更新: {key}")

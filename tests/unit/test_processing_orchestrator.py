@@ -10,7 +10,7 @@ import numpy as np
 # 添加项目根目录到Python路径
 sys.path.insert(0, '..')
 
-from src.business.processing_orchestrator import ProcessingOrchestrator
+from src.business.orchestrator import ProcessingOrchestrator
 
 
 class TestProcessingOrchestrator(unittest.IsolatedAsyncioTestCase):

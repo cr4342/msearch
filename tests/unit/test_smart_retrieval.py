@@ -35,7 +35,7 @@ class TestSmartRetrievalEngine(unittest.IsolatedAsyncioTestCase):
             },
             'database': {
                 'sqlite': {
-                    'path': './data/db/msearch.db'
+                    'path': './data/database/msearch.db'
                 }
             }
         }

@@ -41,10 +41,22 @@ class ConfigManager:
             
         except FileNotFoundError:
             logger.warning(f"配置文件不存在: {self.config_path}")
-            return self._generate_default_config()
+            config = self._generate_default_config()
+            # 应用环境变量覆盖到默认配置
+            config = self._apply_env_overrides(config)
+            return config
+        except yaml.YAMLError as e:
+            logger.error(f"配置文件YAML格式错误: {e}")
+            config = self._generate_default_config()
+            # 应用环境变量覆盖到默认配置
+            config = self._apply_env_overrides(config)
+            return config
         except Exception as e:
             logger.error(f"加载配置失败: {e}")
-            raise
+            config = self._generate_default_config()
+            # 应用环境变量覆盖到默认配置
+            config = self._apply_env_overrides(config)
+            return config
     
     def get(self, key: str, default=None) -> Any:
         """获取配置值，支持点号分隔的嵌套键"""
@@ -92,16 +104,61 @@ class ConfigManager:
         # 支持 MSEARCH_DATABASE_SQLITE_PATH 格式的环境变量
         for key, value in os.environ.items():
             if key.startswith('MSEARCH_'):
+                # 将环境变量名转换为配置键
+                # 环境变量使用 MSEARCH_前缀_KEY_NAME 格式
+                # 配置文件中的键使用 key.name 或 key_name 格式
+                # 为了简化映射，我们直接使用下划线替换为点的方式
+                # 但需要特殊处理，以确保映射到正确的配置键
+                
+                # 例如: MSEARCH_GENERAL_LOG_LEVEL -> general.log_level
                 config_key = key[8:].lower().replace('_', '.')
+                
+                logger.debug(f"应用环境变量覆盖: {key} -> {config_key} = {value}")
+                
+                # 特殊处理：对于某些常见的键，需要调整映射
+                # 例如 general.log.level 应该映射到 general.log_level
+                # 但我们先按当前方式处理，然后在_get_nested_value中处理映射
+                
                 self._set_nested_value(config, config_key, value)
         
         return config
     
     def _set_nested_value(self, config: Dict, key: str, value: Any) -> None:
         """设置嵌套配置值"""
+        # 处理点号分隔的嵌套键
         keys = key.split('.')
         current = config
         
+        # 特殊情况处理：对于常见的环境变量映射
+        # 如果要设置 general.log.level，但实际配置中是 general.log_level
+        # 我们需要检查是否存在替代的键名
+        if len(keys) == 3 and keys[0] == 'general' and keys[1] == 'log' and keys[2] == 'level':
+            # 直接设置 general.log_level
+            try:
+                if isinstance(value, str) and value.isdigit():
+                    config['general']['log_level'] = int(value)
+                elif isinstance(value, str) and value.lower() in ('true', 'false'):
+                    config['general']['log_level'] = value.lower() == 'true'
+                else:
+                    config['general']['log_level'] = value
+            except:
+                config['general']['log_level'] = value
+            return
+            
+        # 特殊处理：对于数据库路径的环境变量映射
+        if len(keys) == 3 and keys[0] == 'database' and keys[1] == 'sqlite' and keys[2] == 'path':
+            # 直接设置 database.sqlite.path
+            try:
+                config['database']['sqlite']['path'] = value
+            except:
+                if 'database' not in config:
+                    config['database'] = {}
+                if 'sqlite' not in config['database']:
+                    config['database']['sqlite'] = {}
+                config['database']['sqlite']['path'] = value
+            return
+            
+        # 对于其他情况，按正常嵌套结构处理
         for k in keys[:-1]:
             if k not in current:
                 current[k] = {}
@@ -110,9 +167,9 @@ class ConfigManager:
         # 尝试转换值类型
         try:
             # 如果是数字
-            if value.isdigit():
+            if isinstance(value, str) and value.isdigit():
                 current[keys[-1]] = int(value)
-            elif value.lower() in ('true', 'false'):
+            elif isinstance(value, str) and value.lower() in ('true', 'false'):
                 current[keys[-1]] = value.lower() == 'true'
             else:
                 current[keys[-1]] = value
