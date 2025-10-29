@@ -1,5 +1,5 @@
 # Logs
-logs
+logs/
 *.log
 npm-debug.log*
 yarn-debug.log*
@@ -7,15 +7,16 @@ yarn-error.log*
 pnpm-debug.log*
 lerna-debug.log*
 
-node_modules
-dist
-dist-ssr
+# Node.js
+node_modules/
+dist/
+dist-ssr/
 *.local
 
 # Editor directories and files
-.vscode/*
+.vscode/
 !.vscode/extensions.json
-.idea
+.idea/
 .DS_Store
 *.suo
 *.ntvs*
@@ -27,62 +28,6 @@ dist-ssr
 __pycache__/
 *.py[cod]
 *$py.class
-
-# Virtual environments
-venv/
-env/
-.venv/
-.env/
-
-# OS generated files
-Thumbs.db
-.DS_Store
-
-# Build directories
-build/
-dist/
-
-# Configuration files
-.env
-.env.local
-.env.development.local
-.env.test.local
-.env.production.local
-
-# Test data
-testdata/
-
-# Temporary files
-*.tmp
-*.temp
-.cache/
-
-# Coverage reports
-coverage/
-.coverage
-*.lcov
-
-# Debug
-.vscode/launch.json
-
-# Offline resources
-offline/
-# 测试数据目录
-testdata/
-tests/fixtures
-
-# 部署测试目录（真机测试）
-deployment_test/
-release/
-# 离线模型和依赖（避免重复下载）
-offline/
-
-# 数据目录
-data/
-
-# Python缓存
-__pycache__/
-*.pyc
 *.pyo
 *.pyd
 .Python
@@ -103,26 +48,54 @@ wheels/
 *.egg
 MANIFEST
 
-# 虚拟环境
+# Virtual environments
 venv/
 env/
+.venv/
+.env/
 ENV/
 
-# IDE配置
-.vscode/
-.idea/
+# OS generated files
+Thumbs.db
+.DS_Store
+
+# Configuration files
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Test data
+testdata/
+tests/fixtures/
+
+# Temporary files
+*.tmp
+*.temp
+.cache/
+
+# Coverage reports
+coverage/
+.coverage
+*.lcov
+htmlcov/
+.pytest_cache/
+
+# Debug
+.vscode/launch.json
+
+# Project specific directories (do not commit)
+offline/
+data/
+temp/
+.infinity_cache/
+
+# Deployment test directory
+deployment_test/
+release/
+
+# IDE files
 *.swp
 *.swo
 *~
-
-# 测试覆盖率报告
-htmlcov/
-.coverage
-.pytest_cache/
-
-# 日志文件
-*.log
-
-# 系统文件
-.DS_Store
-Thumbs.db
