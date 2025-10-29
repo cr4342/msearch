@@ -1,0 +1,68 @@
+# Qdrant向量数据库配置
+service:
+  # 服务监听地址
+  host: 0.0.0.0
+  http_port: 6333
+  grpc_port: 6334
+
+  # 最大请求大小（MB）
+  max_request_size_mb: 32
+
+  # 最大响应大小（MB）
+  max_response_size_mb: 32
+
+  # CORS设置
+  enable_cors: true
+
+storage:
+  # 存储路径
+  storage_path: "/data/project/msearch/offline/qdrant_data"
+
+  # 快照配置
+  snapshots_path: "/data/project/msearch/offline/qdrant_data/snapshots"
+
+  # 性能优化
+  performance:
+    # 最大搜索线程数
+    max_search_threads: 4
+    # 最大优化线程数
+    max_optimization_threads: 2
+
+  # 向量索引配置
+  optimizers:
+    # 默认段配置
+    default_segment_number: 2
+    # 最大段大小（MB）
+    max_segment_size: 50000
+    # 内存限制（MB）
+    memmap_threshold: 20000
+    # 索引阈值
+    indexing_threshold: 20000
+
+  # 集合配置
+  collection:
+    # 向量大小（根据模型调整）
+    vector_size: 512
+    # 距离度量
+    distance: Cosine
+
+log_level: INFO
+
+# 集群配置（单机模式）
+cluster:
+  enabled: false
+
+# 性能调优
+performance:
+  # 查询缓存大小
+  query_cache_size: 1000
+  # 更新队列大小
+  update_queue_size: 100
+
+# 健康检查配置
+health_check:
+  # 健康检查间隔（秒）
+  interval_sec: 30
+
+# 遥测配置（禁用）
+telemetry_disabled: true

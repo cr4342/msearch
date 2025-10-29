@@ -37,13 +37,13 @@ def test_basic_functionality():
         print("✓ 搜索引擎初始化成功")
         
         print("🎉 所有基本功能测试通过！")
-        return True
+        assert True  # 使用assert而不是return
         
     except Exception as e:
         print(f"❌ 基本功能测试失败: {e}")
         import traceback
         traceback.print_exc()
-        return False
+        assert False, f"测试失败: {e}"
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

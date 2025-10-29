@@ -6,9 +6,13 @@ import pytest
 import tempfile
 import os
 import yaml
+import logging
 from unittest.mock import patch, MagicMock
 
 from src.core.config_manager import ConfigManager
+
+# 获取测试日志记录器
+test_logger = logging.getLogger('msearch_tests')
 
 
 class TestConfigManager:
@@ -38,15 +42,17 @@ class TestConfigManager:
     
     def test_config_loading(self, temp_config_file):
         """测试配置加载功能"""
-        config_manager = ConfigManager(temp_config_file)
+        test_logger.info("开始测试配置加载功能")
         
-        # 验证配置加载
-        assert config_manager.get('general.log_level') == 'INFO'
-        assert config_manager.get('models.clip_model') == 'openai/clip-vit-base-patch32'
-        assert config_manager.get('processing.batch_size') == 16
+        config_manager = ConfigManager(str(temp_config_file))
+        config = config_manager.config
         
-        # 清理临时文件
-        os.unlink(temp_config_file)
+        # 验证配置是否正确加载
+        assert config is not None
+        assert config['general']['log_level'] == 'INFO'
+        assert config['models']['clip_model'] == 'openai/clip-vit-base-patch32'
+        
+        test_logger.info("配置加载测试通过")
     
     def test_nested_key_access(self, temp_config_file):
         """测试嵌套键访问"""

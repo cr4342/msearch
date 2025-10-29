@@ -71,131 +71,80 @@ class EmbeddingEngine:
             # 初始化成功的模型列表
             successful_models = []
             
-            # CLIP模型配置 - 使用本地路径
-            clip_config = models_config.get('clip', {})
-            # 优先使用本地路径，如果没有则使用默认本地路径
-            clip_model = clip_config.get('local_path', clip_config.get('model_name', './data/models/clip'))
+            # 动态加载配置中指定的模型
+            model_loaders = {
+                'clip': {
+                    'config_key': 'clip',
+                    'default_path': './data/models/clip',
+                    'default_batch_size': 16
+                },
+                'clap': {
+                    'config_key': 'clap', 
+                    'default_path': './data/models/clap',
+                    'default_batch_size': 8
+                },
+                'whisper': {
+                    'config_key': 'whisper',
+                    'default_path': './data/models/whisper',
+                    'default_batch_size': 4
+                }
+            }
             
-            # 确保使用绝对路径
-            if not os.path.isabs(clip_model):
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                # 移除开头的./或../，避免重复路径
-                if clip_model.startswith('./'):
-                    clip_model = clip_model[2:]
-                elif clip_model.startswith('../'):
-                    clip_model = clip_model[3:]
-                clip_model = os.path.join(project_root, clip_model)
-            
-            try:
-                # 检查本地模型是否存在
-                if os.path.exists(clip_model):
-                    clip_engine_args = EngineArgs(
-                        model_name_or_path=clip_model,
-                        device=clip_config.get('device', 'cpu'),
-                        model_warmup=True,
-                        batch_size=clip_config.get('batch_size', 16),
-                        dtype='float32'
-                    )
+            for model_name, loader in model_loaders.items():
+                model_config = models_config.get(loader['config_key'], {})
+                
+                # 如果配置中明确指定了该模型，或者配置不为空，则尝试加载
+                if model_config or loader['config_key'] in models_config:
+                    model_path = model_config.get('local_path', model_config.get('model_name', loader['default_path']))
                     
-                    successful_models.append(clip_engine_args)
-                    self.model_health['clip'] = True
-                    self.logger.info(f"本地CLIP模型 {clip_model} 初始化成功")
-                else:
-                    self.logger.warning(f"本地CLIP模型路径不存在: {clip_model}")
-                    raise FileNotFoundError(f"CLIP模型路径不存在: {clip_model}")
-                
-            except Exception as e:
-                self.logger.error(f"本地CLIP模型初始化失败: {e}")
-                # 不尝试从网络下载，直接标记为失败
-            
-            # CLAP模型配置 - 使用本地路径
-            clap_config = models_config.get('clap', {})
-            clap_model = clap_config.get('local_path', clap_config.get('model_name', './data/models/clap'))
-            
-            # 确保使用绝对路径
-            if not os.path.isabs(clap_model):
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                # 移除开头的./或../，避免重复路径
-                if clap_model.startswith('./'):
-                    clap_model = clap_model[2:]
-                elif clap_model.startswith('../'):
-                    clap_model = clap_model[3:]
-                clap_model = os.path.join(project_root, clap_model)
-            
-            try:
-                # 检查本地模型是否存在
-                if os.path.exists(clap_model):
-                    # 优先使用safetensors格式的模型文件
-                    safetensors_path = os.path.join(clap_model, 'model.safetensors')
-                    if os.path.exists(safetensors_path):
-                        # 如果存在safetensors文件，使用它
-                        clap_engine_args = EngineArgs(
-                            model_name_or_path=clap_model,
-                            device=clap_config.get('device', 'cpu'),
-                            model_warmup=True,
-                            batch_size=clap_config.get('batch_size', 8),
-                            dtype='float32'
-                        )
-                        
-                        successful_models.append(clap_engine_args)
-                        self.model_health['clap'] = True
-                        self.logger.info(f"本地CLAP模型 {clap_model} 初始化成功（使用safetensors格式）")
-                    else:
-                        # 如果没有safetensors文件，尝试使用pytorch格式
-                        clap_engine_args = EngineArgs(
-                            model_name_or_path=clap_model,
-                            device=clap_config.get('device', 'cpu'),
-                            model_warmup=True,
-                            batch_size=clap_config.get('batch_size', 8),
-                            dtype='float32'
-                        )
-                        
-                        successful_models.append(clap_engine_args)
-                        self.model_health['clap'] = True
-                        self.logger.info(f"本地CLAP模型 {clap_model} 初始化成功（使用pytorch格式）")
-                else:
-                    self.logger.warning(f"本地CLAP模型路径不存在: {clap_model}")
-                    raise FileNotFoundError(f"CLAP模型路径不存在: {clap_model}")
-                
-            except Exception as e:
-                self.logger.error(f"本地CLAP模型初始化失败: {e}")
-                # 不尝试从网络下载，直接标记为失败
-            
-            # Whisper模型配置 - 使用本地路径
-            whisper_config = models_config.get('whisper', {})
-            whisper_model = whisper_config.get('local_path', whisper_config.get('model_name', './data/models/whisper'))
-            
-            # 确保使用绝对路径
-            if not os.path.isabs(whisper_model):
-                project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-                # 移除开头的./或../，避免重复路径
-                if whisper_model.startswith('./'):
-                    whisper_model = whisper_model[2:]
-                elif whisper_model.startswith('../'):
-                    whisper_model = whisper_model[3:]
-                whisper_model = os.path.join(project_root, whisper_model)
-            
-            try:
-                # 检查本地模型是否存在
-                if os.path.exists(whisper_model):
-                    whisper_engine_args = EngineArgs(
-                        model_name_or_path=whisper_model,
-                        device=whisper_config.get('device', 'cpu'),
-                        model_warmup=True,
-                        batch_size=whisper_config.get('batch_size', 4),
-                        dtype='float32'
-                    )
+                    # 确保使用绝对路径
+                    if not os.path.isabs(model_path):
+                        project_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+                        # 移除开头的./或../，避免重复路径
+                        if model_path.startswith('./'):
+                            model_path = model_path[2:]
+                        elif model_path.startswith('../'):
+                            model_path = model_path[3:]
+                        model_path = os.path.join(project_root, model_path)
                     
-                    successful_models.append(whisper_engine_args)
-                    self.model_health['whisper'] = True
-                    self.logger.info(f"本地Whisper模型 {whisper_model} 初始化成功")
-                else:
-                    self.logger.warning(f"本地Whisper模型路径不存在: {whisper_model}")
-                    raise FileNotFoundError(f"Whisper模型路径不存在: {whisper_model}")
-                
-            except Exception as e:
-                self.logger.error(f"本地Whisper模型初始化失败: {e}")
-                # 不尝试从网络下载，直接标记为失败
+                    try:
+                        # 检查本地模型是否存在
+                        if os.path.exists(model_path):
+                            # 特殊处理CLAP模型的safetensors文件问题
+                            if model_name == 'clap':
+                                safetensors_path = os.path.join(model_path, 'model.safetensors')
+                                if os.path.exists(safetensors_path):
+                                    # 检查safetensors文件是否可用
+                                    try:
+                                        import safetensors
+                                        with open(safetensors_path, 'rb') as f:
+                                            safetensors.torch.load_file(f)
+                                        self.logger.info(f"CLAP模型使用safetensors格式")
+                                    except Exception:
+                                        # safetensors文件有问题，使用pytorch格式
+                                        self.logger.warning(f"CLAP模型safetensors文件有问题，使用pytorch格式")
+                                        # 确保pytorch_model.bin存在
+                                        if not os.path.exists(os.path.join(model_path, 'pytorch_model.bin')):
+                                            raise FileNotFoundError("CLAP模型pytorch_model.bin文件不存在")
+                            
+                            engine_args = EngineArgs(
+                                model_name_or_path=model_path,
+                                device=model_config.get('device', 'cpu'),
+                                model_warmup=True,
+                                batch_size=model_config.get('batch_size', loader['default_batch_size']),
+                                dtype='float32'
+                            )
+                            
+                            successful_models.append(engine_args)
+                            self.model_health[model_name] = True
+                            self.logger.info(f"本地{model_name.upper()}模型 {model_path} 初始化成功")
+                        else:
+                            self.logger.warning(f"本地{model_name.upper()}模型路径不存在: {model_path}")
+                            raise FileNotFoundError(f"{model_name.upper()}模型路径不存在: {model_path}")
+                        
+                    except Exception as e:
+                        self.logger.error(f"本地{model_name.upper()}模型初始化失败: {e}")
+                        # 不尝试从网络下载，直接标记为失败
             
             # 如果有成功加载的模型，创建引擎数组
             if successful_models:
@@ -229,7 +178,7 @@ class EmbeddingEngine:
         """
         if self.engine_array is not None:
             try:
-                model = self.model_mapping.get(content_type)
+                model = self._get_model_for_content_type(content_type)
                 if not model:
                     raise ValueError(f"不支持的内容类型: {content_type}")
                 
@@ -242,43 +191,42 @@ class EmbeddingEngine:
                 # 预处理内容数据
                 processed_content = self._preprocess_content(content, content_type)
                 
-                # 调用Infinity生成向量
-                # 根据技术实现文档，需要通过索引访问具体引擎实例，并使用async with上下文管理器
-                engine_index = 0  # 默认使用第一个引擎（通常是CLIP）
-                if model == 'clap':
-                    engine_index = 1  # CLAP模型
+                # 调用Infinity生成向量 - 使用具体的模型引擎和上下文管理器
+                if model == 'clip':
+                    clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
+                    async with clip_engine:
+                        if content_type == 'text':
+                            if isinstance(processed_content, (list, tuple)):
+                                embedding_result = await clip_engine.embed(processed_content)
+                            else:
+                                embedding_result = await clip_engine.embed([processed_content])
+                        else:  # image or audio (fallback to text embedding)
+                            if isinstance(processed_content, (list, tuple)):
+                                embedding_result = await clip_engine.embed(processed_content)
+                            else:
+                                embedding_result = await clip_engine.embed([processed_content])
+                elif model == 'clap':
+                    clap_engine = self.engine_array[1] if len(self.engine_array) > 1 else self.engine_array[0]
+                    async with clap_engine:
+                        if isinstance(processed_content, (list, tuple)):
+                            embedding_result = await clap_engine.audio_embed(processed_content)
+                        else:
+                            embedding_result = await clap_engine.audio_embed([processed_content])
                 elif model == 'whisper':
-                    engine_index = 2  # Whisper模型
-                
-                # 获取对应的引擎实例
-                engine = self.engine_array[engine_index]
-                
-                # 使用async with上下文管理器调用embed方法
-                async with engine:
-                    if content_type == 'text':
-                        # 文本嵌入
+                    whisper_engine = None
+                    for engine in self.engine_array:
+                        if 'whisper' in str(type(engine)).lower():
+                            whisper_engine = engine
+                            break
+                    if whisper_engine is None:
+                        raise RuntimeError("未找到Whisper模型引擎")
+                    async with whisper_engine:
                         if isinstance(processed_content, (list, tuple)):
-                            embedding_result = await engine.embed(processed_content)
+                            embedding_result = await whisper_engine.transcribe(processed_content)
                         else:
-                            embedding_result = await engine.embed([processed_content])
-                    elif content_type == 'image':
-                        # 图像嵌入 - 使用关键字参数images
-                        if isinstance(processed_content, (list, tuple)):
-                            embedding_result = await engine.image_embed(images=processed_content)
-                        else:
-                            embedding_result = await engine.image_embed(images=[processed_content])
-                    elif content_type in ['audio_music', 'audio_speech']:
-                        # 音频嵌入（使用CLAP模型）
-                        if isinstance(processed_content, (list, tuple)):
-                            embedding_result = await engine.audio_embed(audios=processed_content)
-                        else:
-                            embedding_result = await engine.audio_embed(audios=[processed_content])
-                    else:
-                        # 默认使用文本嵌入
-                        if isinstance(processed_content, (list, tuple)):
-                            embedding_result = await engine.embed(processed_content)
-                        else:
-                            embedding_result = await engine.embed([processed_content])
+                            embedding_result = await whisper_engine.transcribe([processed_content])
+                else:
+                    raise RuntimeError(f"不支持的模型类型: {model}")
                 
                 # 提取向量数据 - Infinity返回(embeddings, usage)元组
                 if isinstance(embedding_result, tuple) and len(embedding_result) >= 1:
@@ -286,9 +234,20 @@ class EmbeddingEngine:
                 else:
                     embeddings = embedding_result
                 
+                # 提取向量 - 处理不同的返回格式
+                if isinstance(embeddings, list) and len(embeddings) > 0:
+                    # 如果是列表，取第一个元素
+                    vector = embeddings[0]
+                elif hasattr(embeddings, 'shape') and len(embeddings.shape) > 0:
+                    # 如果是numpy数组，取第一个元素
+                    vector = embeddings[0]
+                else:
+                    # 其他情况，直接使用
+                    vector = embeddings
+                
                 # 确保返回的是numpy数组
-                if not isinstance(embeddings, np.ndarray):
-                    embeddings = np.array(embeddings)
+                if not isinstance(vector, np.ndarray):
+                    vector = np.array(vector)
                 
                 # 后处理向量
                 processed_embeddings = self._postprocess_embeddings(embeddings, content_type)
@@ -370,18 +329,22 @@ class EmbeddingEngine:
             self.logger.warning(f"内容预处理失败: {e}，使用原始内容")
             return content
     
-    def _postprocess_embeddings(self, embeddings: np.ndarray, content_type: str) -> np.ndarray:
+    def _postprocess_embeddings(self, embeddings, content_type: str) -> np.ndarray:
         """
         后处理生成的向量
         
         Args:
-            embeddings: 原始向量
+            embeddings: 原始向量（可能是列表、numpy数组等）
             content_type: 内容类型
             
         Returns:
             处理后的向量
         """
         try:
+            # 确保是numpy数组
+            if not isinstance(embeddings, np.ndarray):
+                embeddings = np.array(embeddings)
+            
             # 确保向量是float32类型
             if embeddings.dtype != np.float32:
                 embeddings = embeddings.astype(np.float32)
@@ -426,47 +389,42 @@ class EmbeddingEngine:
         
         return mock_vector
     
-    async def embed_image(self, images: Union[str, List[str], np.ndarray, List[np.ndarray]]) -> np.ndarray:
+    async def embed_image(self, images: Union[np.ndarray, List[np.ndarray]]) -> np.ndarray:
         """
-        图像向量化 - 支持路径和numpy数组
-        
+        图片向量化
+
         Args:
-            images: 图像路径（字符串或列表）或图像数据（numpy数组或列表）
-            
+            images: 图片数据 (单张图片或图片列表)
+
         Returns:
-            图像向量
+            图片向量
         """
+        # 如果传入的是文件路径，转换为numpy数组
+        if isinstance(images, str):
+            # 单个路径
+            from PIL import Image
+            img = Image.open(images).convert('RGB')
+            images = np.array(img).astype(np.float32) / 255.0
+        elif isinstance(images, list) and len(images) > 0 and isinstance(images[0], str):
+            # 路径列表
+            from PIL import Image
+            processed = []
+            for path in images:
+                img = Image.open(path).convert('RGB')
+                processed.append(np.array(img).astype(np.float32) / 255.0)
+            images = processed
+        
         if self.engine_array is not None:
             try:
-                # 获取CLIP模型用于图像向量化
+                # 查找CLIP模型用于图像向量化
                 clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
-                
-                # 检查是否是numpy数组类型（图像数据）
-                if isinstance(images, np.ndarray) or (isinstance(images, list) and len(images) > 0 and isinstance(images[0], np.ndarray)):
-                    # 使用embed_content方法处理numpy数组
-                    return await self.embed_content(images, 'image')
-                
-                # 处理路径字符串
-                if isinstance(images, str):
-                    # 单个路径
-                    processed_content = [images]
-                else:
-                    # 路径列表
-                    processed_content = images
-                
-                # 使用async with上下文管理器
                 async with clip_engine:
-                    # 使用关键字参数images传入路径列表
-                    embedding_result = await clip_engine.image_embed(images=processed_content)
-                
-                # 提取向量数据
-                if isinstance(embedding_result, tuple) and len(embedding_result) >= 1:
-                    embeddings = embedding_result[0]
-                    if isinstance(embeddings, list) and len(embeddings) > 0:
+                    if isinstance(images, list):
+                        embeddings, usage = await clip_engine.image_embed(images)
                         return np.array(embeddings[0])
-                
-                return np.array([])
-                
+                    else:
+                        embeddings, usage = await clip_engine.image_embed([images])
+                        return np.array(embeddings[0])
             except Exception as e:
                 self.logger.error(f"图像向量化失败: {e}")
                 return np.array([])
@@ -484,7 +442,19 @@ class EmbeddingEngine:
         Returns:
             文本向量
         """
-        return await self.embed_content(text, 'text')
+        if self.engine_array is not None:
+            try:
+                # 查找CLIP模型用于文本向量化
+                clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
+                async with clip_engine:
+                    embeddings, usage = await clip_engine.embed([text])
+                    return np.array(embeddings[0])
+            except Exception as e:
+                self.logger.error(f"文本向量化失败: {e}")
+                return np.array([])
+        else:
+            self.logger.error("嵌入引擎未正确初始化")
+            return np.array([])
     
     async def embed_audio_music(self, audio: np.ndarray) -> np.ndarray:
         """
@@ -531,7 +501,18 @@ class EmbeddingEngine:
                 # 使用Whisper模型进行语音转文本
                 # 注意：这里需要特殊的处理，因为Whisper返回的是文本而不是向量
                 # 这里简化实现，实际应用中需要根据infinity_emb的API进行调整
-                transcription_result = await self.engine_array.embed(audio, 'whisper')
+                whisper_engine = None
+                for engine in self.engine_array:
+                    # 尝试找到Whisper模型引擎
+                    if 'whisper' in str(type(engine)).lower():
+                        whisper_engine = engine
+                        break
+                
+                if whisper_engine is None:
+                    raise RuntimeError("未找到Whisper模型引擎")
+                
+                # 使用Whisper引擎进行转录
+                transcription_result = await whisper_engine.transcribe([audio])
                 
                 # 提取转录文本
                 if hasattr(transcription_result, 'text'):
@@ -571,6 +552,25 @@ class EmbeddingEngine:
         """
         return self.model_health.get(model_name, False)
     
+    def _get_model_for_content_type(self, content_type: str) -> str:
+        """
+        根据内容类型获取对应的模型名称
+        
+        Args:
+            content_type: 内容类型 ('image', 'text', 'audio_music', 'audio_speech')
+            
+        Returns:
+            模型名称 ('clip', 'clap', 'whisper')
+        """
+        # 如果配置中只包含CLIP模型，则所有内容类型都使用CLIP
+        configured_models = self.config.get('models', {})
+        if 'clip' in configured_models and len(configured_models) == 1:
+            # 只配置了CLIP模型，所有类型都使用CLIP
+            return 'clip'
+        
+        # 否则使用默认的模型映射
+        return self.model_mapping.get(content_type, 'clip')
+    
     async def batch_embed_text(self, texts: List[str]) -> List[np.ndarray]:
         """
         批量文本向量化
@@ -587,19 +587,13 @@ class EmbeddingEngine:
         # 如果支持批处理，使用批处理
         if self.engine_array is not None and self.model_health.get('clip', False):
             try:
-                # 批处理文本
-                batch_result = await self.engine_array.embed(texts, 'clip')
-                
-                if hasattr(batch_result, 'embeddings'):
-                    embeddings = batch_result.embeddings
-                else:
-                    embeddings = batch_result
-                
-                if isinstance(embeddings, np.ndarray):
-                    # 确保返回的是列表
-                    return [embeddings[i] for i in range(len(texts))]
-                else:
-                    return embeddings
+                # 使用CLIP模型进行批处理
+                clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
+                async with clip_engine:
+                    embeddings, usage = await clip_engine.embed(texts)
+                    
+                    # 转换为numpy数组列表
+                    return [np.array(embedding) for embedding in embeddings]
                     
             except Exception as e:
                 self.logger.error(f"批量文本向量化失败: {e}")
@@ -623,19 +617,13 @@ class EmbeddingEngine:
         # 如果支持批处理，使用批处理
         if self.engine_array is not None and self.model_health.get('clip', False):
             try:
-                # 批处理图片
-                batch_result = await self.engine_array.embed(images, 'clip')
-                
-                if hasattr(batch_result, 'embeddings'):
-                    embeddings = batch_result.embeddings
-                else:
-                    embeddings = batch_result
-                
-                if isinstance(embeddings, np.ndarray):
-                    # 确保返回的是列表
-                    return [embeddings[i] for i in range(len(images))]
-                else:
-                    return embeddings
+                # 使用CLIP模型进行批处理
+                clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
+                async with clip_engine:
+                    embeddings, usage = await clip_engine.image_embed(images)
+                    
+                    # 转换为numpy数组列表
+                    return [np.array(embedding) for embedding in embeddings]
                     
             except Exception as e:
                 self.logger.error(f"批量图片向量化失败: {e}")

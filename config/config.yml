@@ -63,9 +63,9 @@ models:
   # CLIP模型配置 - 用于图像处理和图像检索时的文本向量化
   clip:
     # 使用本地模型路径（不是模型名称）
-    model_name: "./data/models/clip-vit-base-patch32"
+    model_name: "./data/models/clip"
     # 本地路径（与model_name相同）
-    local_path: "./data/models/clip-vit-base-patch32"
+    local_path: "./data/models/clip"
     # 不允许下载
     allow_download: false
     device: "auto"  # auto, cpu, cuda
@@ -76,9 +76,9 @@ models:
   # CLAP模型配置 - 用于音频处理和音频检索时的文本向量化
   clap:
     # 使用本地模型路径（不是模型名称）
-    model_name: "./data/models/clap-htsat-fused"
+    model_name: "./data/models/clap"
     # 本地路径（与model_name相同）
-    local_path: "./data/models/clap-htsat-fused"
+    local_path: "./data/models/clap"
     # 不允许下载
     allow_download: false
     device: "auto"
@@ -89,9 +89,9 @@ models:
   # Whisper模型配置 - 用于语音转文本和语音检索时的文本向量化
   whisper:
     # 使用本地模型路径（不是模型名称）
-    model_name: "./data/models/whisper-base"
+    model_name: "./data/models/whisper"
     # 本地路径（与model_name相同）
-    local_path: "./data/models/whisper-base"
+    local_path: "./data/models/whisper"
     # 不允许下载
     allow_download: false
     device: "auto"

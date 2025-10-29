@@ -1,0 +1,101 @@
+# CPU模式配置 - 用于集成测试和性能测试
+
+# 系统配置
+system:
+  log_level: INFO
+  max_workers: 4
+  data_dir: "./data"
+
+# 模型配置
+models_storage:
+  models_dir: "./offline/models"
+  offline_mode: true
+  force_local: true
+
+# Infinity服务配置
+infinity:
+  enabled: true
+  models:
+    clip:
+      model_name: "./offline/models/clip-vit-base-patch32"
+      local_path: "./offline/models/clip-vit-base-patch32"
+      device: "cpu"
+      batch_size: 8
+      engine_args:
+        model_warmup: true
+        served_model_name: "clip"
+        port: 7997
+    clap:
+      model_name: "./offline/models/clap-htsat-fused"
+      local_path: "./offline/models/clap-htsat-fused"
+      device: "cpu"
+      batch_size: 4
+      engine_args:
+        model_warmup: true
+        served_model_name: "clap"
+        port: 7998
+    whisper:
+      model_name: "./offline/models/whisper-base"
+      local_path: "./offline/models/whisper-base"
+      device: "cpu"
+      batch_size: 2
+      engine_args:
+        model_warmup: true
+        served_model_name: "whisper"
+        port: 7999
+
+# 处理配置
+processing:
+  batch_size: 8
+  max_concurrent_tasks: 2
+  image:
+    target_size: 224
+    max_resolution: [1920, 1080]
+    quality_threshold: 0.5
+  video:
+    target_size: 224
+    max_resolution: [1280, 720]
+    scene_threshold: 0.3
+    frame_interval: 2.0
+  audio:
+    target_sample_rate: 16000
+    target_channels: 1
+    segment_duration: 10.0
+    quality_threshold: 0.5
+  text:
+    max_file_size: 10485760  # 10MB
+    encoding_priority: ["utf-8", "gbk", "gb2312", "latin-1"]
+
+# 数据库配置
+database:
+  sqlite:
+    path: "./data/database/msearch.db"
+  qdrant:
+    host: "localhost"
+    port: 6333
+    collection_name: "msearch_vectors"
+
+# 搜索配置
+search:
+  top_k: 10
+  similarity_threshold: 0.7
+  multimodal_fusion:
+    weights:
+      text: 0.4
+      image: 0.3
+      audio: 0.3
+
+# 人脸识别配置
+face_recognition:
+  enabled: true
+  detector: "mtcnn"
+  recognizer: "facenet"
+  confidence_threshold: 0.7
+  max_faces: 10
+
+# 音频分类配置
+audio_classification:
+  enabled: true
+  classifier: "inaSpeechSegmenter"
+  quality_threshold: 0.6
+

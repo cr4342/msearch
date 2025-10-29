@@ -61,11 +61,11 @@ class TestProcessingOrchestrator(unittest.IsolatedAsyncioTestCase):
             }
         }
     
-    @patch('src.business.processing_orchestrator.get_file_type_detector')
-    @patch('src.business.processing_orchestrator.MediaProcessor')
-    @patch('src.business.processing_orchestrator.EmbeddingEngine')
-    @patch('src.business.processing_orchestrator.TaskManager')
-    @patch('src.business.processing_orchestrator.VectorStore')
+    @patch('src.business.orchestrator.get_file_type_detector')
+    @patch('src.business.orchestrator.MediaProcessor')
+    @patch('src.business.orchestrator.EmbeddingEngine')
+    @patch('src.business.orchestrator.TaskManager')
+    @patch('src.business.orchestrator.VectorStore')
     def test_orchestrator_initialization(self, mock_vector_store, mock_task_manager, 
                                        mock_embedding_engine, mock_media_processor, 
                                        mock_file_type_detector):
@@ -96,11 +96,11 @@ class TestProcessingOrchestrator(unittest.IsolatedAsyncioTestCase):
         self.assertIsNotNone(orchestrator.task_manager)
         self.assertIsNotNone(orchestrator.vector_store)
     
-    @patch('src.business.processing_orchestrator.get_file_type_detector')
-    @patch('src.business.processing_orchestrator.MediaProcessor')
-    @patch('src.business.processing_orchestrator.EmbeddingEngine')
-    @patch('src.business.processing_orchestrator.TaskManager')
-    @patch('src.business.processing_orchestrator.VectorStore')
+    @patch('src.business.orchestrator.get_file_type_detector')
+    @patch('src.business.orchestrator.MediaProcessor')
+    @patch('src.business.orchestrator.EmbeddingEngine')
+    @patch('src.business.orchestrator.TaskManager')
+    @patch('src.business.orchestrator.VectorStore')
     def test_file_type_detection(self, mock_vector_store, mock_task_manager, 
                                mock_embedding_engine, mock_media_processor, 
                                mock_file_type_detector):
@@ -141,11 +141,11 @@ class TestProcessingOrchestrator(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(file_type_info['extension'], '.jpg')
         self.assertEqual(file_type_info['confidence'], 0.9)
     
-    @patch('src.business.processing_orchestrator.get_file_type_detector')
-    @patch('src.business.processing_orchestrator.MediaProcessor')
-    @patch('src.business.processing_orchestrator.EmbeddingEngine')
-    @patch('src.business.processing_orchestrator.TaskManager')
-    @patch('src.business.processing_orchestrator.VectorStore')
+    @patch('src.business.orchestrator.get_file_type_detector')
+    @patch('src.business.orchestrator.MediaProcessor')
+    @patch('src.business.orchestrator.EmbeddingEngine')
+    @patch('src.business.orchestrator.TaskManager')
+    @patch('src.business.orchestrator.VectorStore')
     async def test_image_processing_flow(self, mock_vector_store, mock_task_manager, 
                                        mock_embedding_engine, mock_media_processor, 
                                        mock_file_type_detector):
