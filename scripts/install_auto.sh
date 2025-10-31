@@ -543,6 +543,7 @@ EOF
     else:
         log "${YELLOW}[警告] 部分模型下载失败，请检查网络连接${NC}"
         log "${YELLOW}[警告] 继续安装，但API服务可能无法正常工作${NC}"
+    fi
     
     # 清理临时脚本
     rm -f "${MODEL_SCRIPT}" "${CONFIG_UPDATE_SCRIPT}"
