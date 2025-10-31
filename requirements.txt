@@ -70,8 +70,14 @@ inaspeechsegmenter>=0.0.9       # 音频内容分类器
 facenet-pytorch>=2.5.0          # 人脸识别模型
 mtcnn>=0.1.1                    # 人脸检测器
 insightface>=0.7.0              # 增强人脸分析
-infinity-emb>=0.0.20            # 向量嵌入引擎
-sentence-transformers>=2.2.0    # 多语言文本嵌入
+
+# Infinity Embedding Engine - 统一向量嵌入服务
+infinity-emb[all]>=0.0.20       # 向量嵌入引擎 (包含所有依赖)
+sentence-transformers>=2.2.0    # 多语言文本嵌入 (infinity-emb依赖)
+
+# Infinity-emb 额外依赖
+optimum[onnxruntime]>=1.14.0    # ONNX运行时优化 (infinity-emb性能优化)
+accelerate>=0.20.0              # 模型加速库 (infinity-emb GPU支持)
 
 # =====================================
 # 🖥️ GUI桌面应用框架
