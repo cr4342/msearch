@@ -1,0 +1,67 @@
+# 测试日志配置
+# 根据test_strategy.md第2.2节要求
+
+logging:
+  version: 1
+  disable_existing_loggers: false
+  
+  formatters:
+    detailed:
+      format: "%(asctime)s - %(name)s - %(levelname)s - %(funcName)s:%(lineno)d - %(message)s"
+    
+    performance:
+      format: "%(asctime)s - PERFORMANCE - %(message)s"
+      
+    error:
+      format: "%(asctime)s - ERROR - %(module)s - %(funcName)s:%(lineno)d - %(message)s\n%(exc_info)s\n"
+  
+  handlers:
+    console:
+      class: logging.StreamHandler
+      level: INFO
+      formatter: detailed
+      stream: ext://sys.stdout
+      
+    file:
+      class: logging.handlers.RotatingFileHandler
+      level: DEBUG
+      formatter: detailed
+      filename: tests/deployment_test/logs/msearch_test.log
+      maxBytes: 10485760  # 10MB
+      backupCount: 5
+      
+    performance_file:
+      class: logging.handlers.RotatingFileHandler
+      level: INFO
+      formatter: performance
+      filename: tests/deployment_test/logs/performance_test.log
+      maxBytes: 10485760  # 10MB
+      backupCount: 5
+      
+    error_file:
+      class: logging.handlers.RotatingFileHandler
+      level: ERROR
+      formatter: error
+      filename: tests/deployment_test/logs/error_test.log
+      maxBytes: 10485760  # 10MB
+      backupCount: 5
+  
+  loggers:
+    msearch:
+      level: DEBUG
+      handlers: [console, file]
+      propagate: false
+      
+    msearch.performance:
+      level: INFO
+      handlers: [performance_file]
+      propagate: false
+      
+    msearch.error:
+      level: ERROR
+      handlers: [error_file, console]
+      propagate: false
+  
+  root:
+    level: INFO
+    handlers: [console, file]

@@ -1,0 +1,139 @@
+# CPU环境测试配置
+# 根据test_strategy.md第2.2节要求
+
+cpu_test:
+  # 强制使用CPU模式
+  device: "cpu"
+  
+  # 降低批处理大小以适应CPU内存限制
+  batch_size: 4
+  
+  # 使用轻量级模型进行测试
+  model:
+    clip_model: "openai/clip-vit-base-patch32"
+    face_model: "retinaface_mobile"
+  
+  # 测试数据限制
+  test_data:
+    max_video_duration: 300  # 5分钟
+    max_image_resolution: [720, 720]
+  
+  # 性能基准（CPU模式）
+  performance_benchmarks:
+    video_processing_fps: 0.5  # 实时处理的0.5倍
+    search_response_time_ms: 500  # 搜索响应时间
+    memory_usage_mb: 2048  # 最大内存使用
+
+# 基础系统配置
+general:
+  log_level: DEBUG
+  data_dir: ./tests/deployment_test/data
+  temp_dir: ./tests/deployment_test/data/temp
+  watch_directories: []
+  max_concurrent_tasks: 2
+
+# 功能开关配置
+features:
+  enable_face_recognition: true
+  enable_audio_processing: true
+  enable_video_processing: true
+  enable_file_monitoring: false
+
+# 模型存储配置
+models_storage:
+  models_dir: "./tests/deployment_test/models"
+  offline_mode: true
+  force_local: true
+  offline_cache: "./offline/models"
+
+# 模型配置
+models:
+  clip:
+    model_name: "./tests/deployment_test/models/clip-vit-base-patch32"
+    local_path: "./tests/deployment_test/models/clip-vit-base-patch32"
+    allow_download: false
+    device: "cpu"
+    batch_size: 4
+    
+  clap:
+    model_name: "./tests/deployment_test/models/clap-htsat-fused"
+    local_path: "./tests/deployment_test/models/clap-htsat-fused"
+    allow_download: false
+    device: "cpu"
+    batch_size: 2
+    
+  whisper:
+    model_name: "./tests/deployment_test/models/whisper-base"
+    local_path: "./tests/deployment_test/models/whisper-base"
+    allow_download: false
+    device: "cpu"
+    batch_size: 1
+
+# 处理配置
+processing:
+  supported_formats:
+    image: [jpg, jpeg, png, bmp, gif, webp, tiff]
+    video: [mp4, avi, mov, mkv, webm, flv, wmv]
+    audio: [mp3, wav, ogg, flac, aac, m4a, wma]
+  
+  image:
+    batch_size: 8
+    max_file_size: 50
+    
+  video:
+    batch_size: 4
+    max_duration: 300
+    max_file_size: 100
+    
+  audio:
+    batch_size: 2
+    max_file_size: 50
+
+# 数据库配置
+database:
+  sqlite:
+    path: "./tests/deployment_test/data/database/msearch.db"
+    connection_pool_size: 5
+    
+  qdrant:
+    host: "localhost"
+    port: 6333
+    mode: "server"
+
+# API配置
+api:
+  host: "127.0.0.1"
+  port: 8000
+
+# 日志配置
+logging:
+  level: DEBUG
+  handlers:
+    console:
+      enabled: true
+      level: INFO
+      format: standard
+      
+    file:
+      enabled: true
+      level: DEBUG
+      format: detailed
+      path: "./tests/deployment_test/logs/msearch_test.log"
+      max_size: "10MB"
+      backup_count: 3
+      
+    error_file:
+      enabled: true
+      level: ERROR
+      format: detailed
+      path: "./tests/deployment_test/logs/error_test.log"
+      max_size: "5MB"
+      backup_count: 5
+      
+    performance:
+      enabled: true
+      level: INFO
+      format: performance
+      path: "./tests/deployment_test/logs/performance_test.log"
+      max_size: "5MB"
+      backup_count: 3
