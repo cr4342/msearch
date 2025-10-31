@@ -274,6 +274,34 @@ install_dependencies() {
     python3 -m pip install transformers torch torchvision \
         -i https://pypi.tuna.tsinghua.edu.cn/simple
     
+    # 安装infinity-emb及其依赖
+    log "${BLUE}[步骤5] 安装infinity-emb向量嵌入引擎...${NC}"
+    python3 -m pip install "infinity-emb[all]" \
+        -i https://pypi.tuna.tsinghua.edu.cn/simple \
+        --timeout 180 \
+        --retries 3 || {
+        log "${YELLOW}[警告] infinity-emb完整版安装失败，尝试安装基础版本...${NC}"
+        python3 -m pip install infinity-emb \
+            -i https://pypi.tuna.tsinghua.edu.cn/simple
+    }
+    
+    # 测试infinity-emb安装
+    log "${BLUE}[步骤6] 测试infinity-emb安装...${NC}"
+    if python3 -c "import infinity_emb; print('infinity-emb导入成功')" 2>/dev/null; then
+        log "${GREEN}[成功] infinity-emb安装并导入成功${NC}"
+        
+        # 测试infinity CLI命令
+        if command -v infinity_emb &> /dev/null; then
+            log "${GREEN}[成功] infinity_emb CLI命令可用${NC}"
+            log "${BLUE}[信息] 可以使用以下命令测试infinity服务:${NC}"
+            log "${BLUE}       infinity_emb v2 --model-id BAAI/bge-small-en-v1.5${NC}"
+        else
+            log "${YELLOW}[警告] infinity_emb CLI命令不可用，但Python模块已安装${NC}"
+        fi
+    else
+        log "${YELLOW}[警告] infinity-emb安装可能有问题，但继续安装${NC}"
+    fi
+    
     log "${GREEN}系统依赖安装完成！${NC}"
 }
 
