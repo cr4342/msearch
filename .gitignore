@@ -68,6 +68,7 @@ Thumbs.db
 .env.production.local
 
 # Test data
+venv_test/
 testdata/
 tests/fixtures/
 
