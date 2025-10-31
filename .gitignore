@@ -50,6 +50,7 @@ MANIFEST
 
 # Virtual environments
 venv/
+venv_test/
 env/
 .venv/
 .env/
