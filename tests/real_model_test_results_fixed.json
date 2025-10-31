@@ -1,0 +1,21 @@
+{
+  "timestamp": "2025-10-30 01:43:50",
+  "test_type": "real_model_comprehensive_fixed",
+  "results": {
+    "环境检查": true,
+    "CLIP模型加载": true,
+    "ConfigManager集成": true,
+    "MediaProcessor集成": true,
+    "EmbeddingEngine模拟模式": true,
+    "FileTypeDetector测试": false,
+    "数据库集成": false,
+    "性能基准测试": true,
+    "时间戳精度测试": true
+  },
+  "summary": {
+    "total": 9,
+    "passed": 7,
+    "failed": 2,
+    "success_rate": 77.77777777777779
+  }
+}
