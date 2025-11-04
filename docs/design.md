@@ -42,7 +42,8 @@
 
 | 模态类型 | 模型选择 | 应用场景 | 技术优势 |
 |---------|---------|---------|---------|
-| **文本-视觉** | CLIP | 文本检索图片/视频 | 跨模态语义对齐，精确时间定位 |
+| **文本-图像** | CLIP | 文本检索图片内容 | 跨模态语义对齐，高精度图像理解 |
+| **文本-视频** | CLIP | 文本检索视频内容 | 跨模态语义对齐，精确时间定位 |
 | **文本-音频** | CLAP | 文本检索音乐内容 | 专业音频语义理解 |
 | **语音-文本** | Whisper | 语音内容转录检索 | 高精度多语言语音识别 |
 | **音频分类** | inaSpeechSegmenter | 音频内容智能分类 | 精准区分音乐、语音、噪音 |
@@ -50,7 +51,12 @@
 
 #### 1.3.3 模型选择策略
 
-**CLIP模型（文本-视觉检索）**
+**CLIP模型（文本-图像检索）**
+- **模型版本**：openai/clip-vit-base-patch32（基础版）/ openai/clip-vit-large-patch14-336（高精度版）
+- **核心能力**：文本-图像跨模态语义对齐，高精度图像内容理解
+- **应用场景**：文本查询图片、图像相似度检索、静态图像内容分析
+
+**CLIP模型（文本-图像/视频检索）**
 - **模型版本**：openai/clip-vit-base-patch32（基础版）/ openai/clip-vit-large-patch14-336（高精度版）
 - **核心能力**：文本-图像跨模态语义对齐，支持视频关键帧精确定位
 - **应用场景**：文本查询图片、视频关键帧定位、图像相似度检索
@@ -562,6 +568,7 @@ graph TB
 
 | 查询目标 | 使用模型 | 处理方式 | 存储位置 | 说明 |
 |---------|---------|---------|---------|------|
+| 检索图片 | CLIP | 实时向量化 | 不存储 | 查询时临时生成 |
 | 检索图片/视频 | CLIP | 实时向量化 | 不存储 | 查询时临时生成 |
 | 检索音频 | CLAP | 实时向量化 | 不存储 | 查询时临时生成 |
 | 检索语音内容 | Whisper | 实时向量化 | 不存储 | 查询时临时生成 |
@@ -605,6 +612,7 @@ graph TB
 
 | 方法名 | 模型选择 | 输入格式 | 输出格式 | 实现方式 |
 |--------|---------|---------|---------|---------|
+| embed_image | CLIP | 图片数据 | 512维向量 | 直接Python调用 |
 | embed_image | CLIP | 图片数据 | 512维向量 | 直接Python调用 |
 | embed_audio | CLAP | 音频数据 | 512维向量 | 直接Python调用 |
 | embed_text | CLIP | 文本字符串 | 512维向量 | 直接Python调用 |
@@ -919,9 +927,11 @@ graph TB
    - 长视频(>120s)：场景检测+关键帧提取
 4. **帧预处理**：每帧调整至224x224，应用标准化
 5. **向量化处理**：批量调用CLIP模型生成向量
-6. **多模态时间戳处理**：为每个模态向量精确记录时间位置和持续时长
+6. **相似度峰值检测**：通过峰值检测算法定位最相关的时间段
+7. **多模态时间戳处理**：为每个模态向量精确记录时间位置和持续时长
 
 **关键参数**：
+- **分辨率转换**：4K/HD→720p (1280×720)（显著减少显存压力）
 - **分辨率转换**：4K/HD→720p (1280×720)（显著减少显存压力）
 - **抽帧间隔**：2-5秒/帧（根据视频长度动态调整）
 - **批处理大小**：16（720p预处理后可增加批处理大小）
@@ -930,157 +940,119 @@ graph TB
 - **显存优化**：分辨率降采样可减少70-80%显存占用
 - **处理效率**：预转换可提升30-50%处理速度
 
-#### 4.2.5.1 视频时间戳处理机制
+#### 4.2.5.1 简化视频时间定位机制
 
-**核心挑战**：
-- CLIP模型本身不支持时间信息，需要外部时间戳管理
-- 长视频切片后需要保持时间连续性和精确性
-- 多模态处理（视觉+音频+语音）需要时间同步
-- 检索时需要精确返回±2秒范围内的时间段
+**设计目标**：为视频剪辑人员提供快速内容定位，±2秒精度（4秒范围内）完全满足需求。
 
-**时间戳处理架构**：
+**简化处理流程**：
 
 ```mermaid
 graph TB
-    A[原始视频文件] --> B[元数据提取]
-    B --> C[时间轴建立]
-    C --> D{内容分析}
+    A[原始视频文件] --> B[FFmpeg场景检测]
+    B --> C[按场景切片]
+    C --> D[片段信息记录]
     
-    D --> E[视觉帧提取]
-    D --> F[音频流分离]
-    D --> G[语音检测]
+    D --> E[片段1: 0-45s]
+    D --> F[片段2: 45-120s]
+    D --> G[片段N: ...]
     
-    E --> H[CLIP向量化]
-    F --> I[CLAP向量化]
-    G --> J[Whisper向量化]
+    E --> H[关键帧提取]
+    F --> H
+    G --> H
     
-    H --> K[视觉时间戳记录]
-    I --> L[音频时间戳记录]
-    J --> M[语音时间戳记录]
-    
-    K --> N[统一时间索引]
-    L --> N
-    M --> N
-    
-    N --> O[精确时间检索]
+    H --> I[CLIP向量化]
+    I --> J[向量存储+时间信息]
 ```
 
-**时间戳数据结构**：
+**简化数据结构**：
 
 ```python
-# 视频时间戳记录结构
-VideoTimestamp = {
-    "file_id": "uuid",
-    "segment_id": "segment_uuid", 
-    "modality": "visual|audio_music|audio_speech",
-    "start_time": 125.5,  # 开始时间(秒)
-    "end_time": 127.5,    # 结束时间(秒)
-    "duration": 2.0,      # 持续时长(秒)
-    "frame_index": 2511,  # 帧索引(视觉模态)
+# 视频片段信息
+VideoSegment = {
+    "file_id": "source_video_uuid",      # 源文件UUID
+    "segment_index": 0,                  # 片段序号
+    "start_time": 0.0,                   # 片段开始时间(秒)
+    "end_time": 45.0,                    # 片段结束时间(秒)
+    "frame_count": 1350,                 # 总帧数
+    "fps": 30.0                          # 帧率
+}
+
+# 向量存储信息
+VectorInfo = {
     "vector_id": "vector_uuid",
-    "confidence": 0.85,   # 内容置信度
-    "scene_boundary": false  # 是否场景边界
+    "file_id": "source_video_uuid",      # 源文件UUID
+    "segment_index": 0,                  # 片段序号
+    "frame_index": 60,                   # 在片段中的帧索引
+    "timestamp_in_segment": 2.0,         # 在片段中的时间戳
+    "absolute_timestamp": 2.0            # 在原视频中的绝对时间戳
 }
 ```
 
-**精确时间定位策略**：
-
-1. **帧级时间戳计算**：
-   ```python
-   # 基于帧率的精确时间计算
-   frame_timestamp = frame_index / video_fps
-   # 考虑变帧率视频的时间校正
-   adjusted_timestamp = frame_timestamp + time_offset
-   ```
-
-2. **音频同步对齐**：
-   ```python
-   # 音频片段与视频帧的时间对齐
-   audio_start = video_frame_time
-   audio_end = audio_start + audio_segment_duration
-   # 确保音视频时间戳一致性
-   ```
-
-3. **场景边界处理**：
-   - 场景切换点作为时间锚点
-   - 避免跨场景的时间段混合
-   - 保持场景内容的完整性
-
-**检索时间精度保证**：
-
-| 精度要求 | 实现策略 | 技术细节 |
-|---------|---------|---------|
-| **±2秒精度** | 重叠时间窗口 | 每个向量覆盖4秒时间窗口，重叠2秒 |
-| **帧级精确** | 帧索引记录 | 记录每个向量对应的精确帧位置 |
-| **音视频同步** | 统一时间基准 | 使用视频时间轴作为主时间基准 |
-| **边界处理** | 场景感知切片 | 避免在场景中间进行时间切分 |
-
-#### 4.2.5.2 长视频多模态处理策略
-
-**处理流程设计**：
+**时间反向计算**：
 
 ```python
-# 长视频多模态处理伪代码
-async def process_long_video(video_path: str) -> Dict[str, Any]:
-    # 1. 建立统一时间轴
-    video_metadata = extract_video_metadata(video_path)
-    time_axis = create_time_axis(video_metadata.duration, video_metadata.fps)
+def calculate_absolute_time(vector_info: dict) -> float:
+    """根据向量信息反向计算在原视频中的绝对时间"""
+    segment_start = get_segment_start_time(vector_info['file_id'], vector_info['segment_index'])
+    return segment_start + vector_info['timestamp_in_segment']
+```
+
+#### 4.2.5.2 极简长视频处理策略
+
+**核心思路**：预检测 + 切片标记 + 直接计算
+
+**处理流程**：
+
+```python
+# 极简长视频处理
+def process_long_video(video_path: str) -> Dict[str, Any]:
+    # 1. 预检测视频信息
+    video_info = ffmpeg.probe(video_path)
+    duration = float(video_info['streams'][0]['duration'])
+    fps = eval(video_info['streams'][0]['r_frame_rate'])
     
-    # 2. 音视频流分离
-    video_stream = extract_video_stream(video_path)
-    audio_stream = extract_audio_stream(video_path)
+    # 2. 场景检测和切片
+    scene_times = detect_scenes_ffmpeg(video_path)  # 使用FFmpeg scene detection
+    segments = create_segments(scene_times, max_duration=120)
     
-    # 3. 内容分析与分类
-    audio_segments = classify_audio_content(audio_stream)  # 音乐vs语音
-    scene_boundaries = detect_scene_changes(video_stream)
+    # 3. 逐片段处理
+    results = []
+    for i, segment in enumerate(segments):
+        # 提取关键帧（2秒间隔）
+        frames = extract_keyframes(video_path, segment['start'], segment['end'], interval=2.0)
+        
+        # CLIP向量化
+        for frame_time, frame_data in frames:
+            vector_id = clip_vectorize(frame_data)
+            
+            # 存储简单元数据
+            metadata = {
+                'file_id': generate_uuid(video_path),
+                'segment_index': i,
+                'frame_relative_time': frame_time - segment['start'],  # 帧在片段中的时间
+                'segment_start_time': segment['start'],
+                'segment_end_time': segment['end']
+            }
+            
+            results.append({'vector_id': vector_id, 'metadata': metadata})
     
-    # 4. 多模态并行处理
-    visual_results = await process_visual_content(
-        video_stream, scene_boundaries, time_axis
-    )
-    audio_results = await process_audio_content(
-        audio_segments, time_axis
-    )
-    
-    # 5. 时间戳统一与验证
-    unified_timestamps = merge_timestamps(visual_results, audio_results)
-    validated_timestamps = validate_time_accuracy(unified_timestamps)
-    
+    return results
+
+# 检索时直接计算时间
+def get_timestamp(vector_id):
+    meta = get_vector_metadata(vector_id)
+    absolute_time = meta['segment_start_time'] + meta['frame_relative_time']
     return {
-        "visual_vectors": visual_results,
-        "audio_vectors": audio_results, 
-        "timestamps": validated_timestamps,
-        "time_accuracy": "±2_seconds"
+        'timestamp': absolute_time,
+        'range': (absolute_time - 2, absolute_time + 2)  # ±2秒范围
     }
 ```
 
-**多模态时间同步机制**：
-
-| 模态类型 | 时间基准 | 同步策略 | 精度保证 |
-|---------|---------|---------|---------|
-| **视觉帧** | 视频时间轴 | 帧索引→时间戳转换 | 帧级精确(±0.033s@30fps) |
-| **音频-音乐** | 视频时间轴 | 音频偏移校正 | ±0.1秒 |
-| **音频-语音** | 视频时间轴 | 语音边界对齐 | ±0.2秒 |
-
-**场景感知切片策略**：
-
-```python
-# 场景感知的时间切片
-def create_scene_aware_segments(video_path: str) -> List[VideoSegment]:
-    scenes = detect_scenes(video_path, threshold=0.3)
-    segments = []
-    
-    for scene in scenes:
-        # 确保每个场景完整性
-        if scene.duration > 120:  # 长场景需要切分
-            # 在场景内部进行智能切分，避免破坏内容连续性
-            sub_segments = split_long_scene(scene, max_duration=60)
-            segments.extend(sub_segments)
-        else:
-            segments.append(scene)
-    
-    return segments
-```
+**优势**：
+- **极简实现**：只需要简单的加法运算
+- **内存友好**：按片段处理，无长视频内存压力  
+- **精度满足**：±2秒精度完全满足剪辑人员需求
+- **易于调试**：逻辑简单，问题容易定位
 
 #### 4.2.6 音频处理策略
 
@@ -1105,17 +1077,22 @@ def create_scene_aware_segments(video_path: str) -> List[VideoSegment]:
 - **时间精度**：±0.1秒（音频时间戳精度）
 - **显存优化**：重采样和单声道转换可减少60-70%显存占用
 
-### 4.3 检索时间精度保证机制
+### 4.3 极简时间定位机制
 
-#### 4.3.1 时间戳检索架构
+#### 4.3.1 基于片段的时间定位
 
-**核心挑战解决**：
-- **CLIP无时间支持**：通过外部时间戳索引解决
-- **多模态时间对齐**：统一时间基准，确保同步精度
-- **±2秒精度要求**：重叠时间窗口+精确边界检测
+**设计原则**：简单、直接、满足剪辑人员需求（±2秒精度足够）
+
+**时间定位流程**：
 
 ```mermaid
 graph TB
+    A[用户查询] --> B[CLIP向量化]
+    B --> C[向量相似度搜索]
+    C --> D[获取向量元数据]
+    D --> E[计算绝对时间]
+    E --> F[返回时间范围]
+```
     A[用户查询] --> B[向量相似度检索]
     B --> C[获取匹配向量ID]
     C --> D[时间戳索引查询]
@@ -1130,102 +1107,66 @@ graph TB
     I --> J[最终结果排序]
 ```
 
-#### 4.3.2 时间戳数据库设计
+#### 4.3.2 极简数据存储
 
-**时间索引表结构**：
+**核心存储表**：
 
 ```sql
--- 视频时间戳索引表
-CREATE TABLE video_timestamps (
-    id INTEGER PRIMARY KEY,
-    file_id TEXT NOT NULL,
-    vector_id TEXT NOT NULL,
-    modality TEXT NOT NULL,  -- 'visual', 'audio_music', 'audio_speech'
-    start_time REAL NOT NULL,  -- 开始时间(秒)
-    end_time REAL NOT NULL,    -- 结束时间(秒)
-    duration REAL NOT NULL,    -- 持续时长(秒)
-    frame_index INTEGER,       -- 帧索引(视觉模态专用)
-    confidence REAL,           -- 内容置信度
-    scene_id TEXT,            -- 场景ID
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+-- 视频片段表
+CREATE TABLE video_segments (
+    file_id TEXT NOT NULL,             -- 源文件UUID
+    segment_index INTEGER NOT NULL,    -- 片段序号
+    start_time REAL NOT NULL,          -- 片段开始时间(秒)
+    end_time REAL NOT NULL,            -- 片段结束时间(秒)
+    
+    PRIMARY KEY (file_id, segment_index)
 );
 
--- 时间范围查询索引
-CREATE INDEX idx_time_range ON video_timestamps(file_id, start_time, end_time);
-CREATE INDEX idx_vector_lookup ON video_timestamps(vector_id);
-CREATE INDEX idx_modality_time ON video_timestamps(modality, start_time);
+-- 向量时间信息表
+CREATE TABLE vector_timestamps (
+    vector_id TEXT PRIMARY KEY,        -- 向量ID
+    file_id TEXT NOT NULL,             -- 源文件UUID
+    segment_index INTEGER NOT NULL,    -- 片段序号
+    frame_time REAL NOT NULL           -- 帧在片段中的时间
+);
 ```
 
-#### 4.3.3 精确时间检索算法
+#### 4.3.3 极简时间检索
 
-**重叠时间窗口策略**：
+**直接时间计算**：
 
 ```python
-class TimeAccurateRetrieval:
-    def __init__(self, accuracy_requirement: float = 2.0):
-        self.accuracy_requirement = accuracy_requirement  # ±2秒
-        self.overlap_buffer = 1.0  # 1秒重叠缓冲
+class SimpleTimeRetrieval:
+    def get_video_timestamp(self, vector_id):
+        """根据向量ID获取视频时间戳"""
+        # 1. 获取向量的时间信息
+        vector_info = self.get_vector_metadata(vector_id)
+        
+        # 2. 获取片段信息
+        segment_info = self.get_segment_info(
+            vector_info['file_id'], 
+            vector_info['segment_index']
+        )
+        
+        # 3. 计算绝对时间
+        absolute_time = segment_info['start_time'] + vector_info['frame_time']
+        
+        # 4. 返回时间范围（±2秒）
+        return {
+            'file_id': vector_info['file_id'],
+            'timestamp': absolute_time,
+            'start_range': max(0, absolute_time - 2),
+            'end_range': absolute_time + 2
+        }
     
-    async def retrieve_with_timestamp(
-        self, 
-        query_vector: np.ndarray, 
-        target_modality: str,
-        top_k: int = 50
-    ) -> List[TimeStampedResult]:
-        
-        # 1. 向量相似度检索
-        similar_vectors = await self.vector_search(query_vector, top_k * 2)
-        
-        # 2. 获取时间戳信息
-        timestamped_results = []
-        for vector_result in similar_vectors:
-            timestamp_info = await self.get_timestamp_info(
-                vector_result.vector_id, target_modality
-            )
-            
-            # 3. 时间精度验证
-            if self.validate_time_accuracy(timestamp_info):
-                timestamped_results.append(
-                    TimeStampedResult(
-                        vector_result=vector_result,
-                        timestamp=timestamp_info,
-                        time_accuracy=self.calculate_accuracy(timestamp_info)
-                    )
-                )
-        
-        # 4. 时间段合并与去重
-        merged_results = self.merge_overlapping_segments(timestamped_results)
-        
-        # 5. 按相似度和时间连续性排序
-        return self.sort_by_relevance_and_continuity(merged_results)[:top_k]
-    
-    def validate_time_accuracy(self, timestamp_info: TimestampInfo) -> bool:
-        """验证时间戳精度是否满足±2秒要求"""
-        return timestamp_info.duration <= (self.accuracy_requirement * 2)
-    
-    def merge_overlapping_segments(
-        self, 
-        results: List[TimeStampedResult]
-    ) -> List[MergedTimeSegment]:
-        """合并重叠的时间段，提高检索连续性"""
-        merged_segments = []
-        
-        # 按文件和时间排序
-        sorted_results = sorted(results, key=lambda x: (x.file_id, x.start_time))
-        
-        current_segment = None
-        for result in sorted_results:
-            if current_segment is None:
-                current_segment = MergedTimeSegment(result)
-            elif self.is_time_continuous(current_segment, result):
-                # 时间连续，合并到当前段
-                current_segment.merge(result)
-            else:
-                # 时间不连续，开始新段
-                merged_segments.append(current_segment)
-                current_segment = MergedTimeSegment(result)
-        
-        if current_segment:
+    def batch_get_timestamps(self, vector_ids):
+        """批量获取时间戳"""
+        results = []
+        for vector_id in vector_ids:
+            timestamp_info = self.get_video_timestamp(vector_id)
+            results.append(timestamp_info)
+        return results
+```
             merged_segments.append(current_segment)
         
         return merged_segments
@@ -1335,9 +1276,9 @@ class MultiModalTimeSyncValidator:
 - **批处理大小**：8
 - **向量维度**：512
 
-### 4.3 媒体处理流程详述
+### 4.5 媒体处理流程详述
 
-#### 4.3.1 图片处理流程
+#### 4.5.1 图片处理流程
 
 | 处理阶段 | 执行组件 | 任务 | 输出结果 |
 |---------|---------|------|---------|
@@ -1347,7 +1288,7 @@ class MultiModalTimeSyncValidator:
 | **向量化** | EmbeddingEngine | 生成图片向量 | 512维向量表示 |
 | **存储** | VectorStore | 存储向量和元数据 | 向量ID、存储状态 |
 
-#### 4.3.2 视频处理流程
+#### 4.5.2 视频处理流程
 
 | 处理阶段 | 执行组件 | 任务 | 输出结果 |
 |---------|---------|------|---------|
@@ -1359,7 +1300,7 @@ class MultiModalTimeSyncValidator:
 | **时间戳关联** | VideoProcessor | 关联帧与时间戳 | 带时间戳的向量 |
 | **存储** | VectorStore | 存储向量和元数据 | 向量ID、存储状态 |
 
-#### 4.3.3 音频处理流程
+#### 4.5.3 音频处理流程
 
 | 处理阶段 | 执行组件 | 任务 | 输出结果 |
 |---------|---------|------|---------|
@@ -1372,9 +1313,9 @@ class MultiModalTimeSyncValidator:
 | **时间戳关联** | AudioProcessor | 关联片段与时间戳 | 带时间戳的向量 |
 | **存储** | VectorStore | 存储向量和元数据 | 向量ID、存储状态 |
 
-### 4.4 数据存储结构示例
+### 4.6 数据存储结构示例
 
-#### 4.4.1 向量存储结构（Qdrant）
+#### 4.6.1 向量存储结构（Qdrant）
 
 ```python
 # 图片向量示例
@@ -1463,7 +1404,7 @@ class MultiModalTimeSyncValidator:
 }
 ```
 
-#### 4.4.2 元数据存储结构（SQLite）
+#### 4.6.2 元数据存储结构（SQLite）
 
 ```sql
 -- 文件表结构
@@ -1503,9 +1444,9 @@ CREATE TABLE tasks (
 );
 ```
 
-### 4.5 视频处理策略详解
+### 4.7 视频处理策略详解
 
-#### 4.5.1 格式标准化
+#### 4.7.1 格式标准化
 
 系统使用FFmpeg进行视频格式标准化处理，确保所有视频都能被正确处理。
 
@@ -1521,7 +1462,7 @@ ffmpeg -i input.mp4 -vf "scale=1280:720" -c:v libx264 -crf 23 output_720p.mp4
 ffprobe -v quiet -print_format json -show_format -show_streams input.mp4
 ```
 
-#### 4.5.2 切片策略
+#### 4.7.2 切片策略
 
 系统根据视频长度和内容特征，采用智能切片策略。
 
@@ -1571,7 +1512,7 @@ def get_optimal_slicing_strategy(video_info: dict) -> dict:
     }
 ```
 
-#### 4.5.3 音频内容分类
+#### 4.7.3 音频内容分类
 
 系统使用inaSpeechSegmenter进行音频内容分类，区分音乐、语音和噪音。
 
@@ -1613,9 +1554,9 @@ class AudioClassifier:
         return speech_duration / total_duration > 0.1 if total_duration > 0 else False
 ```
 
-### 4.6 音频处理策略详解
+### 4.8 音频处理策略详解
 
-#### 4.6.1 格式标准化
+#### 4.8.1 格式标准化
 
 系统使用FFmpeg进行音频格式标准化处理，确保所有音频都能被正确处理。
 
@@ -1631,7 +1572,7 @@ ffmpeg -i input.wav -af "arnndn=m=rnnoise_models/model.bin" output_denoised.wav
 ffprobe -v quiet -print_format json -show_format -show_streams input.mp3
 ```
 
-#### 4.6.2 内容分类与质量评估
+#### 4.8.2 内容分类与质量评估
 
 系统对音频内容进行分类，并评估音频质量，以便选择合适的处理策略。
 
@@ -1706,7 +1647,7 @@ def evaluate_audio_quality(audio_path: str) -> dict:
     }
 ```
 
-### 4.7 处理策略决策表
+### 4.9 处理策略决策表
 
 | 文件类型 | 预处理模块 | 向量化模块 | 向量类型 | 存储集合 |
 |---------|---------|---------|---------|---------|
@@ -1716,7 +1657,7 @@ def evaluate_audio_quality(audio_path: str) -> dict:
 | 音频（语音） | AudioProcessor + Whisper | CLAP | 音频向量+文本向量 | audio_vectors + text_vectors |
 | 文本 | TextProcessor | CLIP | 文本向量 | text_vectors |
 
-### 4.8 职责边界总结
+### 4.10 职责边界总结
 
 | 组件 | 主要职责 | 权责边界 |
 |------|---------|---------|
@@ -3468,7 +3409,44 @@ def _adjust_for_hardware(self):
 
 ## 8. 项目结构设计
 
-### 8.1 整体目录结构
+### 8.1 项目结构概览
+
+msearch项目采用分层架构设计，严格分离开发环境和生产环境，支持离线部署和跨平台运行。
+
+#### 8.1.1 核心设计原则
+
+- **分层架构**：UI层 → API层 → 业务层 → 处理层 → 存储层
+- **模块化设计**：按功能和职责划分模块，便于维护和扩展
+- **配置驱动**：所有参数配置化，支持不同环境部署
+- **离线优先**：支持完全离线部署，适应内网环境
+
+#### 8.1.2 目录结构总览
+
+```
+msearch/
+├── 📁 src/                            # 源代码目录
+│   ├── 📁 core/                       # 核心组件（配置、日志、文件检测）
+│   ├── 📁 api/                        # API服务层（FastAPI路由和模型）
+│   ├── 📁 business/                   # 业务逻辑层（处理编排、检索引擎）
+│   ├── 📁 processors/                 # 专业处理器（图片、视频、音频）
+│   ├── 📁 storage/                    # 存储层（Qdrant、SQLite）
+│   ├── 📁 models/                     # 数据模型（Pydantic模型定义）
+│   ├── 📁 utils/                      # 工具函数（通用工具库）
+│   └── 📁 ui/                         # 用户界面层（PySide6桌面应用）
+│
+├── 📁 config/                         # 配置文件目录
+├── 📁 scripts/                        # 脚本文件（启动、安装、初始化）
+├── 📁 data/                           # 运行时数据目录
+├── 📁 offline/                        # 离线部署资源缓存
+├── 📁 docs/                           # 文档目录
+├── 📁 tests/                          # 测试文件（开发环境专用）
+├── 📁 examples/                       # 示例代码（开发环境专用）
+└── 📁 deploy_test/                    # 部署测试（不纳入Git）
+```
+
+### 8.2 详细目录结构
+
+#### 8.2.1 完整项目结构
 
 ```
 msearch/
@@ -3481,7 +3459,7 @@ msearch/
 │
 ├── config/                            # 配置文件目录
 │   ├── config.yml                     # 主配置文件
-│   └──config.example.yml              # 日志配置文件
+│   └── config.example.yml             # 配置示例文件
 │
 ├── src/                               # 源代码目录
 │   ├── __init__.py
@@ -3500,21 +3478,23 @@ msearch/
 │   │   │   ├── search.py              # 检索API
 │   │   │   ├── config.py              # 配置API
 │   │   │   ├── tasks.py               # 任务控制API
-│   │   │   └── status.py              # 状态查询API
+│   │   │   ├── status.py              # 状态查询API
+│   │   │   └── face.py                # 人脸管理API
 │   │   ├── models/                    # API数据模型
 │   │   │   ├── __init__.py
 │   │   │   ├── search_models.py       # 检索请求/响应模型
 │   │   │   ├── config_models.py       # 配置模型
+│   │   │   ├── task_models.py         # 任务相关模型
 │   │   │   └── common_models.py       # 通用模型
 │   │   └── middleware/                # 中间件
 │   │       ├── __init__.py
-│   │       ├── cors.py                # CORS中间件
-│   │       └── error_handler.py       # 错误处理中间件
+│   │       ├── cors_middleware.py     # CORS中间件
+│   │       ├── error_middleware.py    # 错误处理中间件
+│   │       └── auth_middleware.py     # 认证中间件（预留）
 │   │
 │   ├── business/                      # 业务逻辑层
 │   │   ├── __init__.py
 │   │   ├── orchestrator.py            # ProcessingOrchestrator处理编排器
-│   │   ├── media_processor.py         # MediaProcessor媒体预处理器
 │   │   ├── embedding_engine.py        # EmbeddingEngine向量化引擎
 │   │   ├── search_engine.py           # SearchEngine检索引擎
 │   │   ├── smart_retrieval.py         # SmartRetrievalEngine智能检索
@@ -3567,13 +3547,13 @@ msearch/
 ├── scripts/                           # 脚本文件
 │   ├── start.py                       # 应用启动脚本
 │   ├── setup_environment.py          # 环境初始化脚本
-│   ├── download_all_resources.sh   # 模型资源下载到offline/models/
-│   ├── download_all_resources.bat  # Windows模型资源下载脚本
-│   ├── install_auto.sh               # Linux/Mac离线安装
-│   ├── install_auto.bat              # Windows离线安装
-│   └── database_init.py              # 数据库初始化脚本
+│   ├── download_all_resources.sh      # 模型资源下载脚本
+│   ├── download_all_resources.bat     # Windows模型资源下载脚本
+│   ├── install_auto.sh                # Linux/Mac离线安装
+│   ├── install_auto.bat               # Windows离线安装
+│   └── database_init.py               # 数据库初始化脚本
 │
-├── tests/                             # 测试文件
+├── tests/                             # 测试文件（开发环境专用）
 │   ├── __init__.py
 │   ├── conftest.py                    # pytest配置
 │   ├── unit/                          # 单元测试
@@ -3589,13 +3569,13 @@ msearch/
 │   │   ├── test_api_endpoints.py      # API端点测试
 │   │   ├── test_search_workflow.py    # 检索流程测试
 │   │   └── test_processing_pipeline.py # 处理流程测试
-│   └── test_data/                      # 测试数据
+│   └── test_data/                     # 测试数据
 │       ├── images/                    # 测试图片
 │       ├── videos/                    # 测试视频
 │       ├── audios/                    # 测试音频
 │       └── configs/                   # 测试配置
 │
-├── examples/                          # 示例代码
+├── examples/                          # 示例代码（开发环境专用）
 │   ├── __init__.py
 │   ├── logging_examples.py           # 日志系统使用示例
 │   ├── search_examples.py            # 检索功能示例
@@ -3618,13 +3598,13 @@ msearch/
 │       └── timestamp.log              # 时间戳处理日志
 │
 ├── offline/                           # 离线部署资源缓存（安装时使用）
-│   ├── models/                        # 离线安装时的模型缓存文件，安装时脚本自动从这里将模型复制到data/models/
+│   ├── models/                        # 离线安装时的模型缓存文件
 │   │   ├── models--openai--clip-vit-base-patch32/  
 │   │   ├── models--laion--clap-htsat-fused/         
 │   │   └── models--openai--whisper-base/           
-│   ├── packages/                     # 离线Python依赖包
-│   └── bin/                          # 二进制执行文件
-│       ├── qdrant                    # qdrant安装包
+│   ├── packages/                      # 离线Python依赖包
+│   └── bin/                           # 二进制执行文件
+│       ├── qdrant                     # qdrant安装包
 │       └── qdrant-x86_64-unknown-linux-musl.tar.gz 
 │
 ├── docs/                              # 文档目录
@@ -3643,249 +3623,277 @@ msearch/
     └── performance_reports/           # 性能测试报告
 ```
 
-### 8.2 核心目录说明
+### 8.3 源代码结构详解（src/）
 
-#### 8.2.1 源代码结构（src/）
+#### 8.3.1 核心组件层（core/）
 
-**核心组件（core/）**：
-- `config_manager.py`: 统一配置管理，支持YAML配置文件和环境变量
-  - 实现配置热重载机制，支持运行时动态调整参数
-  - 提供类型安全的配置访问接口，避免配置错误
-  - 支持环境变量覆盖，适应不同部署环境
-  - 集成配置验证机制，确保配置完整性和正确性
+**职责**：提供系统基础设施和通用服务
 
-- `logger_manager.py`: 多级别日志管理，支持动态调整和硬件自适应
-  - 实现分级日志输出（DEBUG、INFO、WARNING、ERROR、CRITICAL） 
-  - 支持多处理器日志（控制台、文件、远程）
-  - 提供性能日志和错误日志分离机制
-  - 集成日志轮转和压缩功能，避免日志文件过大
-  - 支持硬件自适应日志级别，GPU环境下自动调整详细程度
+```
+src/core/
+├── __init__.py
+├── config_manager.py          # 统一配置管理
+├── logger_manager.py          # 多级别日志系统
+└── file_type_detector.py      # 智能文件类型检测
+```
 
-- `file_type_detector.py`: 文件类型检测，支持扩展名和MIME类型识别
-  - 实现多层次文件类型检测（扩展名、MIME类型、文件头分析）
-  - 支持自定义文件类型映射配置
-  - 提供置信度评分机制，处理类型冲突
-  - 集成libmagic库，提供精确的文件内容分析
+**核心特性**：
+- **ConfigManager**：YAML配置文件管理，环境变量覆盖，类型安全访问
+- **LoggerManager**：分级日志输出，硬件自适应，动态级别调整
+- **FileTypeDetector**：多层次文件检测，MIME类型识别，置信度评分
 
-**API服务层（api/）**：
-- `main.py`: FastAPI应用入口，集成所有路由和中间件
-  - 实现应用生命周期管理（启动、关闭、健康检查）
-  - 集成CORS中间件，支持跨域访问
-  - 提供统一的异常处理和错误响应格式
-  - 集成OpenAPI文档自动生成和交互式测试界面
+#### 8.3.2 API服务层（api/）
 
-- `routes/`: API端点实现，按功能模块划分
-  - `search.py`: 多模态检索API，支持文本、图片、音频查询
-  - `processing.py`: 文件处理API，支持批量处理和进度查询
-  - `config.py`: 系统配置API，支持配置查询和动态更新
-  - `status.py`: 系统状态API，提供健康检查和性能监控
-  - `face.py`: 人脸管理API，支持人脸注册和人名关联
+**职责**：提供RESTful API接口和数据验证
 
-- `models/`: Pydantic数据模型，用于请求/响应验证
-  - `search_models.py`: 检索相关数据模型（查询请求、结果响应）
-  - `processing_models.py`: 处理相关数据模型（任务状态、进度信息）
-  - `config_models.py`: 配置相关数据模型（系统设置、参数验证）
-  - `common_models.py`: 通用数据模型（基础响应、错误信息）
+```
+src/api/
+├── __init__.py
+├── main.py                    # FastAPI应用入口
+├── routes/                    # API路由模块
+│   ├── __init__.py
+│   ├── search.py              # 多模态检索API
+│   ├── config.py              # 系统配置API
+│   ├── tasks.py               # 任务控制API
+│   ├── status.py              # 状态查询API
+│   └── face.py                # 人脸管理API
+├── models/                    # Pydantic数据模型
+│   ├── __init__.py
+│   ├── search_models.py       # 检索请求/响应模型
+│   ├── config_models.py       # 配置相关模型
+│   ├── task_models.py         # 任务相关模型
+│   └── common_models.py       # 通用响应模型
+└── middleware/                # 中间件
+    ├── __init__.py
+    ├── cors_middleware.py     # 跨域资源共享
+    ├── error_middleware.py    # 统一错误处理
+    └── auth_middleware.py     # 认证中间件（预留）
+```
 
-- `middleware/`: 中间件实现，包含CORS和错误处理
-  - `cors_middleware.py`: 跨域资源共享配置
-  - `error_middleware.py`: 统一错误处理和日志记录
-  - `auth_middleware.py`: 认证中间件（预留扩展）
-  - `rate_limit_middleware.py`: 请求频率限制（预留扩展）
+**API设计特点**：
+- **统一响应格式**：标准化的成功/错误响应结构
+- **自动文档生成**：OpenAPI规范，交互式测试界面
+- **数据验证**：Pydantic模型自动验证请求/响应数据
+- **异步处理**：支持高并发请求处理
 
-**业务逻辑层（business/）**：
-- `orchestrator.py`: 处理流程编排器，协调各组件工作
-  - 实现文件处理流程的统一编排和调度
-  - 提供任务队列管理和优先级控制
-  - 支持并发处理控制，避免资源过度占用
-  - 集成错误恢复和重试机制
+#### 8.3.3 业务逻辑层（business/）
 
-- `embedding_engine.py`: 向量化引擎，集成 michaelfeil/infinity Python-native模式
-  - 实现多模型统一管理（CLIP、CLAP、Whisper）
-  - 提供批处理优化，提升GPU利用率
-  - 支持动态模型切换和热加载
-  - 集成向量质量验证和标准化处理
+**职责**：实现核心业务逻辑和流程编排
 
-- `smart_retrieval.py`: 智能检索引擎，支持查询类型识别和跨模态检索
-  - 实现查询类型自动识别（人名、音频、视觉、通用）
-  - 提供动态权重分配和结果融合
-  - 支持分层检索优化（人脸预检索→文件白名单）
-  - 集成多模态结果排序和重排机制
+```
+src/business/
+├── __init__.py
+├── orchestrator.py            # 处理流程编排器
+├── embedding_engine.py        # 向量化引擎（michaelfeil/infinity集成）
+├── search_engine.py           # 基础检索引擎
+├── smart_retrieval.py         # 智能检索引擎
+├── fusion_engine.py           # 多模态融合引擎
+├── face_manager.py            # 人脸管理器
+├── file_monitor.py            # 文件监控服务
+└── task_manager.py            # 任务队列管理器
+```
 
-- `face_manager.py`: 人脸管理器，处理人脸识别和人名关联
-  - 实现人脸检测和特征提取
-  - 提供预定义人脸库管理（人脸照片+名字关联）
-  - 支持人脸聚类和相似度计算
-  - 集成人名匹配和动态权重调整
+**核心组件说明**：
 
-**专业处理器（processors/）**：
-- `image_processor.py`: 图片处理，格式转换和尺寸标准化
-  - 实现多格式图片支持（JPEG、PNG、WEBP、TIFF等）
-  - 提供智能尺寸调整和质量优化
-  - 支持批量处理和内存优化
-  - 集成EXIF元数据提取和处理
+| 组件 | 职责 | 关键特性 |
+|------|------|---------|
+| **ProcessingOrchestrator** | 处理流程编排 | 任务调度、状态管理、错误恢复 |
+| **EmbeddingEngine** | 向量化处理 | Python-native infinity集成、批处理优化 |
+| **SmartRetrievalEngine** | 智能检索 | 查询类型识别、动态权重分配 |
+| **MultiModalFusionEngine** | 多模态融合 | 结果聚合、重排序优化 |
+| **FaceManager** | 人脸识别 | 人脸检测、人名关联、相似度计算 |
 
-- `video_processor.py`: 视频处理，场景检测和关键帧提取
-  - 实现智能场景检测和边界识别
-  - 提供关键帧提取和时间戳精确计算
-  - 支持多分辨率处理和格式转换
-  - 集成音视频流分离和同步处理
+#### 8.3.4 专业处理器层（processors/）
 
-- `audio_processor.py`: 音频处理，内容分类和格式转换
-  - 实现音频内容智能分类（音乐、语音、噪音）
-  - 提供格式标准化和质量过滤
-  - 支持采样率转换和声道处理
-  - 集成音频分段和时间戳管理
+**职责**：处理不同类型的媒体文件
 
-- `timestamp_processor.py`: 时间戳处理，精确时间计算和同步验证
-  - 实现±2秒精度的时间戳管理
-  - 提供多模态时间同步验证
-  - 支持时间段合并和重叠处理
-  - 集成场景感知的时间切片
+```
+src/processors/
+├── __init__.py
+├── image_processor.py         # 图片处理器
+├── video_processor.py         # 视频处理器
+├── audio_processor.py         # 音频处理器
+├── audio_classifier.py        # 音频内容分类器
+└── timestamp_processor.py     # 时间戳处理器
+```
 
-**存储层（storage/）**：
-- `qdrant_client.py`: Qdrant向量数据库抽象层
-  - 实现向量数据库的统一操作接口
-  - 提供集合管理和索引优化
-  - 支持批量向量操作和事务处理
-  - 预留微服务化扩展接口
+**处理器特性**：
+- **ImageProcessor**：格式转换、尺寸标准化、EXIF提取
+- **VideoProcessor**：场景检测、关键帧提取、时间戳计算
+- **AudioProcessor**：格式标准化、内容分类、质量过滤
+- **TimestampProcessor**：±2秒精度时间定位、多模态同步
 
-- `sqlite_manager.py`: SQLite元数据管理
-  - 实现文件元数据的结构化存储
-  - 提供事务管理和并发控制
-  - 支持数据库迁移和版本管理
-  - 集成查询优化和索引管理
+#### 8.3.5 存储层（storage/）
 
-- `face_database.py`: 人脸数据库管理，支持人名关联
-  - 实现人脸特征向量的专门存储
-  - 提供人名-人脸的关联管理
-  - 支持人脸聚类和相似度查询
-  - 集成人脸数据的增删改查操作
+**职责**：数据持久化和检索优化
 
-#### 8.2.2 配置和脚本
+```
+src/storage/
+├── __init__.py
+├── qdrant_client.py           # Qdrant向量数据库客户端
+├── sqlite_manager.py          # SQLite元数据管理器
+└── face_database.py           # 人脸数据库管理
+```
 
-**配置文件（config/）**：
-- `config.yml`: 主配置文件，包含所有系统参数
-  - 系统核心配置：数据库连接、模型路径、设备选择
-  - 处理参数配置：批处理大小、质量阈值、时间精度
-  - 功能开关配置：模块启用/禁用、特性控制
-  - 性能调优配置：并发数、内存限制、缓存策略
+**存储架构**：
+- **QdrantClient**：向量存储抽象层，支持单机和集群部署
+- **SQLiteManager**：元数据管理，事务控制，查询优化
+- **FaceDatabase**：人脸特征存储，人名关联管理
 
-- `config.example.yml`: 配置文件示例，便于用户参考
-  - 提供完整的配置示例和参数说明
-  - 包含不同环境的配置模板（开发、测试、生产）
-  - 详细的参数注释和使用建议
-  - 常见配置场景的最佳实践
+### 8.4 配置和脚本目录
 
-- `logging.yml`: 日志配置文件，支持多级别和多处理器
-  - 日志级别配置：全局和模块级别的日志控制
-  - 输出格式配置：时间戳、模块名、线程信息
-  - 处理器配置：控制台、文件、远程日志服务
-  - 轮转策略配置：文件大小、保留天数、压缩选项
+#### 8.4.1 配置文件（config/）
 
-**脚本文件（scripts/）**：
-- `start.py`: 应用启动脚本，支持不同启动模式
-  - 支持开发模式、生产模式、调试模式启动
-  - 提供环境检查和依赖验证
-  - 集成服务健康检查和自动重启
-  - 支持后台运行和进程管理
+```
+config/
+├── config.yml                # 主配置文件
+└── config.example.yml        # 配置示例文件
+```
 
-- `setup_environment.py`: 环境初始化，创建必要目录和配置
-  - 自动创建 `data/` 运行时目录结构
-  - 初始化数据库表结构和索引
-  - 检查和安装必要的系统依赖
-  - 生成默认配置文件和示例数据
+**配置文件特点**：
+- **分层配置**：系统配置、功能开关、性能参数
+- **环境适配**：开发、测试、生产环境配置模板
+- **类型安全**：配置项类型验证和默认值设置
 
-- `download_model_resources.sh/.bat`: 模型资源下载脚本
-  - **目标路径**: 下载模型到 `offline/models/` 缓存目录
-  - **缓存格式**: 使用HuggingFace标准缓存格式
-  - **用途**: 为离线安装准备模型资源
-  - 支持断点续传和校验验证
+**主要配置项**：
 
-- `install_auto.sh/.bat`或`install_auto.sh`: 本地优先自动安装脚本
-  - **本地优先**: 首先尝试从 `offline/` 缓存目录读取资源，若无则自动从网络下载
-  - **目标路径**: 安装到 `data/` 运行时目录
-  - **核心功能**: 模型格式转换和路径重组织
-  - **依赖处理**: 离线安装Python包和二进制文件，若无则在线下载安装
+| 配置类别 | 配置项 | 说明 |
+|---------|--------|------|
+| **系统核心** | 数据库连接、模型路径、设备选择 | 基础运行环境配置 |
+| **处理参数** | 批处理大小、质量阈值、时间精度 | 媒体处理性能调优 |
+| **功能开关** | 模块启用/禁用、特性控制 | 功能模块控制 |
+| **性能调优** | 并发数、内存限制、缓存策略 | 系统性能优化 |
 
-- `download_models.py`: 模型下载脚本（Python版本）
-  - 提供编程接口的模型下载功能
-  - 集成模型版本管理和更新机制
-  - 支持自定义下载路径和格式
+#### 8.4.2 脚本文件（scripts/）
 
-- `database_init.py`: 数据库初始化，创建表结构和索引
-  - 创建SQLite数据库表结构
-  - 初始化Qdrant向量数据库集合
-  - 建立必要的索引和约束
-  - 提供数据库迁移和升级功能
+```
+scripts/
+├── start.py                   # 应用启动脚本
+├── setup_environment.py      # 环境初始化脚本
+├── download_all_resources.sh  # 模型资源下载脚本
+├── install_auto.sh            # 自动安装脚本
+└── database_init.py           # 数据库初始化脚本
+```
 
-#### 8.2.3 测试和示例
+**脚本功能**：
 
-**测试文件（tests/）**：
-- `unit/`: 单元测试，覆盖各个组件的核心功能
-  - `test_config_manager.py`: 配置管理器功能测试
-  - `test_embedding_engine.py`: 向量化引擎性能和准确性测试
-  - `test_search_engine.py`: 检索引擎多模态查询测试
-  - `test_media_processor.py`: 媒体处理器格式转换测试
-  - `test_face_manager.py`: 人脸管理器识别和匹配测试
-  - `test_timestamp_processor.py`: 时间戳处理器精度验证测试
+| 脚本名称 | 功能描述 | 使用场景 |
+|---------|---------|---------|
+| **start.py** | 多模式启动（开发/生产/调试） | 日常启动和运维 |
+| **install_auto.sh** | 本地优先安装，离线部署支持 | 初始部署和环境搭建 |
+| **setup_environment.py** | 目录创建、依赖检查、配置生成 | 环境初始化 |
+| **download_all_resources.sh** | 模型资源下载到offline/缓存 | 离线部署准备 |
+| **database_init.py** | 数据库表结构和索引创建 | 数据库初始化 |
 
-- `integration/`: 集成测试，验证组件间协作
-  - `test_api_endpoints.py`: API端点完整性和性能测试
-  - `test_search_workflow.py`: 端到端检索流程测试
-  - `test_processing_pipeline.py`: 文件处理流水线集成测试
-  - `test_multimodal_sync.py`: 多模态时间同步集成测试
+### 8.5 数据目录结构
 
-- `fixtures/`: 测试数据，包含各种格式的测试文件
-  - `images/`: 测试图片（不同格式、分辨率、质量）
-  - `videos/`: 测试视频（短视频、长视频、不同编码）
-  - `audios/`: 测试音频（音乐、语音、不同采样率）
-  - `configs/`: 测试配置文件和环境设置
+#### 8.5.1 运行时数据（data/）
 
-**示例代码（examples/）**：
-- `logging_examples.py`: 日志系统使用示例
-  - 演示不同级别日志的使用方法
-  - 展示性能日志和错误日志的最佳实践
-  - 提供自定义日志处理器的实现示例
+```
+data/                          # 运行时数据目录
+├── database/                  # 数据库文件
+│   ├── msearch.db             # SQLite数据库
+│   └── qdrant/                # Qdrant数据目录
+├── models/                    # AI模型存储（运行时使用）
+│   ├── clip/                  # CLIP模型文件
+│   ├── clap/                  # CLAP模型文件
+│   └── whisper/               # Whisper模型文件
+├── temp/                      # 临时文件
+└── logs/                      # 日志文件
+    ├── msearch.log            # 主日志文件
+    ├── error.log              # 错误日志文件
+    └── performance.log        # 性能日志文件
+```
 
-- `search_examples.py`: 检索功能使用示例
-  - 演示文本、图片、音频的多模态检索
-  - 展示高级检索功能（人名检索、时间范围）
-  - 提供检索结果处理和展示的代码示例
+#### 8.5.2 离线资源（offline/）
 
-- `processing_examples.py`: 处理流程示例
-  - 演示批量文件处理的完整流程
-  - 展示自定义处理策略的实现方法
-  - 提供处理进度监控和错误处理示例
+```
+offline/                       # 离线部署资源缓存
+├── models/                    # 模型缓存（安装时使用）
+│   ├── models--openai--clip-vit-base-patch32/
+│   ├── models--laion--clap-htsat-fused/
+│   └── models--openai--whisper-base/
+├── packages/                  # 离线Python依赖包
+└── bin/                       # 二进制执行文件
+    └── qdrant-x86_64-unknown-linux-musl.tar.gz
+```
 
-- `config_examples.py`: 配置管理示例
-  - 演示配置文件的创建和修改
-  - 展示动态配置更新的实现方法
-  - 提供不同环境配置的最佳实践
+**目录用途说明**：
 
-### 8.3 设计原则体现
+| 目录 | 用途 | 生命周期 | 说明 |
+|------|------|---------|------|
+| `data/models/` | 系统运行时模型存储 | 运行时使用 | 系统实际加载的模型路径 |
+| `offline/models/` | 离线安装缓存 | 安装时使用 | HuggingFace缓存格式，安装脚本源 |
+| `data/database/` | 数据库文件 | 运行时使用 | SQLite和Qdrant数据存储 |
+| `data/logs/` | 日志文件 | 运行时使用 | 分类日志存储，支持轮转 |
 
-#### 8.3.1 分层架构清晰
+### 8.6 开发和测试目录
+
+#### 8.6.1 测试文件（tests/）
+
+```
+tests/                         # 测试文件（开发环境专用）
+├── __init__.py
+├── conftest.py                # pytest配置
+├── unit/                      # 单元测试
+│   ├── test_config_manager.py
+│   ├── test_embedding_engine.py
+│   ├── test_search_engine.py
+│   └── test_timestamp_processor.py
+├── integration/               # 集成测试
+│   ├── test_api_endpoints.py
+│   ├── test_search_workflow.py
+│   └── test_processing_pipeline.py
+└── test_data/                 # 测试数据
+    ├── images/
+    ├── videos/
+    └── audios/
+```
+
+**测试覆盖范围**：
+- **单元测试**：各组件核心功能验证
+- **集成测试**：组件间协作验证
+- **性能测试**：时间戳精度、检索性能验证
+
+#### 8.6.2 示例代码（examples/）
+
+```
+examples/                      # 示例代码（开发环境专用）
+├── __init__.py
+├── logging_examples.py       # 日志系统使用示例
+├── search_examples.py        # 检索功能示例
+├── processing_examples.py    # 处理流程示例
+└── config_examples.py        # 配置管理示例
+```
+
+**示例代码价值**：
+- **快速上手**：提供完整的使用示例
+- **最佳实践**：展示推荐的使用方法
+- **功能演示**：覆盖主要功能场景
+
+### 8.7 架构设计优势
+
+#### 8.7.1 分层架构清晰
 
 ```mermaid
 graph TB
-    A[UI层 - src/ui/] --> B[API层 - src/api/]
-    B --> C[业务层 - src/business/]
-    C --> D[处理层 - src/processors/]
-    C --> E[存储层 - src/storage/]
+    A[UI层 - PySide6桌面应用] --> B[API层 - FastAPI服务]
+    B --> C[业务层 - 核心逻辑]
+    C --> D[处理层 - 媒体处理]
+    C --> E[存储层 - 数据持久化]
     
-    F[核心组件 - src/core/] --> C
-    G[数据模型 - src/models/] --> C
-    H[工具函数 - src/utils/] --> D
+    F[核心组件 - 基础设施] --> C
+    G[数据模型 - 类型定义] --> B
+    H[工具函数 - 通用库] --> D
 ```
 
-**分层优势**：
-- **职责清晰**：每层专注于特定功能，便于维护
+**架构优势**：
+- **职责清晰**：每层专注特定功能，便于维护和扩展
 - **依赖单向**：上层依赖下层，避免循环依赖
 - **易于测试**：每层可独立测试，支持Mock和Stub
 - **扩展友好**：新功能可在对应层次添加，不影响其他层
 
-#### 8.3.2 模块化设计
+#### 8.7.2 模块化设计
 
 **按功能划分**：
 - **处理器模块**：图片、视频、音频处理器独立实现
@@ -3897,43 +3905,55 @@ graph TB
 - **API组件**：路由、模型、中间件等API相关功能
 - **工具组件**：通用工具函数，可复用
 
-#### 8.3.3 配置驱动架构
+#### 8.7.3 部署友好设计
 
-**配置集中管理**：
-- 所有配置集中在`config/`目录
-- 支持环境变量覆盖
-- 提供示例配置文件
+**开发环境 vs 生产环境**：
+- **开发环境**：包含完整的测试、文档、示例代码
+- **生产环境**：只包含运行必需的文件，减少部署包大小
+- **离线部署**：支持完全离线安装，适应内网环境
 
-**脚本自动化**：
-- 环境初始化脚本
-- 模型下载脚本
-- 数据库初始化脚本
+**配置驱动架构**：
+- **统一配置**：所有参数集中在config.yml管理
+- **环境适配**：支持不同环境的配置模板
+- **热重载**：配置修改后无需重启（部分参数）
 
-### 8.4 开发和部署便利性
+### 8.8 项目结构最佳实践
 
-#### 8.4.1 开发便利性
+#### 8.8.1 开发便利性
 
-**代码组织**：
-- 清晰的目录结构，便于定位代码
-- 统一的命名规范，提高代码可读性
-- 完整的示例代码，降低学习成本
+**代码组织优势**：
+- **清晰导航**：目录结构直观，便于快速定位代码
+- **统一规范**：命名规范一致，提高代码可读性
+- **完整示例**：examples/目录提供使用示例，降低学习成本
 
-**测试支持**：
-- 完整的测试框架，支持单元测试和集成测试
-- 测试数据和配置，便于测试环境搭建
-- 测试覆盖率要求，确保代码质量
+**开发工具支持**：
+- **测试框架**：完整的单元测试和集成测试支持
+- **文档系统**：docs/目录包含完整的项目文档
+- **调试支持**：多级别日志系统，便于问题排查
 
-#### 8.4.2 部署便利性
+#### 8.8.2 部署和运维便利性
 
-**离线部署支持**：
-- 预下载模型文件，支持离线环境
-- 离线安装脚本，简化部署过程
-- 依赖包管理，确保环境一致性
+**部署优势**：
+- **离线支持**：offline/目录支持完全离线部署
+- **自动化脚本**：一键安装和环境初始化
+- **环境隔离**：开发和生产环境严格分离
 
-**运行时数据管理**：
-- 数据目录结构清晰，便于备份和迁移
-- 日志文件分类存储，便于问题排查
-- 临时文件管理，避免磁盘空间浪费
+**运维优势**：
+- **数据管理**：data/目录结构清晰，便于备份和迁移
+- **日志管理**：分类日志存储，支持轮转和压缩
+- **监控支持**：性能日志和错误日志分离，便于监控
+
+#### 8.8.3 扩展性设计
+
+**架构扩展性**：
+- **微服务就绪**：清晰的服务边界，便于拆分
+- **插件化设计**：处理器模块支持插件式扩展
+- **配置驱动**：新功能通过配置启用，无需修改核心代码
+
+**技术栈扩展**：
+- **存储扩展**：QdrantClient抽象层支持不同存储后端
+- **模型扩展**：EmbeddingEngine支持新的AI模型集成
+- **界面扩展**：UI层独立，支持Web界面等其他前端
 
 ## 9. 部署与运维规范
 

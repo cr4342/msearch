@@ -196,6 +196,19 @@ processing:
       # 时间戳验证
       enable_timestamp_validation: true
       enable_drift_correction: true
+    # 关键帧提取配置
+    keyframe_extraction:
+      frame_interval: 2.0  # 关键帧间隔(秒)
+      max_frames_per_chunk: 30  # 每个切片最大帧数
+      quality: 2  # JPEG质量(1-31, 数值越小质量越高)
+    
+    # 流处理配置
+    stream:
+      enable_audio_extraction: true  # 启用音频流提取
+      enable_stream_sync: true  # 启用流同步
+      sync_tolerance: 0.1  # 流同步容差(秒)
+      max_drift_correction: 1.0  # 最大漂移校正(秒)
+    
     # 处理限制
     max_duration: 7200  # 最大处理时长(秒)
     max_file_size: 500  # MB

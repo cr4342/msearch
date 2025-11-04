@@ -68,7 +68,7 @@ async def search_image(file: UploadFile = File(...), limit: int = 20):
 
 @router.post("/audio")
 async def search_audio(file: UploadFile = File(...), limit: int = 20):
-    """音频检索API"""
+    """音频检索API - 支持上传音频文件进行检索"""
     try:
         logger.info(f"执行音频搜索: filename='{file.filename}', limit={limit}")
         
@@ -83,6 +83,13 @@ async def search_audio(file: UploadFile = File(...), limit: int = 20):
             "limit": limit,
             "results": [],
             "total": 0
+        }
+    except Exception as e:
+        logger.error(f"音频搜索失败: {e}")
+        return {
+            "status": "error",
+            "message": f"音频搜索失败: {e}",
+            "filename": file.filename
         }
     except Exception as e:
         logger.error(f"音频搜索失败: {e}")

@@ -1,0 +1,128 @@
+{
+  "report_info": {
+    "title": "MSearch 综合测试报告",
+    "generated_at": "2025-10-31 05:41:52",
+    "version": "1.0.0"
+  },
+  "system_info": {
+    "python_version": "3.12.3",
+    "platform": "linux",
+    "timestamp": "2025-10-31 05:41:52",
+    "project_root": "/data/project/msearch"
+  },
+  "environment_status": {
+    "python_packages": {
+      "torch": "✅ 已安装",
+      "transformers": "✅ 已安装",
+      "numpy": "✅ 已安装",
+      "fastapi": "✅ 已安装",
+      "qdrant_client": "✅ 已安装",
+      "PIL": "✅ 已安装",
+      "requests": "✅ 已安装"
+    },
+    "critical_packages_missing": [],
+    "status": "GOOD"
+  },
+  "resource_status": {
+    "offline_packages": 296,
+    "model_files": 132,
+    "binary_files": 3,
+    "testdata_files": 2,
+    "status": "GOOD"
+  },
+  "test_results": {
+    "simple_functionality": {
+      "status": "PARTIAL",
+      "tests": []
+    },
+    "real_model": {
+      "status": "PARTIAL",
+      "total_tests": 4,
+      "passed_tests": 3,
+      "failed_tests": 1,
+      "success_rate": 75.0,
+      "tests": [
+        {
+          "name": "CLIP模型测试",
+          "status": "PASS",
+          "details": {
+            "model_loaded": true,
+            "inference_successful": true,
+            "best_match_text": "a red image",
+            "best_match_score": 0.999245285987854,
+            "all_scores": [
+              0.999245285987854,
+              0.000367980741430074,
+              0.000195138476556167,
+              0.00010347963689127937,
+              8.816912304610014e-05
+            ],
+            "test_texts": [
+              "a red image",
+              "a blue image",
+              "a green image",
+              "红色的图片",
+              "蓝色的图片"
+            ]
+          },
+          "error": null,
+          "duration": 6.281010627746582
+        },
+        {
+          "name": "Whisper模型测试",
+          "status": "PASS",
+          "details": {
+            "model_loaded": true,
+            "inference_successful": true,
+            "transcription": " You",
+            "audio_duration": 2,
+            "sample_rate": 16000
+          },
+          "error": null,
+          "duration": 4.8733179569244385
+        },
+        {
+          "name": "CLAP模型测试",
+          "status": "FAIL",
+          "details": {},
+          "error": "Error while deserializing header: incomplete metadata, file not fully covered",
+          "duration": 0.16237330436706543
+        },
+        {
+          "name": "文本查询测试",
+          "status": "PASS",
+          "details": {
+            "queries_loaded": true,
+            "text_queries_count": 9,
+            "test_scenarios_count": 3,
+            "sample_queries": [
+              "智能检索系统",
+              "多模态搜索",
+              "文本相似度"
+            ],
+            "sample_scenarios": [
+              "基础文本检索",
+              "跨模态检索",
+              "性能测试"
+            ]
+          },
+          "error": null,
+          "duration": 0.0002257823944091797
+        }
+      ]
+    }
+  },
+  "overall_stats": {
+    "total_test_suites": 2,
+    "passed_test_suites": 2,
+    "total_individual_tests": 4,
+    "passed_individual_tests": 3,
+    "overall_success_rate": 75.0,
+    "status": "GOOD"
+  },
+  "recommendations": [
+    "🔧 CLAP模型测试失败，建议重新下载CLAP模型文件",
+    "📝 建议定期运行测试以确保系统稳定性",
+    "🔄 如遇到问题，可查看 tests/output/ 目录下的详细日志"
+  ]
+}

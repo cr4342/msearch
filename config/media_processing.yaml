@@ -1,0 +1,248 @@
+# 媒体预处理系统配置
+# 此文件定义了所有媒体处理器的参数和阈值
+
+# 媒体处理全局配置
+media_processing:
+  # 最大文件大小 (字节)
+  max_file_size: 104857600  # 100MB
+  
+  # 临时文件目录
+  temp_dir: "/tmp/msearch"
+  
+  # 并发处理线程数
+  max_workers: 4
+  
+  # 处理超时时间 (秒)
+  processing_timeout: 300
+
+# 图像处理配置
+image_processing:
+  # 目标图像尺寸
+  target_size: 224
+  
+  # 最大分辨率 (宽, 高)
+  max_resolution: [1920, 1080]
+  
+  # 质量阈值 (0-1)
+  quality_threshold: 0.5
+  
+  # 支持的图像格式
+  supported_formats: [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".webp"]
+  
+  # 图像增强参数
+  enhancement:
+    # 是否启用自动增强
+    auto_enhance: true
+    
+    # 亮度调整范围 (-1 到 1)
+    brightness_range: [-0.2, 0.2]
+    
+    # 对比度调整范围 (0.5 到 2.0)
+    contrast_range: [0.8, 1.2]
+    
+    # 饱和度调整范围 (0.5 到 2.0)
+    saturation_range: [0.8, 1.2]
+
+# 视频处理配置
+video_processing:
+  # 目标视频尺寸
+  target_size: 224
+  
+  # 最大分辨率 (宽, 高)
+  max_resolution: [1280, 720]
+  
+  # 目标帧率
+  target_fps: 8
+  
+  # 场景检测阈值 (0-1)
+  scene_threshold: 0.3
+  
+  # 关键帧提取间隔 (秒)
+  frame_interval: 2.0
+  
+  # 支持的视频格式
+  supported_formats: [".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".webm"]
+  
+  # 视频编码参数
+  encoding:
+    # 视频编码器
+    codec: "h264"
+    
+    # 视频比特率 (bps)
+    bitrate: 1000000
+    
+    # 关键帧间隔 (帧)
+    keyframe_interval: 30
+  
+  # 场景检测配置
+  scene_detection:
+    # 是否启用场景检测
+    enabled: true
+    
+    # 场景变化阈值 (0-100)
+    threshold: 30.0
+    
+    # 最小场景长度 (秒)
+    min_scene_length: 30
+    
+    # 最大场景长度 (秒)
+    max_scene_length: 120
+
+# 音频处理配置
+audio_processing:
+  # 目标采样率 (Hz)
+  target_sample_rate: 16000
+  
+  # 目标声道数
+  target_channels: 1
+  
+  # 目标比特率 (bps)
+  target_bitrate: 64000
+  
+  # 音频编码器
+  codec: "aac"
+  
+  # 音频片段长度 (秒)
+  segment_duration: 10.0
+  
+  # 质量阈值 (0-1)
+  quality_threshold: 0.5
+  
+  # 支持的音频格式
+  supported_formats: [".mp3", ".wav", ".flac", ".aac", ".ogg", ".m4a"]
+  
+  # 音频分类配置
+  classification:
+    # 是否启用音频分类
+    enabled: true
+    
+    # 分类模型
+    model: "inaSpeechSegmenter"
+    
+    # 语音检测阈值 (0-1)
+    speech_threshold: 0.7
+  
+  # 音频质量过滤
+  quality_filter:
+    # 最小语音片段时长 (秒)
+    min_duration: 3.0
+    
+    # 最小音乐片段时长 (秒)
+    min_music_duration: 5.0
+    
+    # 噪声阈值 (0-1)
+    noise_threshold: 0.3
+
+# 文本处理配置
+text_processing:
+  # 最大文件大小 (字节)
+  max_file_size: 10485760  # 10MB
+  
+  # 编码检测优先级
+  encoding_priority: ["utf-8", "gbk", "gb2312", "latin-1"]
+  
+  # 支持的文本格式
+  supported_formats: [".txt", ".md", ".doc", ".docx", ".pdf", ".rtf"]
+  
+  # 文本清理配置
+  cleaning:
+    # 是否去除多余空白
+    remove_extra_whitespace: true
+    
+    # 是否规范化Unicode字符
+    normalize_unicode: true
+    
+    # 是否去除特殊字符
+    remove_special_chars: false
+  
+  # 结构化提取配置
+  extraction:
+    # 是否提取标题
+    extract_headings: true
+    
+    # 是否提取链接
+    extract_links: true
+    
+    # 是否提取表格
+    extract_tables: true
+
+# 时间戳处理配置
+timestamp_processing:
+  # 时间戳精度要求 (秒)
+  accuracy_requirement: 2.0
+  
+  # 多模态同步容差 (秒)
+  sync_tolerance:
+    video: 0.1
+    audio_music: 0.2
+    audio_speech: 0.3
+  
+  # 时间段合并配置
+  segment_merge:
+    # 是否启用时间段合并
+    enabled: true
+    
+    # 合并容差 (秒)
+    tolerance: 2.0
+
+# FFmpeg处理配置
+ffmpeg_processing:
+  # FFmpeg可执行文件路径
+  ffmpeg_path: "ffmpeg"
+  
+  # FFprobe可执行文件路径
+  ffprobe_path: "ffprobe"
+  
+  # 处理超时时间 (秒)
+  timeout: 300
+  
+  # 是否使用硬件加速
+  hardware_acceleration: false
+  
+  # 硬件加速类型 (cuda, vaapi, etc.)
+  acceleration_type: "cuda"
+
+# 预处理配置
+preprocessing:
+  # 视频目标短边像素
+  video_target_short_side: 960
+  
+  # 图像目标短边像素
+  image_target_short_side: 960
+  
+  # 是否保留原始文件
+  keep_original: true
+  
+  # 输出目录
+  output_dir: "/tmp/msearch/processed"
+
+# 日志配置
+logging:
+  # 日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
+  level: "INFO"
+  
+  # 日志文件路径
+  file_path: "/var/log/msearch/media_processing.log"
+  
+  # 日志文件最大大小 (MB)
+  max_file_size: 10
+  
+  # 保留的日志文件数量
+  backup_count: 5
+  
+  # 是否输出到控制台
+  console_output: true
+
+# 性能配置
+performance:
+  # 内存使用限制 (MB)
+  memory_limit: 1024
+  
+  # CPU使用限制 (0-1, 1表示100%)
+  cpu_limit: 0.8
+  
+  # 是否启用多进程处理
+  multiprocessing: true
+  
+  # 进程池大小
+  pool_size: 4

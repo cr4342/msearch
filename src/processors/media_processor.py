@@ -7,7 +7,7 @@
 import os
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Any
+from typing import Dict, List, Any, Optional
 import logging
 
 from src.core.config_manager import get_config_manager
@@ -595,35 +595,256 @@ class MediaProcessor:
         keyframes = []
         
         try:
+            # 从配置获取关键帧提取参数
+            keyframe_config = self.video_config.get("keyframe_extraction", {})
+            frame_interval = keyframe_config.get("frame_interval", 2.0)  # 每2秒一帧
+            max_frames_per_chunk = keyframe_config.get("max_frames_per_chunk", 30)
+            
             # 为每个切片提取关键帧
             for chunk in chunks:
                 index = chunk["index"]
                 start_time = chunk["start_time"]
                 end_time = chunk["end_time"]
+                duration = chunk["duration"]
                 
-                # 提取关键帧的输出路径
-                keyframe_path = f"{video_path}_keyframe_{index}.jpg"
+                # 计算需要提取的帧数
+                num_frames = min(int(duration / frame_interval), max_frames_per_chunk)
                 
-                # 使用FFmpeg提取关键帧（在切片的中间时间点）
-                middle_time = (start_time + end_time) / 2
+                if num_frames <= 0:
+                    continue
+                
+                # 计算帧时间点
+                frame_times = []
+                for i in range(num_frames):
+                    frame_time = start_time + (i * duration / num_frames)
+                    frame_times.append(frame_time)
+                
+                # 使用FFmpeg提取关键帧
+                chunk_keyframes = self._extract_frames_at_times(video_path, frame_times, index)
+                keyframes.extend(chunk_keyframes)
+                
+                logger.debug(f"切片{index}提取关键帧: {len(chunk_keyframes)}帧")
+            
+            logger.info(f"关键帧提取完成: 总共{len(keyframes)}帧")
+            return keyframes
+            
+        except Exception as e:
+            logger.error(f"关键帧提取失败: {e}")
+            return []
+    
+    def _extract_frames_at_times(self, video_path: str, frame_times: List[float], 
+                               chunk_index: int) -> List[str]:
+        """
+        在指定时间点提取帧
+        
+        Args:
+            video_path: 视频文件路径
+            frame_times: 帧时间点列表
+            chunk_index: 切片索引
+            
+        Returns:
+            提取的帧文件路径列表
+        """
+        frame_paths = []
+        
+        try:
+            # 创建输出目录
+            output_dir = os.path.join(os.path.dirname(video_path), "keyframes")
+            os.makedirs(output_dir, exist_ok=True)
+            
+            for i, frame_time in enumerate(frame_times):
+                # 生成输出文件名
+                frame_filename = f"chunk_{chunk_index}_frame_{i}_{frame_time:.3f}s.jpg"
+                frame_path = os.path.join(output_dir, frame_filename)
+                
+                # 使用FFmpeg提取单帧
                 cmd = [
-                    "ffmpeg", "-ss", str(middle_time),
+                    "ffmpeg", "-y",  # 覆盖输出文件
                     "-i", video_path,
-                    "-vframes", "1",
-                    "-y",  # 覆盖输出文件
-                    keyframe_path
+                    "-ss", str(frame_time),  # 跳转到指定时间
+                    "-vframes", "1",  # 只提取一帧
+                    "-q:v", "2",  # 高质量
+                    frame_path
                 ]
                 
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode == 0:
-                    keyframes.append(keyframe_path)
-                    logger.info(f"关键帧提取完成: {keyframe_path}")
+                result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
+                
+                if result.returncode == 0 and os.path.exists(frame_path):
+                    frame_paths.append(frame_path)
+                    logger.debug(f"帧提取成功: {frame_path}")
                 else:
-                    logger.error(f"关键帧提取失败: {result.stderr}")
-                    
+                    logger.warning(f"帧提取失败: time={frame_time}s, error={result.stderr}")
+            
+            return frame_paths
+            
         except Exception as e:
-            logger.error(f"关键帧提取出错: {e}")
+            logger.error(f"指定时间点帧提取失败: {e}")
+            return []
+    
+    def process_video_with_timestamps(self, video_path: str) -> Dict[str, Any]:
+        """
+        处理视频并生成精确时间戳信息
         
+        Args:
+            video_path: 视频文件路径
+            
+        Returns:
+            包含时间戳信息的处理结果
+        """
+        try:
+            logger.info(f"开始处理视频并生成时间戳: {video_path}")
+            
+            # 获取视频基本信息
+            video_info = self._get_video_info(video_path)
+            fps = video_info.get("fps", 30.0)
+            duration = video_info.get("duration", 0.0)
+            total_frames = int(fps * duration)
+            
+            # 场景检测和切片
+            chunks = self._detect_scenes_and_slice(video_path, video_info)
+            
+            # 生成场景信息用于时间戳处理
+            scenes = []
+            for chunk in chunks:
+                scene_info = {
+                    'start_time': chunk['start_time'],
+                    'end_time': chunk['end_time'],
+                    'confidence': 1.0,
+                    'scene_id': chunk['index']
+                }
+                scenes.append(scene_info)
+            
+            # 使用时间戳处理器生成精确时间戳
+            from src.processors.timestamp_processor import TimestampProcessor
+            timestamp_processor = TimestampProcessor()
+            
+            video_timestamps = timestamp_processor.process_video_stream_timestamps(
+                video_path, fps, total_frames, scenes
+            )
+            
+            # 提取关键帧
+            keyframes = self._extract_keyframes(video_path, chunks)
+            
+            # 分离音频流（如果存在）
+            audio_path = self._extract_audio_stream(video_path)
+            audio_timestamps = []
+            
+            if audio_path:
+                # 简化音频处理：创建默认音频段
+                audio_segments = [{
+                    'type': 'music',
+                    'start_time': 0.0,
+                    'end_time': duration,
+                    'confidence': 1.0
+                }]
+                audio_timestamps = timestamp_processor.process_audio_stream_timestamps(
+                    audio_path, audio_segments
+                )
+            
+            # 多模态时间戳同步
+            if audio_timestamps:
+                video_timestamps, audio_timestamps = timestamp_processor.synchronize_multimodal_timestamps(
+                    video_timestamps, audio_timestamps
+                )
+            
+            result = {
+                "status": "success",
+                "original_path": video_path,
+                "video_info": video_info,
+                "chunks": chunks,
+                "keyframes": keyframes,
+                "video_timestamps": [
+                    {
+                        'segment_id': ts.segment_id,
+                        'start_time': ts.start_time,
+                        'end_time': ts.end_time,
+                        'duration': ts.duration,
+                        'frame_index': ts.frame_index,
+                        'modality': ts.modality.value,
+                        'confidence': ts.confidence,
+                        'scene_boundary': ts.scene_boundary
+                    }
+                    for ts in video_timestamps
+                ],
+                "audio_timestamps": [
+                    {
+                        'segment_id': ts.segment_id,
+                        'start_time': ts.start_time,
+                        'end_time': ts.end_time,
+                        'duration': ts.duration,
+                        'modality': ts.modality.value,
+                        'confidence': ts.confidence
+                    }
+                    for ts in audio_timestamps
+                ],
+                "timestamp_accuracy": "±2s",
+                "total_video_segments": len(video_timestamps),
+                "total_audio_segments": len(audio_timestamps)
+            }
+            
+            logger.info(f"视频时间戳处理完成: 视频段{len(video_timestamps)}个, "
+                       f"音频段{len(audio_timestamps)}个")
+            
+            return result
+            
+        except Exception as e:
+            logger.error(f"视频时间戳处理失败: {e}")
+            return {
+                "status": "error",
+                "error": str(e),
+                "original_path": video_path
+            }
+    
+    def _extract_audio_stream(self, video_path: str) -> Optional[str]:
+        """
+        从视频中提取音频流
+        
+        Args:
+            video_path: 视频文件路径
+            
+        Returns:
+            音频文件路径或None
+        """
+        try:
+            # 检查视频是否包含音频流
+            cmd = [
+                "ffprobe", "-v", "error", "-select_streams", "a:0",
+                "-show_entries", "stream=codec_name", "-of", "csv=p=0",
+                video_path
+            ]
+            
+            result = subprocess.run(cmd, capture_output=True, text=True)
+            
+            if result.returncode != 0 or not result.stdout.strip():
+                logger.info(f"视频不包含音频流: {video_path}")
+                return None
+            
+            # 生成音频输出路径
+            audio_path = video_path.rsplit('.', 1)[0] + "_audio.wav"
+            
+            # 提取音频流
+            extract_cmd = [
+                "ffmpeg", "-y",  # 覆盖输出文件
+                "-i", video_path,
+                "-vn",  # 不包含视频
+                "-acodec", "pcm_s16le",  # 16位PCM编码
+                "-ar", "16000",  # 16kHz采样率
+                "-ac", "1",  # 单声道
+                audio_path
+            ]
+            
+            result = subprocess.run(extract_cmd, capture_output=True, text=True, timeout=300)
+            
+            if result.returncode == 0 and os.path.exists(audio_path):
+                logger.info(f"音频流提取成功: {audio_path}")
+                return audio_path
+            else:
+                logger.warning(f"音频流提取失败: {result.stderr}")
+                return None
+                
+        except Exception as e:
+            logger.error(f"音频流提取异常: {e}")
+            return None
         return keyframes
     
     def _resample_audio(self, audio_path: str, audio_info: Dict[str, Any], 
@@ -823,4 +1044,5 @@ def get_media_processor() -> MediaProcessor:
     global _media_processor
     if _media_processor is None:
         _media_processor = MediaProcessor()
+    return _media_processor
     return _media_processor

@@ -1,0 +1,58 @@
+{
+  "test_summary": {
+    "total_tests": 6,
+    "passed_tests": 0,
+    "failed_tests": 6,
+    "success_rate": "0.0%",
+    "total_time": "6.28s"
+  },
+  "test_results": {
+    "infinity-emb导入": {
+      "success": false,
+      "timestamp": 1761879812.9151661,
+      "details": {
+        "error": "No module named 'optimum.bettertransformer'"
+      }
+    },
+    "infinity引擎创建": {
+      "success": false,
+      "timestamp": 1761879812.9261675,
+      "details": {
+        "error": "No module named 'optimum.bettertransformer'"
+      }
+    },
+    "文本嵌入": {
+      "success": false,
+      "timestamp": 1761879812.9364934,
+      "details": {
+        "error": "No module named 'optimum.bettertransformer'"
+      }
+    },
+    "批处理": {
+      "success": false,
+      "timestamp": 1761879812.9467869,
+      "details": {
+        "error": "No module named 'optimum.bettertransformer'"
+      }
+    },
+    "性能基准": {
+      "success": false,
+      "timestamp": 1761879812.95713,
+      "details": {
+        "error": "No module named 'optimum.bettertransformer'"
+      }
+    },
+    "错误处理": {
+      "success": false,
+      "timestamp": 1761879812.9674382,
+      "details": {
+        "error": "No module named 'optimum.bettertransformer'"
+      }
+    }
+  },
+  "environment_info": {
+    "python_version": "3.12.3",
+    "platform": "linux",
+    "test_time": "2025-10-31 03:03:32"
+  }
+}
