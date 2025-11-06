@@ -17,8 +17,9 @@ from PySide6.QtWidgets import (
     QGroupBox, QGridLayout, QFormLayout, QMessageBox, QFileDialog,
     QTreeView, QFileSystemModel, QListView, QStackedWidget, QToolButton,
     QButtonGroup, QRadioButton, QGroupBox, QSizePolicy, QSpacerItem,
-    QTableWidgetItem, QDir
+    QTableWidgetItem, QDialog, QAbstractItemView, QHeaderView
 )
+from PySide6.QtCore import QDir
 from PySide6.QtCore import (
     Qt, QTimer, QThread, Signal, QObject, QSettings, QUrl, QSize, 
     QPropertyAnimation, QEasingCurve, QRect
@@ -36,6 +37,11 @@ from src.core.config import load_config
 from src.core.logging_config import get_logger
 from src.gui.api_client import ApiClient
 from src.gui.search_worker import SearchWorker
+from src.gui.widgets.face_recognition_widget import FaceRecognitionWidget
+from src.gui.widgets.timeline_widget import TimelineWidget
+from src.gui.widgets.system_monitor_widget import SystemMonitorWidget
+from src.gui.widgets.config_widget import ConfigManagerWidget
+from src.gui.theme_manager import ThemeManager
 
 logger = get_logger(__name__)
 
@@ -54,6 +60,9 @@ class MainWindow(QMainWindow):
         
         # 初始化搜索工作线程
         self.search_worker = SearchWorker(self.api_client)
+        
+        # 初始化主题管理器
+        self.theme_manager = ThemeManager()
         
         # 初始化UI
         self.init_ui()
@@ -96,6 +105,9 @@ class MainWindow(QMainWindow):
         
         # 应用样式
         self.apply_styles()
+        
+        # 应用当前主题
+        self.theme_manager.apply_theme(self.theme_manager.THEMES[self.theme_manager.current_theme])
     
     def set_window_icon(self):
         """设置窗口图标"""
@@ -203,6 +215,47 @@ class MainWindow(QMainWindow):
         face_management_action.setStatusTip("管理人脸库")
         face_management_action.triggered.connect(self.show_face_management)
         tools_menu.addAction(face_management_action)
+        
+        # 主题菜单
+        theme_menu = menubar.addMenu("主题(&T)")
+        
+        # 浅色主题
+        light_theme_action = QAction("浅色主题", self)
+        light_theme_action.setStatusTip("切换到浅色主题")
+        light_theme_action.triggered.connect(lambda: self.set_theme("light"))
+        theme_menu.addAction(light_theme_action)
+        
+        # 深色主题
+        dark_theme_action = QAction("深色主题", self)
+        dark_theme_action.setStatusTip("切换到深色主题")
+        dark_theme_action.triggered.connect(lambda: self.set_theme("dark"))
+        theme_menu.addAction(dark_theme_action)
+        
+        # 蓝色主题
+        blue_theme_action = QAction("蓝色主题", self)
+        blue_theme_action.setStatusTip("切换到蓝色主题")
+        blue_theme_action.triggered.connect(lambda: self.set_theme("blue"))
+        theme_menu.addAction(blue_theme_action)
+        
+        # 绿色主题
+        green_theme_action = QAction("绿色主题", self)
+        green_theme_action.setStatusTip("切换到绿色主题")
+        green_theme_action.triggered.connect(lambda: self.set_theme("green"))
+        theme_menu.addAction(green_theme_action)
+        
+        # 紫色主题
+        purple_theme_action = QAction("紫色主题", self)
+        purple_theme_action.setStatusTip("切换到紫色主题")
+        purple_theme_action.triggered.connect(lambda: self.set_theme("purple"))
+        theme_menu.addAction(purple_theme_action)
+        
+        theme_menu.addSeparator()
+        
+        # 自定义主题
+        custom_theme_action = QAction("自定义主题...", self)
+        custom_theme_action.setStatusTip("选择自定义主题")
+        custom_theme_action.triggered.connect(self.show_theme_selector)
+        theme_menu.addAction(custom_theme_action)
         
         # 帮助菜单
         help_menu = menubar.addMenu("帮助(&H)")
@@ -505,46 +558,99 @@ class MainWindow(QMainWindow):
     
     def create_file_manager_tab(self):
         """创建文件管理选项卡"""
+        from PySide6.QtWidgets import QTabWidget, QSplitter, QFileSystemModel, QDir
+        from PySide6.QtCore import QDir
+        
+        # 创建一个更完整的文件管理器
         tab = QWidget()
         layout = QVBoxLayout(tab)
         
-        # 文件树
+        # 创建选项卡来组织不同的文件管理功能
+        file_manager_tabs = QTabWidget()
+        
+        # 1. 文件系统浏览器
+        fs_tab = QWidget()
+        fs_layout = QVBoxLayout(fs_tab)
+        
+        # 工具栏
+        fs_toolbar = QHBoxLayout()
+        
+        # 刷新按钮
+        refresh_btn = QPushButton("刷新")
+        refresh_btn.clicked.connect(self.refresh_file_tree)
+        fs_toolbar.addWidget(refresh_btn)
+        
+        # 返回上级目录按钮
+        up_btn = QPushButton("上级目录")
+        up_btn.clicked.connect(self.go_up_directory)
+        fs_toolbar.addWidget(up_btn)
+        
+        # 当前路径显示
+        self.current_path_label = QLabel("当前路径:")
+        fs_toolbar.addWidget(self.current_path_label)
+        fs_toolbar.addStretch()
+        
+        fs_layout.addLayout(fs_toolbar)
+        
+        # 文件系统树
         self.file_tree = QTreeView()
         self.file_model = QFileSystemModel()
         self.file_model.setRootPath(QDir.rootPath())
+        self.file_model.setFilter(QDir.AllEntries | QDir.NoDotAndDotDot | QDir.AllDirs)
         self.file_tree.setModel(self.file_model)
         self.file_tree.setRootIndex(self.file_model.index(QDir.homePath()))
         self.file_tree.setAnimated(False)
         self.file_tree.setIndentation(20)
         self.file_tree.setSortingEnabled(True)
+        self.file_tree.doubleClicked.connect(self.on_file_tree_double_clicked)
+        self.file_tree.clicked.connect(self.on_file_tree_clicked)
+        fs_layout.addWidget(self.file_tree)
         
-        layout.addWidget(self.file_tree)
+        # 文件操作按钮
+        file_action_layout = QHBoxLayout()
+        self.index_file_btn = QPushButton("索引选中文件")
+        self.index_file_btn.clicked.connect(self.index_selected_file)
+        self.index_file_btn.setEnabled(False)
+        file_action_layout.addWidget(self.index_file_btn)
         
+        self.delete_file_btn = QPushButton("删除选中文件")
+        self.delete_file_btn.clicked.connect(self.delete_selected_file)
+        self.delete_file_btn.setEnabled(False)
+        file_action_layout.addWidget(self.delete_file_btn)
+        
+        file_action_layout.addStretch()
+        fs_layout.addLayout(file_action_layout)
+        
+        file_manager_tabs.addTab(fs_tab, "文件系统")
+        
+        # 2. 索引文件管理
+        index_tab = QWidget()
+        index_layout = QVBoxLayout(index_tab)
+        index_label = QLabel("索引文件管理（待实现）")
+        index_label.setAlignment(Qt.AlignCenter)
+        index_layout.addWidget(index_label)
+        file_manager_tabs.addTab(index_tab, "索引管理")
+        
+        # 3. 搜索历史
+        history_tab = QWidget()
+        history_layout = QVBoxLayout(history_tab)
+        history_label = QLabel("搜索历史（待实现）")
+        history_label.setAlignment(Qt.AlignCenter)
+        history_layout.addWidget(history_label)
+        file_manager_tabs.addTab(history_tab, "搜索历史")
+        
+        layout.addWidget(file_manager_tabs)
         return tab
     
-    def create_timeline_tab(self):
-        """创建时间线选项卡"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        # 时间线控件占位
-        timeline_label = QLabel("时间线视图（待实现）")
-        timeline_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(timeline_label)
-        
-        return tab
+    # 创建时间线选项卡
+        self.timeline_widget = TimelineWidget(self.api_client)
+        self.timeline_widget.status_message_changed.connect(self.on_widget_status_message)
+        return self.timeline_widget
     
-    def create_face_management_tab(self):
-        """创建人脸管理选项卡"""
-        tab = QWidget()
-        layout = QVBoxLayout(tab)
-        
-        # 人脸管理控件占位
-        face_label = QLabel("人脸管理视图（待实现）")
-        face_label.setAlignment(Qt.AlignCenter)
-        layout.addWidget(face_label)
-        
-        return tab
+    # 创建人脸管理选项卡
+        self.face_widget = FaceRecognitionWidget(self.api_client)
+        self.face_widget.status_message_changed.connect(self.on_widget_status_message)
+        return self.face_widget
     
     def create_status_bar(self):
         """创建状态栏"""
@@ -563,34 +669,19 @@ class MainWindow(QMainWindow):
         self.connection_label = QLabel("未连接")
         self.status_bar.addPermanentWidget(self.connection_label)
     
+    def on_widget_status_message(self, message):
+        """处理部件状态消息"""
+        self.status_label.setText(message)
+    
     def create_dock_widgets(self):
         """创建停靠窗口"""
         # 系统监控停靠窗口
         self.monitor_dock = QDockWidget("系统监控", self)
         self.monitor_dock.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
         
-        monitor_widget = QWidget()
-        monitor_layout = QVBoxLayout(monitor_widget)
-        
-        # CPU使用率
-        cpu_label = QLabel("CPU使用率:")
-        monitor_layout.addWidget(cpu_label)
-        self.cpu_progress = QProgressBar()
-        monitor_layout.addWidget(self.cpu_progress)
-        
-        # 内存使用率
-        memory_label = QLabel("内存使用率:")
-        monitor_layout.addWidget(memory_label)
-        self.memory_progress = QProgressBar()
-        monitor_layout.addWidget(self.memory_progress)
-        
-        # 磁盘使用率
-        disk_label = QLabel("磁盘使用率:")
-        monitor_layout.addWidget(disk_label)
-        self.disk_progress = QProgressBar()
-        monitor_layout.addWidget(self.disk_progress)
-        
-        self.monitor_dock.setWidget(monitor_widget)
+        self.system_monitor_widget = SystemMonitorWidget(self.api_client)
+        self.system_monitor_widget.status_message_changed.connect(self.on_widget_status_message)
+        self.monitor_dock.setWidget(self.system_monitor_widget)
         self.addDockWidget(Qt.RightDockWidgetArea, self.monitor_dock)
     
     def apply_styles(self):
@@ -698,6 +789,74 @@ class MainWindow(QMainWindow):
         """文件树双击事件"""
         path = self.file_model.filePath(index)
         self.status_label.setText(f"选中文件: {path}")
+        
+        # 如果是文件，尝试打开
+        if os.path.isfile(path):
+            QDesktopServices.openUrl(QUrl.fromLocalFile(path))
+    
+    def on_file_tree_clicked(self, index):
+        """文件树单击事件"""
+        path = self.file_model.filePath(index)
+        self.current_path_label.setText(f"当前路径: {path}")
+        
+        # 更新按钮状态
+        is_file = os.path.isfile(path)
+        self.index_file_btn.setEnabled(is_file)
+        self.delete_file_btn.setEnabled(True)
+    
+    def refresh_file_tree(self):
+        """刷新文件树"""
+        self.file_model.refresh()
+        self.status_label.setText("文件树已刷新")
+    
+    def go_up_directory(self):
+        """返回上级目录"""
+        current_index = self.file_tree.currentIndex()
+        if current_index.isValid():
+            parent_index = current_index.parent()
+            if parent_index.isValid():
+                self.file_tree.setCurrentIndex(parent_index)
+                path = self.file_model.filePath(parent_index)
+                self.current_path_label.setText(f"当前路径: {path}")
+    
+    def index_selected_file(self):
+        """索引选中文件"""
+        current_index = self.file_tree.currentIndex()
+        if current_index.isValid():
+            path = self.file_model.filePath(current_index)
+            if os.path.isfile(path):
+                # 这里应该调用API来索引文件
+                self.status_label.setText(f"开始索引文件: {path}")
+                # TODO: 实际调用索引API
+                QMessageBox.information(self, "提示", f"文件索引功能待实现\n文件: {path}")
+    
+    def delete_selected_file(self):
+        """删除选中文件"""
+        current_index = self.file_tree.currentIndex()
+        if current_index.isValid():
+            path = self.file_model.filePath(current_index)
+            
+            # 确认删除
+            reply = QMessageBox.question(
+                self, "确认删除", 
+                f"确定要删除 '{path}' 吗？此操作不可恢复。",
+                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.No
+            )
+            
+            if reply == QMessageBox.Yes:
+                try:
+                    if os.path.isfile(path):
+                        os.remove(path)
+                    elif os.path.isdir(path):
+                        os.rmdir(path)  # 仅删除空目录
+                    
+                    # 刷新文件树
+                    self.refresh_file_tree()
+                    self.status_label.setText(f"已删除: {path}")
+                except Exception as e:
+                    logger.error(f"删除文件失败: {e}")
+                    QMessageBox.critical(self, "错误", f"删除文件失败: {e}")
     
     def switch_tab(self, tab_name):
         """切换到指定选项卡"""
@@ -937,36 +1096,85 @@ class MainWindow(QMainWindow):
     def update_results_table(self, table, results):
         """更新结果表格"""
         table.setRowCount(len(results))
+        table.setEditTriggers(QAbstractItemView.NoEditTriggers)  # 禁止编辑
         
         for row, result in enumerate(results):
             # 文件路径
             file_path = result.get('file_path', '')
-            table.setItem(row, 0, QTableWidgetItem(file_path))
+            file_path_item = QTableWidgetItem(file_path)
+            file_path_item.setToolTip(file_path)  # 显示完整路径作为工具提示
+            table.setItem(row, 0, file_path_item)
             
             # 文件类型
-            file_type = result.get('file_type', '')
-            table.setItem(row, 1, QTableWidgetItem(file_type))
+            file_type = result.get('file_type', 'unknown')
+            table.setItem(row, 1, QTableWidgetItem(file_type.title()))
             
             # 相似度
             similarity = result.get('score', 0)
-            table.setItem(row, 2, QTableWidgetItem(f"{similarity:.3f}"))
+            similarity_item = QTableWidgetItem(f"{similarity:.3f}")
+            similarity_item.setTextAlignment(Qt.AlignCenter)
+            table.setItem(row, 2, similarity_item)
             
             # 时间戳
             timestamp = ''
-            if 'start_time_ms' in result:
+            start_time_ms = result.get('start_time_ms', 0)
+            end_time_ms = result.get('end_time_ms', 0)
+            
+            if start_time_ms > 0:
                 # 格式化时间戳为 HH:MM:SS
-                ms = result['start_time_ms']
-                hours = ms // 3600000
-                minutes = (ms % 3600000) // 60000
-                seconds = (ms % 60000) // 1000
+                hours = start_time_ms // 3600000
+                minutes = (start_time_ms % 3600000) // 60000
+                seconds = (start_time_ms % 60000) // 1000
                 timestamp = f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+                
+                # 如果有结束时间，显示时间范围
+                if end_time_ms > start_time_ms:
+                    end_hours = end_time_ms // 3600000
+                    end_minutes = (end_time_ms % 3600000) // 60000
+                    end_seconds = (end_time_ms % 60000) // 1000
+                    end_timestamp = f"{end_hours:02d}:{end_minutes:02d}:{end_seconds:02d}"
+                    timestamp = f"{timestamp} - {end_timestamp}"
             elif 'created_at' in result:
                 timestamp = result['created_at']
+            else:
+                timestamp = "N/A"
             
-            table.setItem(row, 3, QTableWidgetItem(timestamp))
+            time_item = QTableWidgetItem(timestamp)
+            time_item.setTextAlignment(Qt.AlignCenter)
+            table.setItem(row, 3, time_item)
+            
+            # 添加操作按钮列（如果还没有）
+            if table.columnCount() == 4:
+                table.setColumnCount(5)
+                table.setHorizontalHeaderLabels(["文件路径", "文件类型", "相似度", "时间戳", "操作"])
+            
+            # 操作按钮
+            action_widget = QWidget()
+            action_layout = QHBoxLayout(action_widget)
+            action_layout.setContentsMargins(2, 2, 2, 2)
+            action_layout.setSpacing(2)
+            
+            # 打开文件按钮
+            open_btn = QPushButton("打开")
+            open_btn.setFixedSize(50, 25)
+            open_btn.clicked.connect(lambda checked, r=result: self.open_search_result(r))
+            action_layout.addWidget(open_btn)
+            
+            # 预览按钮（如果支持预览）
+            if file_type in ['image', 'video', 'audio']:
+                preview_btn = QPushButton("预览")
+                preview_btn.setFixedSize(50, 25)
+                preview_btn.clicked.connect(lambda checked, r=result: self.preview_search_result(r))
+                action_layout.addWidget(preview_btn)
+            
+            action_layout.addStretch()
+            table.setCellWidget(row, 4, action_widget)
         
         # 调整列宽
         table.resizeColumnsToContents()
+        # 设置第一列（文件路径）自适应宽度
+        header = table.horizontalHeader()
+        header.setSectionResizeMode(0, QHeaderView.Stretch)
     
     def on_multimodal_search_completed(self):
         """多模态搜索完成"""
@@ -999,8 +1207,9 @@ class MainWindow(QMainWindow):
     
     def show_config_dialog(self):
         """显示配置对话框"""
-        # TODO: 实现配置对话框
-        QMessageBox.information(self, "提示", "配置对话框功能待实现")
+        from src.gui.widgets.config_widget import ConfigDialog
+        dialog = ConfigDialog(self, self.api_client)
+        dialog.exec()
     
     def show_system_status(self):
         """显示系统状态"""
@@ -1022,20 +1231,145 @@ class MainWindow(QMainWindow):
             "<p>© 2024 mSearch Team</p>"
         )
     
-    def closeEvent(self, event):
-        """窗口关闭事件"""
-        # 停止搜索工作线程
-        if hasattr(self, 'search_worker') and self.search_worker.isRunning():
-            self.search_worker.stop_search()
-            self.search_worker.wait()
-        
-        # 保存窗口状态
-        settings = QSettings()
-        settings.setValue("geometry", self.saveGeometry())
-        settings.setValue("windowState", self.saveState())
-        
-        # 接受关闭事件
+    # 接受关闭事件
         event.accept()
+    
+    def set_theme(self, theme_name: str):
+        """设置主题"""
+        self.theme_manager.set_theme(theme_name)
+        self.status_label.setText(f"主题已切换为: {self.theme_manager.get_current_theme_name()}")
+    
+    def show_theme_selector(self):
+        """显示主题选择器"""
+        from src.gui.theme_manager import ThemeSelectorDialog
+        dialog = ThemeSelectorDialog(self.theme_manager, self)
+        if dialog.exec() == QDialog.Accepted:
+            # 应用选中的主题
+            selected_item = dialog.theme_list.currentItem()
+            if selected_item:
+                theme_name = selected_item.data(Qt.UserRole)
+                self.theme_manager.set_theme(theme_name)
+                self.status_label.setText(f"主题已切换为: {self.theme_manager.get_current_theme_name()}")
+    
+    def open_search_result(self, result: dict):
+        """打开搜索结果文件"""
+        file_path = result.get('file_path', '')
+        if not file_path:
+            QMessageBox.warning(self, "警告", "文件路径为空")
+            return
+        
+        if not os.path.exists(file_path):
+            QMessageBox.warning(self, "警告", f"文件不存在: {file_path}")
+            return
+        
+        try:
+            # 如果是媒体文件且有时间戳，尝试跳转到指定位置
+            start_time_ms = result.get('start_time_ms', 0)
+            if start_time_ms > 0:
+                # 对于视频/音频文件，可以传入时间参数
+                # 这里简单地打开文件，实际应用中可能需要调用特定播放器
+                pass
+            
+            QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+            self.status_label.setText(f"已打开文件: {file_path}")
+        except Exception as e:
+            logger.error(f"打开文件失败: {e}")
+            QMessageBox.critical(self, "错误", f"打开文件失败: {e}")
+    
+    def preview_search_result(self, result: dict):
+        """预览搜索结果"""
+        file_path = result.get('file_path', '')
+        file_type = result.get('file_type', '')
+        
+        if not file_path or not os.path.exists(file_path):
+            QMessageBox.warning(self, "警告", "文件不存在")
+            return
+        
+        try:
+            # 根据文件类型进行预览
+            if file_type == 'image':
+                self.show_image_preview(file_path)
+            elif file_type in ['video', 'audio']:
+                self.show_media_preview(file_path, result)
+            else:
+                # 对于其他文件类型，直接打开
+                QDesktopServices.openUrl(QUrl.fromLocalFile(file_path))
+                self.status_label.setText(f"已打开文件: {file_path}")
+        except Exception as e:
+            logger.error(f"预览文件失败: {e}")
+            QMessageBox.critical(self, "错误", f"预览文件失败: {e}")
+    
+    def show_image_preview(self, file_path: str):
+        """显示图片预览"""
+        # 简单的图片预览对话框
+        preview_dialog = QDialog(self)
+        preview_dialog.setWindowTitle(f"图片预览 - {Path(file_path).name}")
+        preview_dialog.resize(800, 600)
+        
+        layout = QVBoxLayout(preview_dialog)
+        
+        # 显示图片
+        pixmap = QPixmap(file_path)
+        if pixmap.isNull():
+            QMessageBox.warning(self, "警告", "无法加载图片")
+            return
+        
+        # 缩放图片以适应窗口
+        scaled_pixmap = pixmap.scaled(
+            preview_dialog.size(), 
+            Qt.KeepAspectRatio, 
+            Qt.SmoothTransformation
+        )
+        
+        image_label = QLabel()
+        image_label.setPixmap(scaled_pixmap)
+        image_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(image_label)
+        
+        # 文件信息
+        info_label = QLabel(f"文件: {file_path}\n尺寸: {pixmap.width()}x{pixmap.height()}")
+        info_label.setAlignment(Qt.AlignLeft)
+        layout.addWidget(info_label)
+        
+        preview_dialog.exec()
+    
+    def show_media_preview(self, file_path: str, result: dict):
+        """显示媒体预览"""
+        # 媒体预览对话框
+        preview_dialog = QDialog(self)
+        preview_dialog.setWindowTitle(f"媒体预览 - {Path(file_path).name}")
+        preview_dialog.resize(600, 400)
+        
+        layout = QVBoxLayout(preview_dialog)
+        
+        # 媒体信息
+        file_type = result.get('file_type', '')
+        start_time_ms = result.get('start_time_ms', 0)
+        end_time_ms = result.get('end_time_ms', 0)
+        
+        info_text = f"文件: {file_path}\n类型: {file_type.title()}"
+        if start_time_ms > 0:
+            hours = start_time_ms // 3600000
+            minutes = (start_time_ms % 3600000) // 60000
+            seconds = (start_time_ms % 60000) // 1000
+            info_text += f"\n开始时间: {hours:02d}:{minutes:02d}:{seconds:02d}"
+        
+        if end_time_ms > start_time_ms:
+            hours = end_time_ms // 3600000
+            minutes = (end_time_ms % 3600000) // 60000
+            seconds = (end_time_ms % 60000) // 1000
+            info_text += f"\n结束时间: {hours:02d}:{minutes:02d}:{seconds:02d}"
+        
+        info_label = QLabel(info_text)
+        info_label.setAlignment(Qt.AlignLeft)
+        layout.addWidget(info_label)
+        
+        # 播放按钮
+        play_button = QPushButton("播放")
+        play_button.clicked.connect(lambda: self.open_search_result(result))
+        layout.addWidget(play_button)
+        
+        preview_dialog.exec()
 
 
 def main():
