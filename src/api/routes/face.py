@@ -15,7 +15,13 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter()
 config_manager = ConfigManager()
-face_manager = FaceManager(config_manager.get_config())
+# face_manager将在运行时初始化
+face_manager = None
+
+def init_face_manager(face_db, embedding_engine):
+    """初始化人脸管理器"""
+    global face_manager
+    face_manager = FaceManager(config_manager.config, face_db, embedding_engine)
 
 class PersonInfo(BaseModel):
     """人员信息模型"""
