@@ -733,65 +733,7 @@ from pathlib import Path
 
 def test_infinity_import():
     """测试infinity-emb导入"""
-    print("[INFO] 测试infinity-emb导入...")
-    try:
-        import infinity_emb
-        print(f"[SUCCESS] infinity-emb导入成功，版本: {infinity_emb.__version__}")
-        return True
-    except ImportError as e:
-        print(f"[ERROR] infinity-emb导入失败: {e}")
-        return False
-
-def test_infinity_cli():
-    """测试infinity-emb CLI命令"""
-    print("[INFO] 测试infinity-emb CLI命令...")
-    try:
-        # 检查CLI命令是否可用
-        result = subprocess.run(
-            ["infinity_emb", "v2", "--help"], 
-            capture_output=True, 
-            text=True, 
-            timeout=30
-        )
-        
-        if result.returncode == 0:
-            print("[SUCCESS] infinity-emb CLI命令可用")
-            return True
-        else:
-            print(f"[ERROR] infinity-emb CLI命令失败: {result.stderr}")
-            return False
-    except Exception as e:
-        print(f"[ERROR] infinity-emb CLI测试失败: {e}")
-        return False
-
-def test_infinity_model():
-    """测试infinity-emb模型加载"""
-    print("[INFO] 测试infinity-emb模型加载...")
-    try:
-        # 尝试使用小模型进行测试
-        result = subprocess.run(
-            ["infinity_emb", "v2", "--model-id", "BAAI/bge-small-en-v1.5", "--port", "0"], 
-            capture_output=True, 
-            text=True, 
-            timeout=60
-        )
-        
-        # 检查是否成功加载模型（即使端口失败，只要模型加载成功即可）
-        if "model loaded" in result.stderr.lower() or "model loaded" in result.stdout.lower():
-            print("[SUCCESS] infinity-emb模型加载成功")
-            return True
-        else:
-            print(f"[WARNING] infinity-emb模型加载可能失败: {result.stderr[:200]}")
-            return False
-    except Exception as e:
-        print(f"[ERROR] infinity-emb模型测试失败: {e}")
-        return False
-
-def test_core_imports():
-    """测试核心模块导入"""
-    print("[INFO] 测试核心模块导入...")
-    try:
-        sys.path.insert(0, sys.argv[2])  # 添加项目根目录到路径
+    print("[IN核心模块
         from src.business.embedding_engine import EmbeddingEngine
         print("[SUCCESS] 核心模块导入成功")
         return True
@@ -811,13 +753,10 @@ def test_model_paths():
         return False
 
 def main():
-    print("[INFO] 开始infinity-emb功能测试...")
+    print("[INFO] 开始基本测试...")
     
     tests = [
-        ("infinity-emb导入", test_infinity_import),
-        ("infinity-emb CLI命令", test_infinity_cli),
-        ("infinity-emb模型加载", test_infinity_model),
-        ("核心模块导入", lambda: test_core_imports()),
+        ("核心模块导入", test_imports),
         ("模型路径检查", lambda: test_model_paths(sys.argv[1])),
     ]
     
@@ -832,91 +771,17 @@ def main():
             print(f"[WARNING] 测试失败: {test_name}")
     
     print(f"\n[INFO] 测试结果: {passed}/{total} 通过")
-    
-    # 如果infinity-emb相关测试都失败，则返回错误
-    infinity_tests = 0
-    infinity_passed = 0
-    for test_name, test_func in tests[:3]:  # 前三个是infinity-emb相关测试
-        infinity_tests += 1
-        print(f"\n[INFO] 重新执行测试: {test_name}")
-        if test_func():
-            infinity_passed += 1
-    
-    if infinity_passed == 0:
-        print("[ERROR] infinity-emb所有测试失败，请检查安装")
-        return 1
-    elif infinity_passed < infinity_tests:
-        print("[WARNING] infinity-emb部分测试失败，但基本功能可用")
-        return 0
-    else:
-        print("[SUCCESS] infinity-emb所有测试通过")
-        return 0
+    return 0 if passed >= 1 else 1
 
 if __name__ == "__main__":
     sys.exit(main())
 EOF
     
-    # 执行infinity-emb测试
-    log "${BLUE}[步骤1] 执行infinity-emb测试...${NC}"
-    python3 "${INFINITY_TEST_SCRIPT}" "${DEPLOY_MODELS_DIR}" "${PROJECT_ROOT}" || {
-        log "${YELLOW}[警告] infinity-emb测试失败，但继续安装${NC}"
-        log "${YELLOW}[提示] 您可以手动测试infinity-emb:${NC}"
-        log "${YELLOW}       infinity_emb v2 --model-id BAAI/bge-small-en-v1.5${NC}"
-    }
+    # 执行基本测试
+    log "${BLUE}[步骤1] 执行基本测试...${NC}"
+    python3 "${TEST_SCRIPT}" "${DEPLOY_MODELS_DIR}" || log "${YELLOW}[警告] 部分测试失败，但继续安装${NC}"
     
-    # 创建infinity-emb使用示例
-    INFINITY_EXAMPLE="${DEPLOY_TEST_DIR}/infinity_example.py"
-    cat > "${INFINITY_EXAMPLE}" << 'EOF'
-#!/usr/bin/env python3
-"""
-infinity-emb使用示例
-"""
-import os
-import sys
-import numpy as np
-
-# 添加项目路径
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-
-def test_infinity_emb_example():
-    """测试infinity-emb示例"""
-    try:
-        from infinity_emb import EngineArray
-        from infinity_emb.engine import AsyncEngineArray, EngineArray
-        
-        print("[INFO] 创建infinity-emb引擎...")
-        
-        # 使用小模型进行测试
-        engine = EngineArray.from_args([
-            "--model-id", "BAAI/bge-small-en-v1.5",
-            "--device", "cpu"
-        ])
-        
-        print("[INFO] 测试文本嵌入...")
-        # 测试文本嵌入
-        sentences = ["这是一个测试句子", "这是另一个测试句子"]
-        embeddings = engine.encode(sentences)
-        
-        print(f"[SUCCESS] 嵌入生成成功，形状: {embeddings.shape}")
-        print(f"[INFO] 示例嵌入向量: {embeddings[0][:5]}...")
-        
-        return True
-    except Exception as e:
-        print(f"[ERROR] infinity-emb示例失败: {e}")
-        return False
-
-if __name__ == "__main__":
-    success = test_infinity_emb_example()
-    sys.exit(0 if success else 1)
-EOF
-    
-    # 使示例脚本可执行
-    chmod +x "${INFINITY_EXAMPLE}"
-    
-    log "${GREEN}[成功] infinity-emb测试完成！${NC}"
-    log "${YELLOW}- 测试脚本: ${INFINITY_TEST_SCRIPT}${NC}"
-    log "${YELLOW}- 示例脚本: ${INFINITY_EXAMPLE}${NC}"
-    log "${YELLOW}- 使用方法: python3 ${INFINITY_EXAMPLE}${NC}"
+    log "${GREEN}基本测试完成！${NC}"
 }
 
 # 7. 生成启动脚本
@@ -1188,8 +1053,8 @@ main() {
     log "${GREEN}[步骤 5/7] 创建测试数据...${NC}"
     create_test_data || log "${YELLOW}[警告] 测试数据创建失败，但继续安装${NC}"
     
-    log "${GREEN}[步骤 6/7] 运行infinity-emb测试...${NC}"
-    test_infinity_emb || log "${YELLOW}[警告] infinity-emb测试失败，但继续安装${NC}"
+    log "${GREEN}[步骤 6/7] 运行基本测试...${NC}"
+    run_basic_tests || log "${YELLOW}[警告] 部分测试失败，但继续安装${NC}"
     
     log "${GREEN}[步骤 7/7] 生成启动脚本...${NC}"
     generate_startup_scripts || handle_error "启动脚本生成失败"

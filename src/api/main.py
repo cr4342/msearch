@@ -24,7 +24,7 @@ from src.business.orchestrator import ProcessingOrchestrator
 from src.business.embedding_engine import get_embedding_engine
 
 # 导入API路由
-from src.api.routes import search, config, tasks, status, face
+from src.api.routes import search, config, tasks, status, face, monitoring
 
 # 创建FastAPI应用实例
 app = FastAPI(
@@ -50,8 +50,7 @@ app.include_router(config.router)
 app.include_router(tasks.router)
 app.include_router(status.router)
 app.include_router(face.router)
-app.include_router(status.router)
-app.include_router(face.router)
+app.include_router(monitoring.router)
 
 # 全局异常处理
 @app.exception_handler(Exception)
@@ -78,6 +77,12 @@ config = get_config_manager().config
 
 # 获取处理编排器实例
 processing_orchestrator = ProcessingOrchestrator(config)
+
+# 初始化文件监控服务
+file_monitor = monitoring.init_monitoring_service(
+    get_config_manager(), 
+    processing_orchestrator
+)
 
 # 健康检查端点
 

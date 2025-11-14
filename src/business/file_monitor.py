@@ -37,6 +37,11 @@ class FileMonitorHandler(FileSystemEventHandler):
         for extensions in self.file_extensions.values():
             self.supported_extensions.update(extensions)
     
+    def on_deleted(self, event):
+        """处理文件删除事件"""
+        if not event.is_directory:
+            self._handle_file_event(event.src_path, "deleted")
+    
     def on_created(self, event):
         """处理文件创建事件"""
         if not event.is_directory:
@@ -66,13 +71,15 @@ class FileMonitorHandler(FileSystemEventHandler):
             if extension not in self.supported_extensions:
                 return
             
-            # 检查文件是否完全写入
-            if not self._is_file_ready(file_path):
-                # 等待文件准备就绪
-                time.sleep(1)
+            # 对于删除事件，不需要检查文件是否准备就绪
+            if event_type != "deleted":
+                # 检查文件是否完全写入
                 if not self._is_file_ready(file_path):
-                    logger.warning(f"文件未准备就绪，跳过处理: {file_path}")
-                    return
+                    # 等待文件准备就绪
+                    time.sleep(1)
+                    if not self._is_file_ready(file_path):
+                        logger.warning(f"文件未准备就绪，跳过处理: {file_path}")
+                        return
             
             logger.debug(f"检测到文件变化: {file_path}, 事件类型: {event_type}")
             
@@ -113,7 +120,9 @@ class FileMonitor:
             config: 配置字典
         """
         self.config = config
-        self.directories = config.get('general.watch_directories', [])
+        # 使用嵌套键访问配置
+        general_config = config.get('general', {})
+        self.directories = general_config.get('watch_directories', [])
         self.observer = Observer()
         self.handlers = {}
         self.callbacks = []

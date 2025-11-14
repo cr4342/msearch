@@ -340,9 +340,41 @@ class VectorStore:
         """
         logger.info(f"在集合 {collection_name} 中删除 {len(point_ids)} 个向量")
         
-        # 在实际实现中，这里会调用Qdrant API删除向量
-        # 目前只是模拟删除过程
-        return True
+        # 如果客户端不可用，返回模拟结果
+        if self.client is None:
+            logger.warning("Qdrant客户端不可用，模拟删除向量")
+            return True
+        
+        try:
+            # 获取实际的集合名称
+            collection_config = self.collections.get(collection_name, {})
+            actual_collection_name = collection_config.get('name', f'msearch_{collection_name}')
+            
+            # 调用Qdrant API删除向量
+            from qdrant_client.models import Filter, FieldCondition, MatchAny
+            
+            # 创建过滤条件，匹配所有指定的点ID
+            filter_condition = Filter(
+                must=[
+                    FieldCondition(
+                        key="id",
+                        match=MatchAny(any=point_ids)
+                    )
+                ]
+            )
+            
+            # 执行删除操作
+            self.client.delete(
+                collection_name=actual_collection_name,
+                points_selector=filter_condition
+            )
+            
+            logger.info(f"成功删除 {len(point_ids)} 个向量")
+            return True
+            
+        except Exception as e:
+            logger.error(f"删除向量失败: {e}")
+            return False
     
     async def get_collections_info(self) -> Dict[str, Any]:
         """

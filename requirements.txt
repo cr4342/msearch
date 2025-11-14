@@ -72,16 +72,12 @@ mtcnn>=0.1.1                    # 人脸检测器
 insightface>=0.7.0              # 增强人脸分析
 
 # Infinity Embedding Engine - 统一向量嵌入服务
-infinity-emb[all]>=0.0.28       # 向量嵌入引擎 (包含所有依赖，最新版本)
-sentence-transformers>=2.2.2    # 多语言文本嵌入 (infinity-emb依赖)
+infinity-emb[all]>=0.0.20       # 向量嵌入引擎 (包含所有依赖)
+sentence-transformers>=2.2.0    # 多语言文本嵌入 (infinity-emb依赖)
 
 # Infinity-emb 额外依赖
 optimum[onnxruntime]>=1.14.0    # ONNX运行时优化 (infinity-emb性能优化)
 accelerate>=0.20.0              # 模型加速库 (infinity-emb GPU支持)
-
-# CLAP模型依赖 (音频-文本多模态模型)
-torch-audio>=2.2.0             # PyTorch音频处理库 (CLAP模型需要)
-torchaudio>=2.2.0              # PyTorch音频处理 (CLAP模型需要)
 
 # =====================================
 # 🖥️ GUI桌面应用框架

@@ -1,4 +1,3 @@
-"""
 任务队列管理器 - 统一管理文件索引任务的生命周期
 """
 import sqlite3
@@ -354,6 +353,93 @@ class TaskManager:
         except Exception as e:
             logger.error(f"获取任务状态失败: ID={task_id}, 错误={e}")
             return None
+    
+    def get_task_by_file_path(self, file_path: str) -> Optional[Dict[str, Any]]:
+        """
+        根据文件路径获取任务状态
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            任务状态信息
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT id, file_path, status, priority, progress, 
+                       error_message, retry_count, created_at, updated_at
+                FROM tasks 
+                WHERE file_path = ?
+                ORDER BY updated_at DESC
+                LIMIT 1
+            ''', (file_path,))
+            
+            row = cursor.fetchone()
+            conn.close()
+            
+            if row:
+                return {
+                    'id': row[0],
+                    'file_path': row[1],
+                    'status': row[2],
+                    'priority': TaskPriority(row[3]),
+                    'progress': row[4],
+                    'error_message': row[5],
+                    'retry_count': row[6],
+                    'created_at': row[7],
+                    'updated_at': row[8]
+                }
+            
+            return None
+            
+        except Exception as e:
+            logger.error(f"根据文件路径获取任务状态失败: 文件={file_path}, 错误={e}")
+            return None
+    
+    def get_all_tasks_status(self) -> Dict[str, int]:
+        """
+        获取所有任务状态统计
+        
+        Returns:
+            任务状态统计字典
+        """
+        try:
+            conn = sqlite3.connect(self.db_path)
+            cursor = conn.cursor()
+            
+            cursor.execute('''
+                SELECT status, COUNT(*) FROM tasks GROUP BY status
+            ''')
+            
+            rows = cursor.fetchall()
+            conn.close()
+            
+            status_counts = {
+                'pending': 0,
+                'processing': 0,
+                'completed': 0,
+                'failed': 0,
+                'cancelled': 0
+            }
+            
+            for status, count in rows:
+                if status in status_counts:
+                    status_counts[status] = count
+            
+            return status_counts
+            
+        except Exception as e:
+            logger.error(f"获取任务状态统计失败: {e}")
+            return {
+                'pending': 0,
+                'processing': 0,
+                'completed': 0,
+                'failed': 0,
+                'cancelled': 0
+            }
     
     def get_pending_tasks(self, limit: int = 100) -> List[Dict[str, Any]]:
         """

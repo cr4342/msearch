@@ -313,6 +313,185 @@ class ProcessingOrchestrator:
                 'error': str(e)
             }
     
+    async def delete_file(self, file_path: str) -> Dict[str, Any]:
+        """
+        处理文件删除的完整流程
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            处理结果字典
+        """
+        try:
+            logger.info(f"开始处理文件删除: {file_path}")
+            
+            # 1. 确定文件类型
+            file_type_info = self.file_type_detector.detect_file_type(file_path)
+            file_type = file_type_info['type']
+            
+            if file_type == 'unknown':
+                logger.warning(f"不支持的文件类型删除: {file_path}")
+                return {
+                    'status': 'success',
+                    'message': '不支持的文件类型，无需处理',
+                    'file_path': file_path
+                }
+            
+            # 2. 确定向量集合名称
+            collection_name = f"{file_type}_vectors"
+            
+            # 3. 查找文件ID
+            # 在实际实现中，应该从数据库或向量存储中查找文件ID
+            # 这里我们使用文件路径作为查询条件
+            try:
+                # 查询与文件路径匹配的所有向量
+                from qdrant_client.models import Filter, FieldCondition
+                
+                # 如果向量存储客户端不可用，使用模拟删除
+                if self.vector_store.client is None:
+                    logger.warning("向量存储客户端不可用，模拟删除文件")
+                    return {
+                        'status': 'success',
+                        'message': '模拟删除文件（向量存储不可用）',
+                        'file_path': file_path,
+                        'file_type': file_type
+                    }
+                
+                # 获取实际的集合名称
+                collection_config = self.vector_store.collections.get(collection_name, {})
+                actual_collection_name = collection_config.get('name', f'msearch_{collection_name}')
+                
+                # 查询与文件路径匹配的点
+                search_result = self.vector_store.client.scroll(
+                    collection_name=actual_collection_name,
+                    scroll_filter=Filter(
+                        must=[
+                            FieldCondition(
+                                key="file_path",
+                                match={"value": file_path}
+                            )
+                        ]
+                    ),
+                    limit=100  # 假设一个文件最多有100个向量
+                )
+                
+                points = search_result[0]  # scroll返回(points, next_page_offset)
+                
+                if not points:
+                    logger.info(f"未找到文件 {file_path} 对应的向量，可能已被删除")
+                    return {
+                        'status': 'success',
+                        'message': '未找到对应的向量数据',
+                        'file_path': file_path,
+                        'file_type': file_type
+                    }
+                
+                # 提取点ID
+                point_ids = [str(point.id) for point in points]
+                
+                # 4. 删除向量数据
+                delete_result = await self.vector_store.delete_vectors(collection_name, point_ids)
+                
+                if delete_result:
+                    logger.info(f"文件向量删除成功: {file_path}, 删除了 {len(point_ids)} 个向量")
+                else:
+                    logger.warning(f"文件向量删除失败: {file_path}")
+                
+                # 5. 删除时间戳信息（如果有）
+                # 这里可以调用时间戳数据库的删除方法
+                
+                logger.info(f"文件删除处理完成: {file_path}")
+                
+                return {
+                    'status': 'success',
+                    'file_path': file_path,
+                    'file_type': file_type,
+                    'deleted_vectors': len(point_ids) if delete_result else 0
+                }
+                
+            except Exception as e:
+                logger.error(f"查询和删除向量失败: {file_path}, 错误: {e}")
+                return {
+                    'status': 'error',
+                    'error': f"查询和删除向量失败: {str(e)}",
+                    'file_path': file_path
+                }
+            
+        except Exception as e:
+            logger.error(f"文件删除处理失败: {file_path}, 错误: {e}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'file_path': file_path
+            }
+    
+    def get_file_processing_status(self, file_path: str) -> Dict[str, Any]:
+        """
+        获取文件处理状态
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            文件处理状态信息
+        """
+        try:
+            # 通过任务管理器获取任务状态
+            task_status = self.task_manager.get_task_by_file_path(file_path)
+            
+            if task_status:
+                return {
+                    'status': 'success',
+                    'file_path': file_path,
+                    'task_id': task_status['id'],
+                    'processing_status': task_status['status'],
+                    'progress': task_status['progress'],
+                    'error_message': task_status['error_message'],
+                    'retry_count': task_status['retry_count'],
+                    'created_at': task_status['created_at'],
+                    'updated_at': task_status['updated_at']
+                }
+            else:
+                # 没有找到任务，可能文件未被处理
+                return {
+                    'status': 'not_found',
+                    'file_path': file_path,
+                    'message': '文件未被处理或任务已被清理'
+                }
+                
+        except Exception as e:
+            logger.error(f"获取文件处理状态失败: 文件={file_path}, 错误={e}")
+            return {
+                'status': 'error',
+                'error': str(e),
+                'file_path': file_path
+            }
+    
+    def get_all_processing_status(self) -> Dict[str, Any]:
+        """
+        获取所有文件处理状态统计
+        
+        Returns:
+            处理状态统计信息
+        """
+        try:
+            # 通过任务管理器获取所有任务状态统计
+            status_counts = self.task_manager.get_all_tasks_status()
+            
+            return {
+                'status': 'success',
+                'task_counts': status_counts,
+                'total_tasks': sum(status_counts.values())
+            }
+            
+        except Exception as e:
+            logger.error(f"获取处理状态统计失败: 错误={e}")
+            return {
+                'status': 'error',
+                'error': str(e)
+            }
+
     def _find_task_id_by_file(self, file_path: str) -> str:
         """
         根据文件路径查找任务ID
