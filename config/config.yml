@@ -1,594 +1,172 @@
-# msearch 智能多模态检索系统配置文件
-# 版本: v1.0.0
+# msearch 多模态检索系统配置文件
 
-# ============================================================================
-# 基础系统配置
-# ============================================================================
-general:
-  # 日志级别: DEBUG, INFO, WARNING, ERROR, CRITICAL
+# 系统配置
+system:
   log_level: INFO
-  # 数据存储目录
   data_dir: ./data
-  # 临时文件目录
-  temp_dir: ./data/temp
-  # 监控目录列表 - 系统将监控这些目录中的文件变化
-  watch_directories:
-    - ~/Pictures
-    - ~/Videos
-    - ~/Documents
-    - ~/Downloads
-  # 最大并发任务数 - 根据硬件性能调整
-  max_concurrent_tasks: 4
+  temp_dir: ./temp
+  monitored_directories:
+    - ./data/media
+  supported_extensions:
+    - .jpg
+    - .jpeg
+    - .png
+    - .bmp
+    - .webp
+    - .mp4
+    - .avi
+    - .mov
+    - .mp3
+    - .wav
+    - .flac
+  debounce_delay: 0.5
+  max_workers: 4
 
-# ============================================================================
-# 功能开关配置
-# ============================================================================
-features:
-  # 人脸识别功能开关
-  enable_face_recognition: true
-  # 音频处理功能开关
-  enable_audio_processing: true
-  # 视频处理功能开关
-  enable_video_processing: true
-  # 实时文件监控开关
-  enable_file_monitoring: true
-
-# ============================================================================
-# AI模型配置 - 文本向量化特殊说明
-# ============================================================================
-# 重要说明：本系统不存储文本内容向量，仅在查询时根据检索目标动态选择模型
-# - 检索图片/视频：使用CLIP对查询文本向量化，与image_vectors/video_vectors匹配
-# - 检索音乐内容：使用CLAP对查询文本向量化，与audio_vectors匹配  
-# - 检索语音内容：使用Whisper对查询文本向量化，与audio_vectors匹配
-# 这种设计确保了跨模态检索时的向量空间对齐
-
-# 模型存储配置
-models_storage:
-  # 本地模型根目录（运行时使用）
-  models_dir: "./data/models"
-  # 离线模式设置（防止尝试在线下载）
-  offline_mode: true
-  # 强制使用本地模型（不尝试从HuggingFace下载）
-  force_local: true
-  # 离线缓存路径（仅安装脚本使用）
-  offline_cache: "./offline/models"
-  # 模型下载源配置（仅安装脚本使用）
-  download_sources:
-    clip: "openai/clip-vit-base-patch32"
-    clap: "laion/clap-htsat-fused"
-    whisper: "openai/whisper-base"
-
-# 模型配置
-models:
-  # CLIP模型配置 - 用于图像处理和图像检索时的文本向量化
-  clip:
-    # 使用本地模型路径（不是模型名称）
-    model_name: "./data/models/clip-vit-base-patch32"
-    # 本地路径（与model_name相同）
-    local_path: "./data/models/clip-vit-base-patch32"
-    # 不允许下载
-    allow_download: false
-    device: "auto"  # auto, cpu, cuda
-    batch_size: 16
-    # 文本向量化用途：查询文本 -> 检索图片/视频
-    text_embedding_usage: "query_to_visual_content"
-    
-  # CLAP模型配置 - 用于音频处理和音频检索时的文本向量化
-  clap:
-    # 使用本地模型路径（不是模型名称）
-    model_name: "./data/models/clap-htsat-fused"
-    # 本地路径（与model_name相同）
-    local_path: "./data/models/clap-htsat-fused"
-    # 不允许下载
-    allow_download: false
-    device: "auto"
-    batch_size: 8
-    # 文本向量化用途：查询文本 -> 检索音频内容
-    text_embedding_usage: "query_to_audio_content"
-    
-  # Whisper模型配置 - 用于语音转文本和语音检索时的文本向量化
-  whisper:
-    # 使用本地模型路径（不是模型名称）
-    model_name: "./data/models/whisper-base"
-    # 本地路径（与model_name相同）
-    local_path: "./data/models/whisper-base"
-    # 不允许下载
-    allow_download: false
-    device: "auto"
-    batch_size: 4
-    # 文本向量化用途：查询文本 -> 检索语音内容
-    text_embedding_usage: "query_to_speech_content"
-
-# ============================================================================
-# 向量存储配置 - 明确不存储文本向量
-# ============================================================================
-vector_storage:
-  # 存储的向量类型（不包含text_vectors）
-  stored_vector_types:
-    - image_vectors    # 图片内容向量
-    - video_vectors    # 视频关键帧向量
-    - audio_vectors    # 音频内容向量（包含音乐和语音）
-    - face_vectors     # 人脸特征向量
-  
-  # 文本向量处理策略
-  text_vector_strategy:
-    storage_policy: "no_storage"  # 不存储文本向量
-    processing_mode: "query_time_embedding"  # 查询时实时向量化
-    model_selection: "target_modality_based"  # 根据检索目标选择模型
-
-# ============================================================================
-# 文件处理配置
-# ============================================================================
-processing:
-  # 支持的文件格式（不包含纯文本文件）
-  supported_formats:
-    image: [jpg, jpeg, png, bmp, gif, webp, tiff]
-    video: [mp4, avi, mov, mkv, webm, flv, wmv]
-    audio: [mp3, wav, ogg, flac, aac, m4a, wma]
-  
-  # 排除的文件格式（纯文本文件不进行索引）
-  excluded_formats: [txt, doc, docx, pdf, md, rtf]
-  
-  # 图像处理配置
-  image:
-    batch_size: 32
-    # 预处理分辨率转换（减少显存压力）
-    preprocessing:
-      # 4K图片降采样目标分辨率
-      max_resolution: 1920  # 1080p宽度
-      # 支持的输入格式
-      input_formats: [jpg, jpeg, png, bmp, gif, webp, tiff]
-      # 统一输出格式
-      output_format: "jpeg"
-      # 质量设置
-      jpeg_quality: 85
-    # CLIP模型输入尺寸
-    model_input:
-      resize_width: 224
-      resize_height: 224
-    max_file_size: 50  # MB
-    
-  # 视频处理配置
-  video:
-    batch_size: 16
-    # 格式转换与分辨率降采样（显存优化）
-    preprocessing:
-      # 分辨率转换策略
-      resolution_conversion:
-        # 4K视频 (3840x2160) -> 720p (1280x720)
-        "4k_to_720p": true
-        # HD视频 (1920x1080) -> 720p (1280x720)  
-        "hd_to_720p": true
-        # 目标分辨率（短边像素）
-        target_resolution: 720
-      # 编码转换
-      encoding:
-        # 统一转换为H.264编码
-        target_codec: "h264"
-        # 比特率控制（Mbps）
-        target_bitrate: 2.0
-        # 帧率限制
-        max_fps: 30
-    # 关键帧提取策略
-    frame_extraction:
-      # 短视频抽帧间隔
-      short_video_interval: 2  # 秒
-      # 长视频抽帧间隔
-      long_video_interval: 5   # 秒
-      # 长短视频分界线
-      long_video_threshold: 120  # 秒
-    # 场景检测配置
-    scene_detection:
-      threshold: 0.3  # 场景变化阈值
-      min_scene_length: 3  # 最小场景长度(秒)
-      max_scene_length: 60  # 最大场景长度(秒，超过则切分)
-    # 时间戳处理配置
-    timestamp_processing:
-      # 时间精度要求
-      accuracy_requirement: 2.0  # ±2秒精度要求
-      # 重叠时间窗口
-      overlap_buffer: 1.0  # 1秒重叠缓冲
-      # 多模态同步容差
-      sync_tolerance:
-        visual: 0.033      # 帧级精度(30fps)
-        audio_music: 0.1   # 音频精度
-        audio_speech: 0.2  # 语音精度
-      # 时间戳验证
-      enable_timestamp_validation: true
-      enable_drift_correction: true
-    # 处理限制
-    max_duration: 7200  # 最大处理时长(秒)
-    max_file_size: 500  # MB
-    
-  # 音频处理配置
-  audio:
-    batch_size: 8
-    # 格式标准化（显存和计算优化）
-    preprocessing:
-      # 采样率转换
-      target_sample_rate: 16000  # 统一转换为16kHz
-      # 声道转换
-      target_channels: 1  # 转换为单声道
-      # 输出格式
-      output_format: "wav"  # 统一为WAV格式
-      # 比特深度
-      bit_depth: 16
-    # 分段处理配置
-    segmentation:
-      # 音乐片段时长
-      music_segment_duration: 30  # 秒
-      # 语音片段时长
-      speech_segment_duration: 10  # 秒
-      # 最小处理时长
-      min_duration: 3  # 秒
-    # 音频内容分类
-    content_classification:
-      enable: true
-      music_threshold: 0.7  # 音乐分类阈值
-      speech_threshold: 0.6  # 语音分类阈值
-      # 质量过滤
-      quality_filter:
-        min_snr: 10  # 最小信噪比(dB)
-        max_silence_ratio: 0.8  # 最大静音比例
-    max_file_size: 100  # MB
-
-# ============================================================================
-# 人脸识别配置
-# ============================================================================
-face_recognition:
-  detection:
-    min_face_size: 40  # 最小人脸尺寸(像素)
-    confidence_threshold: 0.8  # 检测置信度阈值
-    max_faces_per_frame: 10  # 每帧最大检测人脸数
-    
-  matching:
-    similarity_threshold: 0.6  # 相似度阈值
-    max_matches: 10  # 最大匹配结果数
-    feature_dimension: 512  # 人脸特征向量维度
-
-# ============================================================================
-# 智能检索配置 - 查询文本向量化路由
-# ============================================================================
-search:
-  # 查询类型识别与模型路由
-  query_routing:
-    # 视觉内容检索关键词 -> 使用CLIP向量化
-    visual_keywords: ["图片", "照片", "视频", "画面", "场景", "颜色", "风景", "人物"]
-    # 音频内容检索关键词 -> 使用CLAP向量化  
-    audio_keywords: ["音乐", "歌曲", "音频", "声音", "旋律", "节拍", "乐器"]
-    # 语音内容检索关键词 -> 使用Whisper向量化
-    speech_keywords: ["讲话", "会议", "语音", "对话", "演讲", "讨论", "录音"]
-    # 人名检索 -> 使用人脸预检索
-    person_keywords: ["人名", "姓名", "人物", "谁"]
-  
-  # 文本向量化模型选择策略
-  text_embedding_strategy:
-    # 默认策略：根据查询意图自动选择
-    default_mode: "auto_detect"
-    # 备选策略：多模型并行（性能要求高时使用）
-    fallback_mode: "multi_model_parallel"
-    
-  # 动态权重配置
-  weights:
-    # 默认权重分配
-    default:
-      clip: 0.4      # 视觉模态权重
-      clap: 0.3      # 音频模态权重  
-      whisper: 0.3   # 语音模态权重
-      
-    # 视觉查询权重调整
-    visual_query:
-      clip: 0.7      # 视觉模态权重提升
-      clap: 0.15
-      whisper: 0.15
-      
-    # 音频查询权重调整  
-    audio_query:
-      clip: 0.2
-      clap: 0.6      # 音频模态权重提升
-      whisper: 0.2
-      
-    # 语音查询权重调整
-    speech_query:
-      clip: 0.2  
-      clap: 0.2
-      whisper: 0.6   # 语音模态权重提升
-      
-    # 人名查询权重调整
-    person_query:
-      face: 0.6      # 人脸模态权重提升
-      clip: 0.2
-      clap: 0.1
-      whisper: 0.1
-
-  # 检索结果配置
-  results:
-    max_results: 50  # 最大返回结果数
-    similarity_threshold: 0.3  # 相似度阈值
-    enable_reranking: true  # 启用重排序
-    diversity_factor: 0.2  # 结果多样性因子
-    
-  # 时间戳检索配置
-  timestamp_retrieval:
-    # 时间精度保证
-    accuracy_requirement: 2.0  # ±2秒精度要求
-    # 时间段合并
-    enable_segment_merging: true  # 启用重叠时间段合并
-    merge_threshold: 2.0  # 时间段合并阈值(秒)
-    # 连续性检测
-    continuity_detection: true  # 启用时间连续性检测
-    max_gap_tolerance: 4.0  # 最大时间间隔容忍度(秒)
-    # 多模态同步
-    multimodal_sync_validation: true  # 启用多模态同步验证
-    sync_correction: true  # 启用同步校正
-
-# ============================================================================
 # 数据库配置
-# ============================================================================
 database:
-  # SQLite元数据库配置
   sqlite:
-    path: "./data/database/msearch.db"
+    path: ./data/msearch.db
     connection_pool_size: 10
-    # 时间戳索引配置
-    timestamp_indexing:
-      # 启用时间范围索引
-      enable_time_range_index: true
-      # 启用向量ID索引
-      enable_vector_id_index: true
-      # 启用模态时间索引
-      enable_modality_time_index: true
-      # 索引优化
-      index_optimization: true
-    
-  # Qdrant向量数据库配置
+    timeout: 30
   qdrant:
-    host: "localhost"
+    host: localhost
     port: 6333
-    # 部署模式: embedded(嵌入式) 或 server(服务器模式)
-    mode: "server"
-    # 嵌入式模式配置
-    embedded:
-      path: "./data/database/qdrant"
-      # 向量集合配置（不包含text_collection）
-      collections:
-        image_collection:
-          vector_size: 512
-          distance: "cosine"
-        video_collection:
-          vector_size: 512  
-          distance: "cosine"
-        audio_collection:
-          vector_size: 512
-          distance: "cosine"
-        face_collection:
-          vector_size: 512
-          distance: "cosine"
-    # 服务器模式配置（可选）
-    server:
-      host: "localhost"
-      port: 6333
-      api_key: null
+    timeout: 30
+    collections:
+      visual_vectors: visual_vectors
+      audio_music_vectors: audio_music_vectors
+      audio_speech_vectors: audio_speech_vectors
 
-# ============================================================================
 # Infinity服务配置
-# ============================================================================
 infinity:
   services:
     clip:
-      host: "localhost"
+      model_id: openai/clip-vit-base-patch32
       port: 7997
+      device: cuda:0
+      max_batch_size: 32
+      dtype: float16
     clap:
-      host: "localhost"
+      model_id: laion/clap-htsat-fused
       port: 7998
+      device: cuda:0
+      max_batch_size: 16
+      dtype: float16
     whisper:
-      host: "localhost"
+      model_id: openai/whisper-base
       port: 7999
+      device: cuda:1
+      max_batch_size: 8
+      dtype: float16
+  health_check:
+    interval: 30
+    failure_threshold: 3
+    timeout: 5
+  resource_monitor:
+    interval: 60
+    gpu_threshold: 0.9
+    memory_threshold: 0.85
+    auto_cleanup: true
 
-# ============================================================================
-# API服务配置
-# ============================================================================
-api:
-  # FastAPI服务配置
-  host: "0.0.0.0"
-  port: 8000
-  # API端点配置
-  endpoints:
-    # 检索API - 支持跨模态文本查询
-    search: "/api/v1/search"
-    # 配置API
-    config: "/api/v1/config"  
-    # 任务控制API
-    tasks: "/api/v1/tasks"
-    # 状态查询API
-    status: "/api/v1/status"
-  
-  # CORS配置
-  cors:
-    allow_origins: ["*"]
-    allow_methods: ["GET", "POST", "PUT", "DELETE"]
-    allow_headers: ["*"]
+# 媒体处理配置
+media_processing:
+  video:
+    max_resolution: 960
+    target_fps: 8
+    codec: h264
+    scene_detection:
+      enabled: true
+      threshold: 30.0
+      min_scene_length: 30
+      max_scene_length: 120
+  audio:
+    sample_rate: 16000
+    channels: 1
+    bitrate: 64000
+    codec: aac
+    quality_filter:
+      min_duration: 3.0
+      min_snr_ratio: 5.0
+      enable_silence_detection: true
 
-# ============================================================================
-# 性能优化配置
-# ============================================================================
-performance:
-  # GPU内存管理
-  gpu_memory:
-    # 模型加载策略
-    model_loading: "lazy"  # lazy(按需加载) 或 eager(预加载)
-    # 内存清理策略
-    cleanup_strategy: "auto"
-    # 最大GPU内存使用率
-    max_gpu_memory_fraction: 0.8
-    
-  # 批处理优化
-  batch_processing:
-    # 动态批大小调整
-    dynamic_batch_size: true
-    # 内存使用监控
-    memory_monitoring: true
-    
-  # 缓存配置
-  cache:
-    # 向量缓存大小(MB)
-    vector_cache_size: 1024
-    # 模型缓存策略
-    model_cache_strategy: "lru"
+# 人脸识别配置
+face_recognition:
+  enabled: true
+  model: facenet
+  detector: mtcnn
+  detection:
+    min_face_size: 40
+    confidence_threshold: 0.9
+    nms_threshold: 0.4
+  feature_extraction:
+    vector_dim: 512
+    normalize: true
+  matching:
+    similarity_threshold: 0.6
+    enable_fuzzy_matching: true
+    fuzzy_threshold: 0.8
+    max_matches: 10
+  indexing:
+    video_sample_interval: 5
+    batch_size: 16
+    enable_clustering: false
 
-# ============================================================================
-# 监控和日志配置  
-# ============================================================================
-monitoring:
-  # 性能监控
-  performance_monitoring: true
-  # 资源使用监控
-  resource_monitoring: true
-  # 监控数据保留天数
-  retention_days: 30
-  
-# ============================================================================
-# 日志系统配置 - 多级别可配置日志
-# ============================================================================
-logging:
-  # 全局日志级别 (DEBUG, INFO, WARNING, ERROR, CRITICAL)
-  level: INFO
-  
-  # 日志格式配置
-  format:
-    # 标准格式 - 生产环境推荐
-    standard: "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
-    # 详细格式 - 开发调试推荐
-    detailed: "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s() - %(message)s"
-    # 简化格式 - 控制台输出
-    simple: "%(levelname)s - %(message)s"
-    # 性能格式 - 性能监控专用
-    performance: "%(asctime)s - PERF - %(message)s"
-  
-  # 输出处理器配置
-  handlers:
-    # 控制台输出配置
-    console:
-      enabled: true
-      level: INFO          # 控制台日志级别
-      format: standard     # 使用标准格式
-      
-    # 主日志文件配置
-    file:
-      enabled: true
-      level: DEBUG         # 文件记录所有级别日志
-      format: detailed     # 使用详细格式便于调试
-      path: "./data/logs/msearch.log"
-      max_size: "100MB"    # 单文件最大大小
-      backup_count: 5      # 保留备份文件数
-      encoding: "utf-8"
-      
-    # 错误日志单独文件
-    error_file:
-      enabled: true
-      level: ERROR         # 只记录错误和严重错误
-      format: detailed     # 详细格式便于错误诊断
-      path: "./data/logs/error.log"
-      max_size: "50MB"
-      backup_count: 10     # 错误日志保留更多备份
-      encoding: "utf-8"
-      
-    # 性能日志文件
-    performance:
-      enabled: true
-      level: INFO
-      format: performance  # 专用性能格式
-      path: "./data/logs/performance.log"
-      max_size: "50MB"
-      backup_count: 3
-      encoding: "utf-8"
-      
-    # 时间戳处理专用日志
-    timestamp:
-      enabled: true
-      level: WARNING       # 只记录时间戳相关警告和错误
-      format: detailed
-      path: "./data/logs/timestamp.log"
-      max_size: "20MB"
-      backup_count: 5
-      encoding: "utf-8"
-  
-  # 组件特定日志级别配置
-  loggers:
-    # 核心组件日志级别
-    "msearch.core": INFO
-    "msearch.core.config_manager": INFO
-    "msearch.core.file_type_detector": INFO
-    
-    # 业务逻辑组件
-    "msearch.business": INFO
-    "msearch.business.orchestrator": INFO
-    "msearch.business.search_engine": INFO
-    "msearch.business.smart_retrieval": INFO
-    
-    # 处理器组件 (开发时可调整为DEBUG)
-    "msearch.processors": WARNING
-    "msearch.processors.image_processor": WARNING
-    "msearch.processors.video_processor": INFO    # 视频处理较复杂，保持INFO
-    "msearch.processors.audio_processor": WARNING
-    "msearch.processors.timestamp_processor": INFO # 时间戳处理保持INFO
-    
-    # AI模型组件
-    "msearch.models": WARNING
-    "msearch.models.embedding_engine": INFO       # 向量化引擎保持INFO
-    "msearch.models.model_manager": WARNING
-    
-    # 存储组件
-    "msearch.storage": INFO
-    "msearch.storage.qdrant_client": INFO
-    "msearch.storage.sqlite_manager": INFO
-    
-    # API服务组件
-    "msearch.api": INFO
-    "msearch.api.routes": INFO
-    
-    # UI组件
-    "msearch.ui": INFO
-    
-    # 第三方库日志级别控制
-    "qdrant_client": WARNING
-    "infinity_emb": WARNING
-    "transformers": ERROR
-    "torch": ERROR
-    "PIL": ERROR
-    "cv2": ERROR
-    "librosa": WARNING
-    "whisper": WARNING
-  
-  # 日志监控配置
-  monitoring:
-    # 错误率监控
-    error_rate:
-      enabled: true
-      threshold: 5        # 每分钟错误数阈值
-      window: 60          # 监控窗口(秒)
-      
-    # 性能监控
-    performance:
-      enabled: true
-      processing_time_threshold: 30    # 处理时间阈值(秒)
-      memory_usage_threshold: 80       # 内存使用率阈值(%)
-      
-    # 磁盘空间监控
-    disk_usage:
-      enabled: true
-      log_dir_threshold: 90           # 日志目录磁盘使用率阈值(%)
-      
-  # 开发环境特殊配置
-  development:
-    # 开发模式下的日志配置覆盖
-    enabled: false        # 是否启用开发模式
-    console_level: DEBUG  # 开发时控制台显示DEBUG日志
-    file_level: DEBUG     # 开发时文件记录DEBUG日志
-    
-  # 生产环境优化配置
-  production:
-    # 生产模式下的日志配置覆盖
-    enabled: false        # 是否启用生产模式
-    console_level: WARNING # 生产时控制台只显示警告和错误
-    reduce_third_party: true # 减少第三方库日志输出
+# 智能检索配置
+smart_retrieval:
+  default_weights:
+    clip: 0.4
+    clap: 0.3
+    whisper: 0.3
+  person_weights:
+    clip: 0.5
+    clap: 0.25
+    whisper: 0.25
+  audio_weights:
+    music:
+      clip: 0.2
+      clap: 0.7
+      whisper: 0.1
+    speech:
+      clip: 0.2
+      clap: 0.1
+      whisper: 0.7
+  visual_weights:
+    clip: 0.7
+    clap: 0.15
+    whisper: 0.15
+  keywords:
+    music:
+      - 音乐
+      - 歌曲
+      - MV
+      - 音乐视频
+      - 歌
+      - 曲子
+      - 旋律
+      - 节拍
+    speech:
+      - 讲话
+      - 演讲
+      - 会议
+      - 访谈
+      - 对话
+      - 发言
+      - 语音
+    visual:
+      - 画面
+      - 场景
+      - 图像
+      - 图片
+      - 视频画面
+      - 截图
+
+# 调度器配置
+orchestrator:
+  check_interval: 5.0
+  max_concurrent_tasks: 3
+
+# 任务管理器配置
+task_manager:
+  max_retry_attempts: 3
+  retry_delay: 60
+  task_timeout: 3600

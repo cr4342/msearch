@@ -29,6 +29,14 @@ class ConfigManager:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
             
+            # 如果配置为空（空文件），使用默认配置
+            if config is None:
+                config = {}
+            
+            # 合并默认配置
+            default_config = self._generate_default_config()
+            config = self._merge_configs(default_config, config)
+            
             # 环境变量覆盖
             config = self._apply_env_overrides(config)
             
@@ -44,18 +52,21 @@ class ConfigManager:
             config = self._generate_default_config()
             # 应用环境变量覆盖到默认配置
             config = self._apply_env_overrides(config)
+            self.config = config
             return config
         except yaml.YAMLError as e:
             logger.error(f"配置文件YAML格式错误: {e}")
             config = self._generate_default_config()
             # 应用环境变量覆盖到默认配置
             config = self._apply_env_overrides(config)
+            self.config = config
             return config
         except Exception as e:
             logger.error(f"加载配置失败: {e}")
             config = self._generate_default_config()
             # 应用环境变量覆盖到默认配置
             config = self._apply_env_overrides(config)
+            self.config = config
             return config
     
     def get(self, key: str, default=None) -> Any:
@@ -175,6 +186,18 @@ class ConfigManager:
                 current[keys[-1]] = value
         except:
             current[keys[-1]] = value
+    
+    def _merge_configs(self, default: Dict, custom: Dict) -> Dict:
+        """合并配置，自定义配置覆盖默认配置"""
+        result = default.copy()
+        
+        for key, value in custom.items():
+            if key in result and isinstance(result[key], dict) and isinstance(value, dict):
+                result[key] = self._merge_configs(result[key], value)
+            else:
+                result[key] = value
+        
+        return result
     
     def _validate_config(self, config: Dict) -> None:
         """验证配置完整性"""

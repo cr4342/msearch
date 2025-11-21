@@ -1,0 +1,473 @@
+"""
+智能检索引擎
+负责多模态检索、结果排序
+"""
+
+import asyncio
+import logging
+import re
+from typing import Dict, Any, List, Optional, Tuple
+import numpy as np
+
+from src.common.storage.database_adapter import DatabaseAdapter
+from src.common.embedding.embedding_engine import EmbeddingEngine
+from src.core.config_manager import get_config_manager
+
+
+class SmartRetrievalEngine:
+    """智能检索引擎"""
+    
+    def __init__(self, config_manager=None):
+        self.config_manager = config_manager or get_config_manager()
+        self.logger = logging.getLogger(__name__)
+        
+        # 初始化组件
+        self.db_adapter = DatabaseAdapter()
+        self.embedding_engine = EmbeddingEngine()
+        
+        # 检索配置
+        self.default_weights = self.config_manager.get("smart_retrieval.default_weights", {
+            'clip': 0.4,
+            'clap': 0.3,
+            'whisper': 0.3
+        })
+        
+        self.person_weights = self.config_manager.get("smart_retrieval.person_weights", {
+            'clip': 0.5,
+            'clap': 0.25,
+            'whisper': 0.25
+        })
+        
+        self.audio_weights = self.config_manager.get("smart_retrieval.audio_weights", {
+            'music': {
+                'clip': 0.2,
+                'clap': 0.7,
+                'whisper': 0.1
+            },
+            'speech': {
+                'clip': 0.2,
+                'clap': 0.1,
+                'whisper': 0.7
+            }
+        })
+        
+        self.visual_weights = self.config_manager.get("smart_retrieval.visual_weights", {
+            'clip': 0.7,
+            'clap': 0.15,
+            'whisper': 0.15
+        })
+        
+        # 关键词配置
+        self.keywords = self.config_manager.get("smart_retrieval.keywords", {
+            'music': ['音乐', '歌曲', 'MV', '音乐视频', '歌', '曲子', '旋律', '节拍'],
+            'speech': ['讲话', '演讲', '会议', '访谈', '对话', '发言', '语音'],
+            'visual': ['画面', '场景', '图像', '图片', '视频画面', '截图']
+        })
+        
+        # 运行状态
+        self.is_running = False
+        
+        self.logger.info("智能检索引擎初始化完成")
+    
+    async def start(self):
+        """启动检索引擎"""
+        self.logger.info("启动智能检索引擎")
+        self.is_running = True
+        self.logger.info("智能检索引擎启动完成")
+    
+    async def stop(self):
+        """停止检索引擎"""
+        self.logger.info("停止智能检索引擎")
+        self.is_running = False
+        self.logger.info("智能检索引擎已停止")
+    
+    async def search(self, query: str, query_type: str = "text", top_k: int = 10, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """
+        执行检索
+        
+        Args:
+            query: 查询内容（文本或二进制数据）
+            query_type: 查询类型（text, image, audio）
+            top_k: 返回结果数量
+            filters: 过滤条件
+            
+        Returns:
+            检索结果列表
+        """
+        try:
+            self.logger.info(f"执行检索: type={query_type}, top_k={top_k}")
+            
+            # 识别查询类型
+            query_intent = self._identify_query_intent(query, query_type)
+            
+            # 根据查询意图选择权重
+            weights = self._get_weights_by_intent(query_intent)
+            
+            # 执行多模态检索
+            results = await self._multimodal_search(query, query_type, weights, top_k, filters)
+            
+            # 结果融合和排序
+            fused_results = self._fuse_results(results, weights)
+            
+            # 添加详细元数据
+            enriched_results = await self._enrich_results(fused_results)
+            
+            self.logger.info(f"检索完成: 返回 {len(enriched_results)} 个结果")
+            
+            return enriched_results
+            
+        except Exception as e:
+            self.logger.error(f"检索失败: {e}")
+            return []
+    
+    def _identify_query_intent(self, query: str, query_type: str) -> str:
+        """识别查询意图"""
+        if query_type != "text":
+            return query_type
+        
+        query_lower = query.lower()
+        
+        # 人名查询检测
+        if self._is_person_query(query):
+            return "person"
+        
+        # 音频查询检测
+        if self._is_audio_query(query_lower):
+            return "audio"
+        
+        # 视觉查询检测
+        if self._is_visual_query(query_lower):
+            return "visual"
+        
+        # 默认通用查询
+        return "general"
+    
+    def _is_person_query(self, query: str) -> bool:
+        """检测是否为人名查询"""
+        # 简单的人名检测逻辑
+        # 实际应用中应该使用更复杂的人名识别算法
+        chinese_name_pattern = r'[\u4e00-\u9fff]{2,4}'
+        matches = re.findall(chinese_name_pattern, query)
+        
+        # 如果查询中包含2-4个中文字符，可能是人名
+        return len(matches) > 0 and len(query.strip()) <= 10
+    
+    def _is_audio_query(self, query: str) -> bool:
+        """检测是否为音频查询"""
+        for keyword in self.keywords['music'] + self.keywords['speech']:
+            if keyword in query:
+                return True
+        return False
+    
+    def _is_visual_query(self, query: str) -> bool:
+        """检测是否为视觉查询"""
+        for keyword in self.keywords['visual']:
+            if keyword in query:
+                return True
+        return False
+    
+    def _get_weights_by_intent(self, intent: str) -> Dict[str, float]:
+        """根据查询意图获取权重"""
+        if intent == "person":
+            return self.person_weights
+        elif intent == "audio":
+            # 进一步区分音乐和语音
+            # 这里简化处理，实际应该更复杂
+            return self.audio_weights['music']
+        elif intent == "visual":
+            return self.visual_weights
+        else:
+            return self.default_weights
+    
+    async def _multimodal_search(self, query: str, query_type: str, weights: Dict[str, float], top_k: int, filters: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+        """执行多模态检索"""
+        results = {}
+        
+        try:
+            # CLIP模型检索（视觉模态）
+            if weights.get('clip', 0) > 0 and 'clip' in self.embedding_engine.get_available_models():
+                clip_results = await self._search_with_clip(query, query_type, top_k, filters)
+                results['clip'] = clip_results
+            
+            # CLAP模型检索（音频模态）
+            if weights.get('clap', 0) > 0 and 'clap' in self.embedding_engine.get_available_models():
+                clap_results = await self._search_with_clap(query, query_type, top_k, filters)
+                results['clap'] = clap_results
+            
+            # Whisper模型检索（语音模态）
+            if weights.get('whisper', 0) > 0 and 'whisper' in self.embedding_engine.get_available_models():
+                whisper_results = await self._search_with_whisper(query, query_type, top_k, filters)
+                results['whisper'] = whisper_results
+        
+        except Exception as e:
+            self.logger.error(f"多模态检索失败: {e}")
+        
+        return results
+    
+    async def _search_with_clip(self, query: str, query_type: str, top_k: int, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """使用CLIP模型检索"""
+        try:
+            # 向量化查询
+            if query_type == "text":
+                query_vector = await self.embedding_engine.embed_text_for_visual(query)
+            elif query_type == "image":
+                query_vector = await self.embedding_engine.embed_image(query.encode() if isinstance(query, str) else query)
+            else:
+                return []
+            
+            # 执行向量检索（这里应该调用实际的向量数据库）
+            # 暂时返回模拟结果
+            mock_results = [
+                {
+                    'file_id': f'clip_file_{i}',
+                    'score': 0.9 - i * 0.1,
+                    'model': 'clip',
+                    'metadata': {'file_type': 'image', 'file_path': f'/path/to/image_{i}.jpg'}
+                }
+                for i in range(min(top_k, 5))
+            ]
+            
+            return mock_results
+            
+        except Exception as e:
+            self.logger.error(f"CLIP检索失败: {e}")
+            return []
+    
+    async def _search_with_clap(self, query: str, query_type: str, top_k: int, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """使用CLAP模型检索"""
+        try:
+            # 向量化查询
+            if query_type == "text":
+                query_vector = await self.embedding_engine.embed_text_for_music(query)
+            elif query_type == "audio":
+                query_vector = await self.embedding_engine.embed_audio_music(query.encode() if isinstance(query, str) else query)
+            else:
+                return []
+            
+            # 执行向量检索
+            mock_results = [
+                {
+                    'file_id': f'clap_file_{i}',
+                    'score': 0.85 - i * 0.1,
+                    'model': 'clap',
+                    'metadata': {'file_type': 'audio', 'file_path': f'/path/to/audio_{i}.mp3'}
+                }
+                for i in range(min(top_k, 5))
+            ]
+            
+            return mock_results
+            
+        except Exception as e:
+            self.logger.error(f"CLAP检索失败: {e}")
+            return []
+    
+    async def _search_with_whisper(self, query: str, query_type: str, top_k: int, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """使用Whisper模型检索"""
+        try:
+            # Whisper主要用于语音转文本，这里简化处理
+            if query_type != "text":
+                return []
+            
+            # 执行文本检索
+            mock_results = [
+                {
+                    'file_id': f'whisper_file_{i}',
+                    'score': 0.8 - i * 0.1,
+                    'model': 'whisper',
+                    'metadata': {'file_type': 'video', 'file_path': f'/path/to/video_{i}.mp4'}
+                }
+                for i in range(min(top_k, 5))
+            ]
+            
+            return mock_results
+            
+        except Exception as e:
+            self.logger.error(f"Whisper检索失败: {e}")
+            return []
+    
+    def _fuse_results(self, results: Dict[str, List[Dict[str, Any]]], weights: Dict[str, float]) -> List[Dict[str, Any]]:
+        """融合多模态检索结果"""
+        try:
+            # 收集所有结果
+            all_results = []
+            
+            for model, model_results in results.items():
+                weight = weights.get(model, 0)
+                
+                for result in model_results:
+                    # 应用权重
+                    weighted_score = result['score'] * weight
+                    
+                    fused_result = {
+                        'file_id': result['file_id'],
+                        'score': weighted_score,
+                        'original_score': result['score'],
+                        'model': result['model'],
+                        'weight': weight,
+                        'metadata': result['metadata']
+                    }
+                    
+                    all_results.append(fused_result)
+            
+            # 按file_id分组并合并分数
+            merged_results = {}
+            
+            for result in all_results:
+                file_id = result['file_id']
+                
+                if file_id not in merged_results:
+                    merged_results[file_id] = {
+                        'file_id': file_id,
+                        'score': 0,
+                        'model_scores': {},
+                        'metadata': result['metadata']
+                    }
+                
+                # 累加权重分数
+                merged_results[file_id]['score'] += result['score']
+                
+                # 记录各模型分数
+                merged_results[file_id]['model_scores'][result['model']] = {
+                    'score': result['original_score'],
+                    'weight': result['weight']
+                }
+            
+            # 转换为列表并排序
+            final_results = list(merged_results.values())
+            final_results.sort(key=lambda x: x['score'], reverse=True)
+            
+            return final_results
+            
+        except Exception as e:
+            self.logger.error(f"结果融合失败: {e}")
+            return []
+    
+    async def _enrich_results(self, results: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        """丰富结果元数据"""
+        try:
+            enriched_results = []
+            
+            for result in results:
+                # 从数据库获取完整文件信息
+                file_info = await self.db_adapter.get_file(result['file_id'])
+                
+                if file_info:
+                    # 合并元数据
+                    enriched_result = {
+                        **result,
+                        'file_info': file_info,
+                        'file_path': file_info['file_path'],
+                        'file_name': file_info['file_name'],
+                        'file_type': file_info['file_type'],
+                        'file_size': file_info['file_size'],
+                        'created_at': file_info['created_at'],
+                        'status': file_info['status']
+                    }
+                    
+                    enriched_results.append(enriched_result)
+            
+            return enriched_results
+            
+        except Exception as e:
+            self.logger.error(f"丰富结果元数据失败: {e}")
+            return results
+    
+    async def get_similar_files(self, file_id: str, top_k: int = 10) -> List[Dict[str, Any]]:
+        """获取相似文件"""
+        try:
+            # 获取文件信息
+            file_info = await self.db_adapter.get_file(file_id)
+            if not file_info:
+                return []
+            
+            # 根据文件类型执行相似性检索
+            file_type = file_info['file_type']
+            
+            if file_type in ['.jpg', '.jpeg', '.png', '.bmp', '.webp']:
+                # 图像相似性检索
+                return await self._find_similar_images(file_id, top_k)
+            elif file_type in ['.mp4', '.avi', '.mov']:
+                # 视频相似性检索
+                return await self._find_similar_videos(file_id, top_k)
+            elif file_type in ['.mp3', '.wav', '.flac']:
+                # 音频相似性检索
+                return await self._find_similar_audio(file_id, top_k)
+            else:
+                return []
+                
+        except Exception as e:
+            self.logger.error(f"获取相似文件失败: {e}")
+            return []
+    
+    async def _find_similar_images(self, file_id: str, top_k: int) -> List[Dict[str, Any]]:
+        """查找相似图像"""
+        # 模拟实现
+        return [
+            {
+                'file_id': f'similar_image_{i}',
+                'score': 0.9 - i * 0.1,
+                'file_path': f'/path/to/similar_image_{i}.jpg',
+                'file_type': '.jpg'
+            }
+            for i in range(min(top_k, 5))
+        ]
+    
+    async def _find_similar_videos(self, file_id: str, top_k: int) -> List[Dict[str, Any]]:
+        """查找相似视频"""
+        # 模拟实现
+        return [
+            {
+                'file_id': f'similar_video_{i}',
+                'score': 0.85 - i * 0.1,
+                'file_path': f'/path/to/similar_video_{i}.mp4',
+                'file_type': '.mp4'
+            }
+            for i in range(min(top_k, 5))
+        ]
+    
+    async def _find_similar_audio(self, file_id: str, top_k: int) -> List[Dict[str, Any]]:
+        """查找相似音频"""
+        # 模拟实现
+        return [
+            {
+                'file_id': f'similar_audio_{i}',
+                'score': 0.8 - i * 0.1,
+                'file_path': f'/path/to/similar_audio_{i}.mp3',
+                'file_type': '.mp3'
+            }
+            for i in range(min(top_k, 5))
+        ]
+    
+    async def get_search_suggestions(self, partial_query: str, limit: int = 10) -> List[str]:
+        """获取搜索建议"""
+        try:
+            # 简单的搜索建议实现
+            # 实际应用中应该基于历史搜索、热门搜索等
+            suggestions = [
+                f"{partial_query} 相关",
+                f"{partial_query} 高清",
+                f"{partial_query} 最新",
+                f"热门 {partial_query}",
+                f"推荐 {partial_query}"
+            ]
+            
+            return suggestions[:limit]
+            
+        except Exception as e:
+            self.logger.error(f"获取搜索建议失败: {e}")
+            return []
+    
+    async def get_popular_searches(self, limit: int = 10) -> List[str]:
+        """获取热门搜索"""
+        try:
+            # 模拟热门搜索
+            popular_searches = [
+                "风景", "人物", "建筑", "动物", "美食",
+                "音乐", "电影", "演讲", "自然", "艺术"
+            ]
+            
+            return popular_searches[:limit]
+            
+        except Exception as e:
+            self.logger.error(f"获取热门搜索失败: {e}")
+            return []

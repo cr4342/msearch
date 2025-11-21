@@ -9,6 +9,8 @@
 4. **阶段四：API与验证** - 搭建FastAPI服务，验证核心功能
 5. **阶段五：UI集成** - 引入PySide6，实现基础交互界面
 6. **阶段六：多模态支持** - 加入视频和音频处理，完善多模态检索
+7. **阶段七：后端优化** - 优化核心功能，提升性能和稳定性
+8. **阶段八：部署与监控** - 部署到Linux服务器，配置监控和自动化部署
 
 ---
 
@@ -18,15 +20,250 @@
 **状态**: [x] 已完成
 
 **任务内容**:
-- 创建 src/api、src/business、src/core、src/processors、src/storage、src/gui 目录
-- 创建 config、data、tests 目录
-- 创建 requirements.txt 和 README.md
+- 创建完整的项目目录结构
+- 初始化所有必需的配置文件
+- 创建项目文档
+
+**完整目录结构**:
+```
+msearch/
+├── src/                          # 源代码目录
+│   ├── __init__.py
+│   ├── main.py                   # 应用入口
+│   │
+│   ├── api/                      # API服务层
+│   │   ├── __init__.py
+│   │   ├── app.py               # FastAPI应用实例
+│   │   ├── routes/              # API路由
+│   │   │   ├── __init__.py
+│   │   │   ├── search.py        # 检索API
+│   │   │   ├── config.py        # 配置管理API
+│   │   │   ├── tasks.py         # 任务管理API
+│   │   │   └── status.py        # 系统状态API
+│   │   ├── models/              # Pydantic数据模型
+│   │   │   ├── __init__.py
+│   │   │   ├── request.py       # 请求模型
+│   │   │   └── response.py      # 响应模型
+│   │   └── middleware/          # 中间件
+│   │       ├── __init__.py
+│   │       ├── cors.py          # CORS中间件
+│   │       ├── error_handler.py # 错误处理
+│   │       └── logging.py       # 日志中间件
+│   │
+│   ├── business/                # 业务逻辑层
+│   │   ├── __init__.py
+│   │   ├── processing_orchestrator.py  # 调度器
+│   │   ├── task_manager.py             # 任务管理器
+│   │   ├── smart_retrieval.py          # 智能检索引擎
+│   │   ├── face_manager.py             # 人脸管理器
+│   │   └── embedding_engine.py         # 向量化引擎
+│   │
+│   ├── processors/              # 媒体处理器
+│   │   ├── __init__.py
+│   │   ├── base_processor.py    # 处理器基类
+│   │   ├── image_processor.py   # 图像处理器
+│   │   ├── video_processor.py   # 视频处理器
+│   │   └── audio_processor.py   # 音频处理器
+│   │
+│   ├── storage/                 # 数据存储层
+│   │   ├── __init__.py
+│   │   ├── database_manager.py  # SQLite数据库管理器
+│   │   ├── vector_store.py      # Qdrant向量存储器
+│   │   └── timestamp_database.py # 时间戳数据库
+│   │
+│   ├── core/                    # 核心组件
+│   │   ├── __init__.py
+│   │   ├── config_manager.py    # 配置管理器
+│   │   ├── logger.py            # 日志系统
+│   │   ├── file_monitor.py      # 文件监控器
+│   │   └── exceptions.py        # 自定义异常
+│   │
+│   └── gui/                     # 用户界面（PySide6）
+│       ├── __init__.py
+│       ├── main_window.py       # 主窗口
+│       ├── search_widget.py     # 检索界面
+│       ├── config_widget.py     # 配置界面
+│       ├── progress_widget.py   # 进度监控界面
+│       └── resources/           # UI资源
+│           ├── icons/
+│           └── styles/
+│
+├── config/                      # 配置文件目录
+│   ├── config.yml              # 主配置文件
+│   ├── config_dev.yml          # 开发环境配置
+│   ├── config_prod.yml         # 生产环境配置
+│   ├── models.yml              # 模型配置
+│   ├── alerts.yml              # 告警配置
+│   └── qdrant_simple.yaml      # Qdrant配置
+│
+├── data/                        # 数据目录
+│   ├── models/                 # AI模型文件
+│   │   ├── clip/
+│   │   ├── clap/
+│   │   ├── whisper/
+│   │   └── facenet/
+│   ├── database/               # SQLite数据库
+│   │   └── msearch.db
+│   ├── qdrant/                 # Qdrant向量数据库
+│   ├── temp/                   # 临时文件
+│   │   ├── images/
+│   │   ├── videos/
+│   │   └── audio/
+│   ├── backups/                # 备份文件
+│   └── checkpoints/            # 任务检查点
+│
+├── logs/                        # 日志目录
+│   ├── msearch.log
+│   ├── error.log
+│   └── performance.log
+│
+├── tests/                       # 测试目录
+│   ├── __init__.py
+│   ├── unit/                   # 单元测试
+│   │   ├── __init__.py
+│   │   ├── test_config_manager.py
+│   │   ├── test_database_manager.py
+│   │   ├── test_vector_store.py
+│   │   └── test_embedding_engine.py
+│   ├── integration/            # 集成测试
+│   │   ├── __init__.py
+│   │   ├── test_file_processing_flow.py
+│   │   └── test_search_flow.py
+│   ├── performance/            # 性能测试
+│   │   ├── __init__.py
+│   │   ├── test_processing_performance.py
+│   │   └── test_search_performance.py
+│   ├── accuracy/               # 精度测试
+│   │   ├── __init__.py
+│   │   └── test_timestamp_accuracy.py
+│   ├── real_model/             # 真实模型测试
+│   │   ├── __init__.py
+│   │   └── test_real_model_inference.py
+│   ├── e2e/                    # 端到端测试
+│   │   ├── __init__.py
+│   │   └── test_real_data_workflow.py
+│   ├── testdata/               # 测试数据
+│   │   ├── images/
+│   │   ├── videos/
+│   │   ├── audios/
+│   │   └── test_config.yml
+│   └── output/                 # 测试输出
+│       └── test_report.json
+│
+├── scripts/                     # 脚本目录
+│   ├── install_auto.sh         # 在线自动安装脚本
+│   ├── install_offline.sh      # 离线安装脚本
+│   ├── download_all_resources.sh  # 下载所有资源
+│   ├── start_qdrant_optimized.sh  # 启动Qdrant
+│   ├── stop_qdrant.sh          # 停止Qdrant
+│   ├── build_with_nuitka.sh    # Nuitka打包脚本
+│   ├── maintain_database.py    # 数据库维护
+│   ├── backup_qdrant.py        # Qdrant备份
+│   └──  stop_services.py        # 停止服务
+│
+├── migrations/                  # 数据库迁移脚本
+│   ├── v1_0_0_initial.sql
+│   ├── v1_1_0_add_persons_table.sql
+│   ├── v1_2_0_add_face_detection.sql
+│   └── v2_0_0_major_schema_change.sql
+│
+├── docs/                        # 文档目录
+│   ├── README.md               # 项目说明
+│   ├── INSTALL.md              # 安装指南
+│   ├── USER_GUIDE.md           # 用户手册
+│   ├── API.md                  # API文档
+│   ├── ARCHITECTURE.md         # 架构文档
+│   ├── DATABASE_SCHEMA.md      # 数据库schema文档
+│   ├── CONTRIBUTING.md         # 贡献指南
+│   ├── FAQ.md                  # 常见问题
+│   ├── technical_implementation.md  # 技术实现指南
+│   └── test_strategy.md        # 测试策略文档
+│
+├── offline/                     # 离线资源包（不纳入Git）
+│   ├── models/                 # 离线模型文件
+│   └── dependencies/           # 离线依赖包
+│
+├── deploy_test/                 # 部署测试目录（不纳入Git）
+│   └── README.md               # 部署测试说明
+│
+├── .github/                     # GitHub配置
+│   └── workflows/
+│       └── tests.yml           # CI/CD配置
+│
+├── .kiro/                       # Kiro配置
+│   ├── specs/                  # 规格文档
+│   │   └── multimodal-search-system/
+│   │       ├── requirements.md
+│   │       ├── design.md
+│   │       └── tasks.md
+│   └── steering/               # Steering规则
+│
+├── requirements.txt             # Python依赖（pip）
+├── pyproject.toml              # 项目配置（uv）
+├── .gitignore                  # Git忽略文件
+├── .env.example                # 环境变量示例
+├── LICENSE                     # 许可证
+└── README.md                   # 项目说明
+```
 
 **验收标准**:
 - [ ] 所有目录结构符合设计文档规范
-- [ ] requirements.txt 包含所有必需依赖
+- [ ] 每个Python模块目录包含 __init__.py 文件
+- [ ] requirements.txt 和 pyproject.toml 包含所有必需依赖
 - [ ] README.md 包含项目简介和快速开始指南
-- [ ] 每个模块目录包含 __init__.py 文件
+- [ ] 配置文件目录包含所有环境的配置模板
+- [ ] 测试目录按测试类型正确组织
+- [ ] 脚本目录包含所有必需的自动化脚本
+- [ ] 文档目录包含完整的项目文档结构
+- [ ] .gitignore 正确配置忽略规则（data/、logs/、offline/、deploy_test/等）
+
+**关键目录说明**:
+
+1. **src/** - 源代码按层次清晰分离
+   - api/: API服务层，处理HTTP请求
+   - business/: 业务逻辑层，核心功能实现
+   - processors/: 媒体处理器，专门处理不同类型文件
+   - storage/: 数据存储层，抽象化数据访问
+   - core/: 核心组件，提供基础功能
+   - gui/: 用户界面，PySide6实现
+
+2. **config/** - 配置文件集中管理
+   - 支持多环境配置（dev/prod）
+   - 模型配置独立管理
+   - 告警规则可配置
+
+3. **data/** - 数据文件分类存储
+   - models/: AI模型文件（按模型类型组织）
+   - database/: SQLite数据库
+   - qdrant/: 向量数据库
+   - temp/: 临时文件（可自动清理）
+   - backups/: 备份文件
+   - checkpoints/: 任务断点
+
+4. **tests/** - 测试按类型组织
+   - unit/: 单元测试（60%）
+   - integration/: 集成测试（30%）
+   - e2e/: 端到端测试（10%）
+   - performance/: 性能测试
+   - accuracy/: 精度测试
+   - testdata/: 测试数据
+
+5. **logs/** - 日志文件（项目根目录）
+   - msearch.log: 主日志文件
+   - error.log: 错误日志
+   - performance.log: 性能日志
+   - 自动轮转和归档
+
+6. **scripts/** - 自动化脚本
+   - 安装脚本（在线/离线/兼容）
+   - 服务管理脚本
+   - 打包和分发脚本
+   - 维护和备份脚本
+
+7. **特殊目录**:
+   - offline/: 离线资源包（不纳入Git）
+   - deploy_test/: 部署测试环境（不纳入Git）
+   - migrations/: 数据库版本迁移脚本
 
 **需求映射**: 2.3
 

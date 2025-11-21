@@ -1,97 +1,57 @@
-# =====================================
-# msearch 多模态检索系统 - 完整依赖清单
-# 更新时间: 2025-10-20
-# 基于深度代码分析和最佳实践生成
-# =====================================
+# msearch 多模态检索系统依赖
 
-# =====================================
-# 🚀 安装说明
-# =====================================
-# 标准安装:
-#   pip install -r requirements.txt
-#
-# 国内镜像加速:
-#   pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-#
-# GPU版本 (推荐):
-#   pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
-#   pip install -r requirements.txt
+# 核心依赖
+torch>=2.2.0
+torchvision>=0.17.0
+transformers>=4.35.0
+numpy>=1.24.0
+pandas>=2.0.0
 
-# =====================================
-# 🔥 核心深度学习框架
-# =====================================
-torch==2.2.0                    # PyTorch深度学习框架 (稳定版本，兼容性最佳)
-torchvision==0.17.0             # PyTorch视觉库 (匹配torch版本)
-transformers>=4.35.0            # Hugging Face Transformers (新模型支持)
-numpy>=1.24.0                   # 科学计算基础库
-pandas>=2.0.0                   # 数据处理库
+# Web框架
+fastapi>=0.104.0
+uvicorn>=0.23.0
+pydantic>=2.5.0
 
-# =====================================
-# 🌐 Web框架和API服务
-# =====================================
-fastapi>=0.104.0                # Web API框架 (安全修复)
-uvicorn>=0.23.0                 # ASGI服务器
-pydantic>=2.5.0                 # 数据验证库 (稳定性提升)
-starlette>=0.27.0               # FastAPI核心依赖
-httpx>=0.25.0                   # 异步HTTP客户端
-requests>=2.31.0                # 同步HTTP客户端 (安全修复)
-aiohttp>=3.8.0                  # 异步HTTP客户端
-aiofiles>=23.0.0                # 异步文件操作 (文件上传必需)
-python-multipart>=0.0.6         # 文件上传支持 (FastAPI必需)
+# 数据库
+sqlalchemy>=2.0.0
+qdrant-client>=1.6.0
 
-# =====================================
-# 💾 数据库和存储
-# =====================================
-sqlalchemy>=2.0.0               # SQL ORM框架
-qdrant-client>=1.6.0            # Qdrant向量数据库客户端
+# 文件监控
+watchdog>=3.0.0
 
-# =====================================
-# 🖼️ 媒体处理和计算机视觉
-# =====================================
-pillow>=10.1.0                  # PIL图像处理 (安全修复)
-opencv-python>=4.8.0            # OpenCV计算机视觉 (cv2)
-librosa>=0.10.0                 # 音频处理库
-soundfile>=0.12.0               # 音频文件I/O
-pydub>=0.25.0                   # 音频格式转换
-ffmpeg-python>=0.2.0            # FFmpeg Python绑定 (视频处理)
-scikit-image>=0.21.0            # 高级图像处理
+# AI模型相关
+openai-whisper>=20230314
+inaspeechsegmenter>=0.0.9
+facenet-pytorch>=2.5.0
+mtcnn>=0.1.1
+insightface>=0.7.0
+sentence-transformers>=2.2.0
+infinity-emb[all]>=0.0.20
 
-# =====================================
-# 🔬 科学计算和机器学习
-# =====================================
-scipy>=1.10.0                   # 科学计算库
-scikit-learn>=1.3.0             # 机器学习库
+# 媒体处理
+pillow>=10.1.0
+opencv-python>=4.8.0
+librosa>=0.10.0
+soundfile>=0.12.0
+pydub>=0.25.0
+ffmpeg-python>=0.2.0
 
-# =====================================
-# 🧠 AI模型和嵌入引擎
-# =====================================
-openai-whisper>=20230314        # 语音识别模型
-inaspeechsegmenter>=0.0.9       # 音频内容分类器
-facenet-pytorch>=2.5.0          # 人脸识别模型
-mtcnn>=0.1.1                    # 人脸检测器
-insightface>=0.7.0              # 增强人脸分析
+# 其他工具
+scipy>=1.10.0
+scikit-learn>=1.3.0
+requests>=2.31.0
+httpx>=0.25.0
+pyyaml>=6.0.1
+psutil>=5.9.0
+tqdm>=4.65.0
 
-# Infinity Embedding Engine - 统一向量嵌入服务
-infinity-emb[all]>=0.0.20       # 向量嵌入引擎 (包含所有依赖)
-sentence-transformers>=2.2.0    # 多语言文本嵌入 (infinity-emb依赖)
+# GUI (可选)
+PySide6>=6.0.0
 
-# Infinity-emb 额外依赖
-optimum[onnxruntime]>=1.14.0    # ONNX运行时优化 (infinity-emb性能优化)
-accelerate>=0.20.0              # 模型加速库 (infinity-emb GPU支持)
-
-# =====================================
-# 🖥️ GUI桌面应用框架
-# =====================================
-PySide6>=6.0.0                  # Qt桌面应用GUI框架
-
-# =====================================
-# 🔧 系统工具和监控
-# =====================================
-watchdog>=3.0.0                 # 文件系统监控
-psutil>=5.9.0                   # 系统资源监控
-tqdm>=4.65.0                    # 进度条显示
-colorama>=0.4.0                 # 彩色终端输出
-pyyaml>=6.0.1                   # YAML配置解析 (安全修复)
-python-dotenv>=1.0.0            # 环境变量管理
-chardet>=5.0.0                  # 字符编码检测
-python-magic>=0.4.0             # 文件类型检测
+# 开发工具
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+black>=23.0.0
+mypy>=1.5.0
+flake8>=6.0.0
