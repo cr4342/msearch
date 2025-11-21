@@ -129,7 +129,7 @@ def _handle_file_change(file_path: str, event_type: str):
                     loop.run_until_complete(_orchestrator.process_file(file_path))
         else:
             # 如果没有处理编排器，仅记录日志
-            logger.info(f"文件 {file_path} 已加入处理队列（处理编排器未初始化），事件类型: {event_type}")
+            logger.info(f"文件 {file_path} 已加入处理队列(处理编排器未初始化)，事件类型: {event_type}")
         
     except Exception as e:
         logger.error(f"处理文件变化失败: {file_path}, 错误: {e}")

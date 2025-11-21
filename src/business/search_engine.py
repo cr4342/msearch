@@ -293,9 +293,9 @@ if __name__ == "__main__":
         'search.similarity_threshold': 0.5
     }
     
-    # 创建搜索引擎实例（需要实际的向量存储实例）
+    # 创建搜索引擎实例(需要实际的向量存储实例)
     # engine = SearchEngine(config, vector_store)
     
-    # 执行搜索（需要实际的查询数据）
+    # 执行搜索(需要实际的查询数据)
     # results = asyncio.run(engine.multimodal_search({'text': '测试查询'}))
     # print(results)

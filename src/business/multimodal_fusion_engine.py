@@ -155,7 +155,7 @@ class MultiModalFusionEngine:
         
         Args:
             results: 搜索结果列表
-            query: 查询字符串（可选）
+            query: 查询字符串(可选)
             
         Returns:
             重排序后的结果列表

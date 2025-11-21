@@ -607,7 +607,7 @@ class SearchWidget(QWidget):
         layout = QVBoxLayout(tab)
         
         # 文本输入区域
-        text_group = QGroupBox("文本查询（可选）")
+        text_group = QGroupBox("文本查询(可选)")
         text_layout = QHBoxLayout(text_group)
         
         self.multimodal_text_input = QLineEdit()
@@ -617,7 +617,7 @@ class SearchWidget(QWidget):
         layout.addWidget(text_group)
         
         # 文件选择区域
-        file_group = QGroupBox("媒体文件（可选）")
+        file_group = QGroupBox("媒体文件(可选)")
         file_layout = QGridLayout(file_group)
         
         # 图像文件

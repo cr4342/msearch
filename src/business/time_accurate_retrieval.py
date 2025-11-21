@@ -3,7 +3,7 @@
 支持多模态时间同步和时间段合并
 
 核心功能：
-1. 视频时间戳精确匹配（±2秒精度）
+1. 视频时间戳精确匹配(±2秒精度)
 2. 多模态时间同步验证
 3. 场景感知的时间段合并
 4. 重叠时间窗口处理
@@ -118,7 +118,7 @@ class TimeAccurateRetrievalEngine:
             
             logger.debug(f"获取到{len(timestamped_results)}个带时间戳的结果")
             
-            # 3. 时间段合并与去重（如果启用）
+            # 3. 时间段合并与去重(如果启用)
             if self.enable_segment_merging:
                 merged_results = self._merge_overlapping_segments(timestamped_results)
                 logger.debug(f"时间段合并完成: {len(timestamped_results)} -> {len(merged_results)}")
@@ -216,10 +216,10 @@ class TimeAccurateRetrievalEngine:
                 # 基础相似度得分
                 base_score = segment.max_score
                 
-                # 连续性奖励（合并的段数越多，奖励越高）
+                # 连续性奖励(合并的段数越多，奖励越高)
                 continuity_bonus = (len(segment.results) - 1) * 0.05
                 
-                # 多模态奖励（包含多种模态的段得分更高）
+                # 多模态奖励(包含多种模态的段得分更高)
                 multimodal_bonus = (len(segment.modalities) - 1) * 0.1
                 
                 # 场景边界奖励
@@ -529,7 +529,7 @@ class TimeAccurateRetrievalEngine:
         Args:
             file_id: 文件ID
             start_time: 开始时间
-            end_time: 结束时间（None表示到文件末尾）
+            end_time: 结束时间(None表示到文件末尾)
             
         Returns:
             连续的时间线段列表
@@ -674,7 +674,7 @@ class VideoTimelineGenerator:
         
         Args:
             file_id: 文件ID
-            resolution: 时间线分辨率（时间点数量）
+            resolution: 时间线分辨率(时间点数量)
             
         Returns:
             时间线数据

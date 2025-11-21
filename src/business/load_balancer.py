@@ -28,7 +28,7 @@ class LoadBalancer:
         self.services = services
         self.request_queues = {name: asyncio.Queue() for name in services.keys()}
         self.max_concurrent_requests = 10
-        self.request_timeouts = 30  # 请求超时时间（秒）
+        self.request_timeouts = 30  # 请求超时时间(秒)
         
         logger.info("负载均衡器初始化完成")
     
@@ -124,7 +124,7 @@ class LoadBalancer:
         
         Args:
             service_name: 服务名称，如果为None则等待所有服务队列清空
-            timeout: 超时时间（秒）
+            timeout: 超时时间(秒)
             
         Returns:
             是否在超时前清空队列
@@ -159,7 +159,7 @@ def get_load_balancer(services: Dict[str, InfinityService] = None) -> LoadBalanc
     获取全局负载均衡器实例
     
     Args:
-        services: Infinity服务字典（首次初始化时需要提供）
+        services: Infinity服务字典(首次初始化时需要提供)
         
     Returns:
         负载均衡器实例

@@ -92,7 +92,7 @@ class FileMonitorHandler(FileSystemEventHandler):
     
     def _is_file_ready(self, file_path: str) -> bool:
         """
-        检查文件是否准备就绪（完全写入）
+        检查文件是否准备就绪(完全写入)
         
         Args:
             file_path: 文件路径

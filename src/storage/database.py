@@ -270,7 +270,7 @@ class DatabaseManager:
             raise
     
     def reset_database(self):
-        """重置数据库（清空所有数据）"""
+        """重置数据库(清空所有数据)"""
         try:
             with sqlite3.connect(self.db_path) as conn:
                 cursor = conn.cursor()

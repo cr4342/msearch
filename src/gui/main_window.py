@@ -470,7 +470,7 @@ class MainWindow(QMainWindow):
         layout = QVBoxLayout(tab)
         
         # 文本输入区域
-        text_group = QGroupBox("文本查询（可选）")
+        text_group = QGroupBox("文本查询(可选)")
         text_layout = QHBoxLayout(text_group)
         
         self.multimodal_text_input = QLineEdit()
@@ -480,7 +480,7 @@ class MainWindow(QMainWindow):
         layout.addWidget(text_group)
         
         # 文件选择区域
-        file_group = QGroupBox("媒体文件（可选）")
+        file_group = QGroupBox("媒体文件(可选)")
         file_layout = QGridLayout(file_group)
         
         # 图像文件
@@ -626,7 +626,7 @@ class MainWindow(QMainWindow):
         # 2. 索引文件管理
         index_tab = QWidget()
         index_layout = QVBoxLayout(index_tab)
-        index_label = QLabel("索引文件管理（待实现）")
+        index_label = QLabel("索引文件管理(待实现)")
         index_label.setAlignment(Qt.AlignCenter)
         index_layout.addWidget(index_label)
         file_manager_tabs.addTab(index_tab, "索引管理")
@@ -634,7 +634,7 @@ class MainWindow(QMainWindow):
         # 3. 搜索历史
         history_tab = QWidget()
         history_layout = QVBoxLayout(history_tab)
-        history_label = QLabel("搜索历史（待实现）")
+        history_label = QLabel("搜索历史(待实现)")
         history_label.setAlignment(Qt.AlignCenter)
         history_layout.addWidget(history_label)
         file_manager_tabs.addTab(history_tab, "搜索历史")
@@ -1143,7 +1143,7 @@ class MainWindow(QMainWindow):
             time_item.setTextAlignment(Qt.AlignCenter)
             table.setItem(row, 3, time_item)
             
-            # 添加操作按钮列（如果还没有）
+            # 添加操作按钮列(如果还没有)
             if table.columnCount() == 4:
                 table.setColumnCount(5)
                 table.setHorizontalHeaderLabels(["文件路径", "文件类型", "相似度", "时间戳", "操作"])
@@ -1160,7 +1160,7 @@ class MainWindow(QMainWindow):
             open_btn.clicked.connect(lambda checked, r=result: self.open_search_result(r))
             action_layout.addWidget(open_btn)
             
-            # 预览按钮（如果支持预览）
+            # 预览按钮(如果支持预览)
             if file_type in ['image', 'video', 'audio']:
                 preview_btn = QPushButton("预览")
                 preview_btn.setFixedSize(50, 25)
@@ -1172,7 +1172,7 @@ class MainWindow(QMainWindow):
         
         # 调整列宽
         table.resizeColumnsToContents()
-        # 设置第一列（文件路径）自适应宽度
+        # 设置第一列(文件路径)自适应宽度
         header = table.horizontalHeader()
         header.setSectionResizeMode(0, QHeaderView.Stretch)
     

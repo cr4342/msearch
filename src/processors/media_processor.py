@@ -325,7 +325,7 @@ class MediaProcessor:
         Args:
             video_path: 视频文件路径
             video_info: 视频信息
-            max_resolution: 最大分辨率（短边）
+            max_resolution: 最大分辨率(短边)
             
         Returns:
             调整后的视频文件路径
@@ -725,7 +725,7 @@ class MediaProcessor:
             # 提取关键帧
             keyframes = self._extract_keyframes(video_path, chunks)
             
-            # 分离音频流（如果存在）
+            # 分离音频流(如果存在)
             audio_path = self._extract_audio_stream(video_path)
             audio_timestamps = []
             
@@ -959,7 +959,7 @@ class MediaProcessor:
         
         # 最小语音片段时长
         min_speech_duration = quality_filter_config.get("min_duration", 3.0)
-        # 最小音乐片段时长（使用相同的最小时长配置）
+        # 最小音乐片段时长(使用相同的最小时长配置)
         min_music_duration = quality_filter_config.get("min_duration", 5.0)
         
         filtered_segments = []

@@ -18,7 +18,7 @@ logger = get_logger(__name__)
 @dataclass
 class TimestampMatch:
     """时间戳匹配结果"""
-    timestamp: float  # 时间戳（秒）
+    timestamp: float  # 时间戳(秒)
     similarity: float  # 相似度分数
     modality: str  # 模态类型：visual/audio/speech
     segment_info: Optional[Dict] = None  # 片段信息
@@ -50,12 +50,12 @@ class TemporalLocalizationEngine:
         }
         
         # 时间窗口配置 - 符合design.md中±2秒精度要求
-        self.time_window_size = 4  # 时间窗口大小（秒），确保±2秒精度
+        self.time_window_size = 4  # 时间窗口大小(秒)，确保±2秒精度
         self.min_confidence = 0.3  # 最小置信度阈值
         self.max_results = 10      # 最大返回结果数
         
         # 精度控制配置 - 符合design.md要求
-        self.timestamp_precision = 2  # 时间戳精度（小数位数），满足±2秒精度要求
+        self.timestamp_precision = 2  # 时间戳精度(小数位数)，满足±2秒精度要求
         
         logger.info("时间定位引擎初始化完成，满足±2秒精度要求")
     
@@ -77,7 +77,7 @@ class TemporalLocalizationEngine:
         设置时间窗口大小
         
         Args:
-            window_size: 窗口大小（秒），范围0.5-10
+            window_size: 窗口大小(秒)，范围0.5-10
         """
         if 0.5 <= window_size <= 10:
             self.time_window_size = window_size
@@ -91,7 +91,7 @@ class TemporalLocalizationEngine:
         
         Args:
             timestamps: 时间戳列表
-            min_distance: 最小距离（秒）
+            min_distance: 最小距离(秒)
             
         Returns:
             处理后的时间戳列表
@@ -118,7 +118,7 @@ class TemporalLocalizationEngine:
     def _round_timestamp(self, timestamp: float) -> float:
         """
         根据精度设置舍入时间戳
-        使用银行家舍入（四舍六入五成偶）以保持一致性
+        使用银行家舍入(四舍六入五成偶)以保持一致性
         
         Args:
             timestamp: 原始时间戳
@@ -144,7 +144,7 @@ class TemporalLocalizationEngine:
         # 合并所有匹配以找出需要创建的所有窗口
         all_matches = list(visual_matches) + list(audio_matches) + list(speech_matches)
         
-        # 如果有匹配，创建完整的窗口范围（包括空窗口）
+        # 如果有匹配，创建完整的窗口范围(包括空窗口)
         if all_matches:
             # 找出最小和最大时间戳
             min_timestamp = min(match.timestamp for match in all_matches)
@@ -215,7 +215,7 @@ class TemporalLocalizationEngine:
             visual_matches: 视觉匹配结果列表
             audio_matches: 音频匹配结果列表
             speech_matches: 语音匹配结果列表
-            weights: 各模态权重字典（可选）
+            weights: 各模态权重字典(可选)
             
         Returns:
             list[FusedTimestamp]: 融合后的时间戳列表，按分数降序排列
@@ -331,7 +331,7 @@ class TemporalLocalizationEngine:
         """计算时间窗口的融合得分"""
         window_center = window_data["window_center"]
         
-        # 计算各模态的加权平均分数（改进：使用平均而仅仅是最大值）
+        # 计算各模态的加权平均分数(改进：使用平均而仅仅是最大值)
         if window_data["visual_matches"]:
             visual_scores = [match.similarity for match in window_data["visual_matches"]]
             visual_score = sum(visual_scores) / len(visual_scores)
@@ -389,7 +389,7 @@ class TemporalLocalizationEngine:
         # 创建权重的副本
         weights = self.default_weights.copy()
         
-        # 检查是否包含中文字符（可能是语音相关查询）
+        # 检查是否包含中文字符(可能是语音相关查询)
         if any('\u4e00' <= char <= '\u9fff' for char in query):
             # 增加语音权重
             weights["speech"] = 0.5
@@ -422,7 +422,7 @@ class TemporalLocalizationEngine:
             visual_matches: 视觉匹配结果列表
             audio_matches: 音频匹配结果列表
             speech_matches: 语音匹配结果列表
-            query: 查询文本（用于动态调整权重）
+            query: 查询文本(用于动态调整权重)
             
         Returns:
             FusedTimestamp: 最佳匹配的时间戳
@@ -447,7 +447,7 @@ class TemporalLocalizationEngine:
             audio_matches: 音频匹配结果列表
             speech_matches: 语音匹配结果列表
             top_k: 返回的结果数量
-            query: 查询文本（用于动态调整权重）
+            query: 查询文本(用于动态调整权重)
             
         Returns:
             list[FusedTimestamp]: 最佳匹配的时间戳列表

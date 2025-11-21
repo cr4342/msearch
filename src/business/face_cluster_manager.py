@@ -114,7 +114,7 @@ class FaceClusterManager:
                 return None
             
             # 使用嵌入引擎提取特征
-            # 注意：实际应用中应该使用专门的人脸识别模型（如FaceNet）
+            # 注意：实际应用中应该使用专门的人脸识别模型(如FaceNet)
             face_vector = await self.embedding_engine.embed_image(image_path)
             
             # 标准化向量
@@ -174,7 +174,7 @@ class FaceClusterManager:
             # 将向量转换为numpy数组
             X = np.array(face_vectors)
             
-            # 计算距离矩阵（余弦距离）
+            # 计算距离矩阵(余弦距离)
             # DBSCAN需要距离矩阵
             distance_matrix = cosine_distances(X)
             
@@ -205,12 +205,12 @@ class FaceClusterManager:
                         'size': 0
                     }
                 
-                # 计算与聚类中心的相似度（简化计算）
+                # 计算与聚类中心的相似度(简化计算)
                 cluster_faces = clusters[cluster_id]['faces']
                 if len(cluster_faces) == 0:
                     similarity = 1.0  # 第一个点的相似度为1
                 else:
-                    # 计算与第一个点的相似度（作为代表）
+                    # 计算与第一个点的相似度(作为代表)
                     similarity = 1 - distance_matrix[idx][cluster_faces[0]['index']]
                 
                 clusters[cluster_id]['faces'].append({
@@ -221,10 +221,10 @@ class FaceClusterManager:
                 })
                 clusters[cluster_id]['size'] += 1
             
-            # 转换为列表并过滤噪声聚类（如果需要）
+            # 转换为列表并过滤噪声聚类(如果需要)
             cluster_list = list(clusters.values())
             
-            # 过滤掉太小的聚类（可选）
+            # 过滤掉太小的聚类(可选)
             filtered_clusters = [cluster for cluster in cluster_list if cluster['size'] >= self.min_samples]
             
             logger.info(f"DBSCAN聚类完成: 生成{len(cluster_list)}个聚类, "
@@ -252,7 +252,7 @@ class FaceClusterManager:
             # 将向量转换为numpy数组
             X = np.array(face_vectors)
             
-            # 确定聚类数量（使用肘部法则的简化版本）
+            # 确定聚类数量(使用肘部法则的简化版本)
             n_samples = len(face_vectors)
             max_clusters = min(self.min_samples * 2, max(2, n_samples // 2))
             
@@ -324,7 +324,7 @@ class FaceClusterManager:
             
             for cluster in clusters:
                 if len(cluster['faces']) >= self.min_samples:
-                    # 为聚类生成一个名称（使用聚类ID）
+                    # 为聚类生成一个名称(使用聚类ID)
                     cluster_name = cluster.get('cluster_name', f"Cluster_{cluster['cluster_id']}")
                     
                     # 获取聚类中的所有人脸向量以生成平均特征
@@ -548,7 +548,7 @@ class FaceClusterManager:
                 # 如果所有脸都移动了，删除原始聚类
                 await self.face_database.delete_person(cluster_id)
             else:
-                # 更新原始聚类名称（如果需要）
+                # 更新原始聚类名称(如果需要)
                 await self.face_database.update_person_name(cluster_id, f"Remaining_{cluster_id}")
             
             return {
@@ -591,7 +591,7 @@ def get_face_cluster_manager(config: Dict[str, Any] = None) -> FaceClusterManage
 
 def set_face_cluster_manager_instance(instance: FaceClusterManager):
     """
-    设置全局人脸聚类管理器实例（用于注入依赖）
+    设置全局人脸聚类管理器实例(用于注入依赖)
     
     Args:
         instance: 人脸聚类管理器实例
@@ -614,9 +614,9 @@ if __name__ == "__main__":
         }
     }
     
-    # 创建聚类管理器实例（需要实际的数据库和嵌入引擎实例）
+    # 创建聚类管理器实例(需要实际的数据库和嵌入引擎实例)
     # manager = FaceClusterManager(config, face_database, embedding_engine)
     
-    # 聚类人脸（需要实际的图片文件列表）
+    # 聚类人脸(需要实际的图片文件列表)
     # result = asyncio.run(manager.cluster_faces(["face1.jpg", "face2.jpg"]))
     # print(result)

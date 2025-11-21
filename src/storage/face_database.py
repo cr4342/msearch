@@ -104,7 +104,7 @@ class FaceDatabase:
                     ON file_faces (timestamp)
                 """)
                 
-                # 创建人脸匹配缓存表（可选，用于性能优化）
+                # 创建人脸匹配缓存表(可选，用于性能优化)
                 cursor.execute("""
                     CREATE TABLE IF NOT EXISTS face_match_cache (
                         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -146,13 +146,13 @@ class FaceDatabase:
             
             person_id = cursor.lastrowid
             
-            # 2. 处理人脸图片（实际检测人脸并提取特征）
+            # 2. 处理人脸图片(实际检测人脸并提取特征)
             for image_path in image_paths:
                 # 检测并提取人脸特征
                 face_features = face_model_manager.detect_and_extract_faces(image_path)
                 
                 if face_features:
-                    # 使用第一个人脸的特征（假设是主要人物）
+                    # 使用第一个人脸的特征(假设是主要人物)
                     main_face = face_features[0]
                     feature_vector = np.array(main_face['features'], dtype=np.float32)
                     confidence = main_face['confidence']

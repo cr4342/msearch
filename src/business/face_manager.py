@@ -154,7 +154,7 @@ class FaceManager:
         try:
             logger.info(f"按人名搜索: 姓名={person_name}")
             
-            # 1. 解析人名（包括别名）
+            # 1. 解析人名(包括别名)
             person_info = await self.face_database.get_person_by_name(person_name)
             if not person_info:
                 logger.info(f"未找到人物: 姓名={person_name}")
@@ -194,13 +194,13 @@ class FaceManager:
             人脸特征向量或None
         """
         try:
-            # 这里应该使用专门的人脸检测和特征提取模型（如FaceNet、MTCNN等）
+            # 这里应该使用专门的人脸检测和特征提取模型(如FaceNet、MTCNN等)
             # 暂时使用嵌入引擎的CLIP模型作为占位符
             
             # 模拟人脸检测和裁剪
             # 实际实现中应该先检测人脸位置，然后裁剪人脸区域
             
-            # 使用嵌入引擎提取特征（模拟）
+            # 使用嵌入引擎提取特征(模拟)
             # 注意：这应该使用专门的人脸识别模型，而不是CLIP
             face_vector = await self.embedding_engine.embed_image(image_path)
             
@@ -266,13 +266,13 @@ if __name__ == "__main__":
         'face.similarity_threshold': 0.7
     }
     
-    # 创建人脸管理器实例（需要实际的数据库和嵌入引擎实例）
+    # 创建人脸管理器实例(需要实际的数据库和嵌入引擎实例)
     # manager = FaceManager(config, face_database, embedding_engine)
     
-    # 注册人脸（需要实际的图片文件）
+    # 注册人脸(需要实际的图片文件)
     # result = asyncio.run(manager.register_face("path/to/face.jpg", "张三"))
     # print(result)
     
-    # 识别人脸（需要实际的图片文件）
+    # 识别人脸(需要实际的图片文件)
     # result = asyncio.run(manager.recognize_face("path/to/unknown_face.jpg"))
     # print(result)

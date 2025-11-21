@@ -85,7 +85,7 @@ class VectorStore:
                 logger.info(f"使用嵌入式Qdrant模式，数据路径: {path}")
                 client = QdrantClient(path=path)
                 
-                # 创建必要的集合（如果不存在）
+                # 创建必要的集合(如果不存在)
                 self._create_collections(client)
                 
                 logger.info("嵌入式Qdrant客户端初始化成功")
@@ -176,10 +176,10 @@ class VectorStore:
     
     async def search_similar(self, query_vector: np.ndarray, collection_name: str, top_k: int = None) -> List[Dict[str, Any]]:
         """
-        相似向量搜索（兼容SearchEngine接口）
+        相似向量搜索(兼容SearchEngine接口)
         
         Args:
-            query_vector: 查询向量（numpy数组）
+            query_vector: 查询向量(numpy数组)
             collection_name: 集合名称
             top_k: 返回结果数量
             
@@ -418,7 +418,7 @@ class VectorStore:
     
     async def reset_collection(self, collection_name: str) -> bool:
         """
-        重置集合（清空所有数据）
+        重置集合(清空所有数据)
         
         Args:
             collection_name: 集合名称
@@ -452,9 +452,9 @@ class VectorStore:
         
         Args:
             file_id: 文件ID
-            start_time: 开始时间（秒）
-            end_time: 结束时间（秒）
-            collection_name: 集合名称（可选，如果不提供则搜索所有集合）
+            start_time: 开始时间(秒)
+            end_time: 结束时间(秒)
+            collection_name: 集合名称(可选，如果不提供则搜索所有集合)
             
         Returns:
             时间范围内的搜索结果

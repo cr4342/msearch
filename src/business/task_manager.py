@@ -137,7 +137,7 @@ class TaskManager:
             # 保存到数据库
             self._save_task_to_db(task)
             
-            # 添加到队列（优先级队列，数值越小优先级越高）
+            # 添加到队列(优先级队列，数值越小优先级越高)
             await self.task_queue.put((-priority.value, task))
             
             logger.info(f"添加任务到队列: ID={task_id}, 文件={file_path}, 优先级={priority.name}")
@@ -222,7 +222,7 @@ class TaskManager:
         Args:
             task_id: 任务ID
             success: 是否成功
-            error_message: 错误信息（如果失败）
+            error_message: 错误信息(如果失败)
             
         Returns:
             是否完成成功

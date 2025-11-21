@@ -130,7 +130,7 @@ class AudioProcessor:
             # 1. 提取音频元数据
             metadata = await loop.run_in_executor(None, self._extract_metadata, audio_path)
             
-            # 2. 预处理音频（格式标准化）
+            # 2. 预处理音频(格式标准化)
             preprocessed_path = await loop.run_in_executor(None, self._preprocess_audio, audio_path, metadata)
             
             # 3. 加载预处理后的音频数据
@@ -342,7 +342,7 @@ class AudioProcessor:
                     'segments': []
                 }
             
-            # 简化的内容分类（基于音频特征）
+            # 简化的内容分类(基于音频特征)
             # 在实际实现中，这里应该集成inaSpeechSegmenter或其他专业分类器
             
             # 计算音频特征
@@ -375,7 +375,7 @@ class AudioProcessor:
             else:
                 music_score += 0.3
             
-            # 基于MFCC的判断（简化）
+            # 基于MFCC的判断(简化)
             if np.std(mfcc_mean) > 10:
                 speech_score += 0.4
             else:
@@ -557,7 +557,7 @@ class AudioProcessor:
         # 计算动态范围
         dynamic_range = np.max(audio_data) - np.min(audio_data)
         
-        # 计算频谱平坦度（衡量频谱分布的均匀性）
+        # 计算频谱平坦度(衡量频谱分布的均匀性)
         fft = np.fft.fft(audio_data)
         magnitude = np.abs(fft[:len(fft)//2])
         spectral_flatness = np.exp(np.mean(np.log(magnitude + 1e-10))) / (np.mean(magnitude) + 1e-10)
@@ -619,7 +619,7 @@ class AudioProcessor:
     
     def _segment_to_dict(self, segment: AudioSegment) -> Dict[str, Any]:
         """
-        将音频段对象转换为字典（用于JSON序列化）
+        将音频段对象转换为字典(用于JSON序列化)
         
         Args:
             segment: 音频段对象

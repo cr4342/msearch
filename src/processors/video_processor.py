@@ -134,7 +134,7 @@ class VideoProcessor:
             if metadata.duration > self.max_duration:
                 raise ValueError(f"视频时长过长: {metadata.duration:.1f}s > {self.max_duration}s")
             
-            # 2. 预处理视频（格式转换和分辨率降采样）
+            # 2. 预处理视频(格式转换和分辨率降采样)
             preprocessed_path = await loop.run_in_executor(None, self._preprocess_video, video_path, metadata)
             
             # 3. 场景检测
@@ -146,7 +146,7 @@ class VideoProcessor:
             # 5. 创建时间戳信息
             timestamp_infos = self._create_timestamp_infos(keyframes, video_path)
             
-            # 6. 音频流分离（如果需要）
+            # 6. 音频流分离(如果需要)
             audio_segments = []
             if metadata.has_audio:
                 audio_segments = await loop.run_in_executor(None, self._extract_audio_segments, video_path, scenes)
@@ -288,7 +288,7 @@ class VideoProcessor:
             
             output_path = output_dir / f"preprocessed_{Path(video_path).stem}.mp4"
             
-            # 计算目标分辨率（保持宽高比）
+            # 计算目标分辨率(保持宽高比)
             if metadata.height > metadata.width:
                 # 竖屏视频
                 target_height = self.target_resolution
@@ -326,12 +326,6 @@ class VideoProcessor:
             logger.error(f"预处理过程出错: {e}")
             return video_path  # 返回原始路径作为备选
         
-        Args:
-            video_path: 视频文件路径
-            
-        Returns:
-            元数据字典
-        """
         if not os.path.exists(video_path):
             raise FileNotFoundError(f"视频文件不存在: {video_path}")
         
@@ -453,7 +447,7 @@ class VideoProcessor:
             start_frame = scene['start_frame']
             end_frame = scene['end_frame']
             
-            # 计算抽帧间隔（基于配置的秒数）
+            # 计算抽帧间隔(基于配置的秒数)
             frame_interval_frames = int(self.frame_interval * fps)
             if frame_interval_frames < 1:
                 frame_interval_frames = 1
@@ -515,15 +509,15 @@ class VideoProcessor:
         return normalized_frame
     
     def _extract_audio(self, video_path: str) -> List[Dict[str, Any]]:
-        """
-        从视频中提取音频流（占位方法）
+        '''
+        从视频中提取音频流(占位方法)
         
         Args:
             video_path: 视频文件路径
             
         Returns:
             音频片段列表
-        """
+        '''
         # 这里应该调用音频处理器来处理音频流
         # 暂时返回空列表
         return []
@@ -572,7 +566,7 @@ if __name__ == "__main__":
             scene_id = 0
             frame_index = 0
             
-            # 计算帧间隔（用于加速处理）
+            # 计算帧间隔(用于加速处理)
             frame_skip = max(1, int(metadata.fps / 5))  # 每秒采样5帧进行场景检测
             
             logger.debug(f"开始场景检测: 阈值={self.scene_threshold}, 帧间隔={frame_skip}")
@@ -712,7 +706,7 @@ if __name__ == "__main__":
                 scene_start_frame = scene.start_frame
                 scene_end_frame = scene.end_frame
                 
-                # 场景边界帧（必须提取）
+                # 场景边界帧(必须提取)
                 if scene.is_boundary:
                     cap.set(cv2.CAP_PROP_POS_FRAMES, scene_start_frame)
                     ret, frame = cap.read()
@@ -781,7 +775,7 @@ if __name__ == "__main__":
         timestamp_infos = []
         
         for i, keyframe in enumerate(keyframes):
-            # 计算时间段（当前帧到下一帧）
+            # 计算时间段(当前帧到下一帧)
             if i < len(keyframes) - 1:
                 end_time = keyframes[i + 1].timestamp
             else:
@@ -881,7 +875,7 @@ if __name__ == "__main__":
     
     def _keyframe_to_dict(self, keyframe: KeyFrame) -> Dict[str, Any]:
         """
-        将关键帧对象转换为字典（用于JSON序列化）
+        将关键帧对象转换为字典(用于JSON序列化)
         
         Args:
             keyframe: 关键帧对象

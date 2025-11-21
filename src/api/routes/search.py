@@ -88,13 +88,6 @@ async def search_audio(file: UploadFile = File(...), limit: int = 20):
         logger.error(f"音频搜索失败: {e}")
         return {
             "status": "error",
-            "message": f"音频搜索失败: {e}",
-            "filename": file.filename
-        }
-    except Exception as e:
-        logger.error(f"音频搜索失败: {e}")
-        return {
-            "status": "error",
             "message": str(e),
             "filename": file.filename
         }

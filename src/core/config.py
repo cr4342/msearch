@@ -9,10 +9,10 @@ from src.core.config_manager import get_config_manager, get_config as get_new_co
 
 def load_config(config_path: str = None) -> Dict[str, Any]:
     """
-    加载配置文件（兼容旧接口）
+    加载配置文件(兼容旧接口)
     
     Args:
-        config_path: 配置文件路径（为保持兼容性而保留，但不再使用）
+        config_path: 配置文件路径(为保持兼容性而保留，但不再使用)
         
     Returns:
         配置字典
@@ -23,7 +23,7 @@ def load_config(config_path: str = None) -> Dict[str, Any]:
 
 def get_model_config(config: Dict[str, Any], model_type: str) -> str:
     """
-    根据硬件模式获取模型配置（兼容旧接口）
+    根据硬件模式获取模型配置(兼容旧接口)
     
     Args:
         config: 配置字典

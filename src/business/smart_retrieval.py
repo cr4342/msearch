@@ -97,7 +97,7 @@ class SmartRetrievalEngine:
         Returns:
             查询类型 ("person", "audio", "visual", "generic")
         """
-        # 检查是否包含人名（从数据库中获取）
+        # 检查是否包含人名(从数据库中获取)
         # 这里简化处理，实际应该查询数据库中的所有人名
         person_names = self._get_person_names()
         for name in person_names:
@@ -140,7 +140,7 @@ class SmartRetrievalEngine:
     
     async def _person_search(self, query: str) -> Dict[str, Any]:
         """
-        人名搜索（人脸预检索）
+        人名搜索(人脸预检索)
         
         Args:
             query: 查询字符串
@@ -199,7 +199,7 @@ class SmartRetrievalEngine:
     
     async def _audio_search(self, query: str) -> Dict[str, Any]:
         """
-        音频搜索（提升音频权重）
+        音频搜索(提升音频权重)
         
         Args:
             query: 查询字符串
@@ -217,7 +217,7 @@ class SmartRetrievalEngine:
             if search_result['status'] != 'success':
                 return search_result
             
-            # 2. 动态调整权重（提升音频相关权重）
+            # 2. 动态调整权重(提升音频相关权重)
             # 这里简化处理，实际应该在融合引擎中调整权重
             weights = {
                 'text': 0.3,
@@ -246,7 +246,7 @@ class SmartRetrievalEngine:
     
     async def _visual_search(self, query: str) -> Dict[str, Any]:
         """
-        视觉搜索（提升视觉权重）
+        视觉搜索(提升视觉权重)
         
         Args:
             query: 查询字符串
@@ -264,7 +264,7 @@ class SmartRetrievalEngine:
             if search_result['status'] != 'success':
                 return search_result
             
-            # 2. 动态调整权重（提升视觉相关权重）
+            # 2. 动态调整权重(提升视觉相关权重)
             # 这里简化处理，实际应该在融合引擎中调整权重
             weights = {
                 'text': 0.2,
@@ -293,7 +293,7 @@ class SmartRetrievalEngine:
     
     async def _generic_search(self, query: str) -> Dict[str, Any]:
         """
-        通用搜索（默认权重分配）
+        通用搜索(默认权重分配)
         
         Args:
             query: 查询字符串

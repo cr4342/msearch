@@ -170,7 +170,7 @@ class EmbeddingEngine:
         统一的内容向量化接口 - 改进版本，支持批处理和更好的错误处理
         
         Args:
-            content: 内容数据（文本字符串、图片数据或音频数据）
+            content: 内容数据(文本字符串、图片数据或音频数据)
             content_type: 内容类型 ('image', 'text', 'audio_music', 'audio_speech')
             
         Returns:
@@ -193,46 +193,83 @@ class EmbeddingEngine:
                 
                 # 调用Infinity生成向量 - 使用具体的模型引擎和上下文管理器
                 if model == 'clip':
-                    clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
-                    async with clip_engine:
-                        if content_type == 'text':
-                            if isinstance(processed_content, (list, tuple)):
-                                embedding_result = await clip_engine.embed(processed_content)
-                            else:
-                                embedding_result = await clip_engine.embed([processed_content])
-                        else:  # image or audio (fallback to text embedding)
-                            if isinstance(processed_content, (list, tuple)):
-                                embedding_result = await clip_engine.embed(processed_content)
-                            else:
-                                embedding_result = await clip_engine.embed([processed_content])
-                elif model == 'clap':
-                    clap_engine = self.engine_array[1] if len(self.engine_array) > 1 else self.engine_array[0]
-                    async with clap_engine:
+                    # 找到CLIP引擎
+                    clip_engine = None
+                    for engine in self.engine_array:
+                        # 检查引擎类型是否支持图像/文本嵌入
+                        if hasattr(engine, 'embed') or hasattr(engine, 'image_embed'):
+                            clip_engine = engine
+                            break
+                    
+                    if clip_engine is None:
+                        raise RuntimeError("未找到CLIP模型引擎")
+                    
+                    # 根据内容类型选择嵌入方法
+                    if content_type in ['image', 'visual']:
+                        # 对于图像内容，使用image_embed
                         if isinstance(processed_content, (list, tuple)):
-                            embedding_result = await clap_engine.audio_embed(processed_content)
+                            result = await clip_engine.image_embed(processed_content)
                         else:
-                            embedding_result = await clap_engine.audio_embed([processed_content])
+                            result = await clip_engine.image_embed([processed_content])
+                    else:  # 文本类型
+                        if isinstance(processed_content, (list, tuple)):
+                            result = await clip_engine.embed(processed_content)
+                        else:
+                            result = await clip_engine.embed([processed_content])
+                            
+                    # 提取向量数据
+                    if isinstance(result, tuple) and len(result) >= 1:
+                        embeddings = result[0]
+                    else:
+                        embeddings = result
+                        
+                elif model == 'clap':
+                    # 找到CLAP引擎
+                    clap_engine = None
+                    for engine in self.engine_array:
+                        if hasattr(engine, 'audio_embed'):
+                            clap_engine = engine
+                            break
+                    
+                    if clap_engine is None:
+                        raise RuntimeError("未找到CLAP模型引擎")
+                    
+                    # 对于音频内容
+                    if isinstance(processed_content, (list, tuple)):
+                        result = await clap_engine.audio_embed(processed_content)
+                    else:
+                        result = await clap_engine.audio_embed([processed_content])
+                        
+                    # 提取向量数据
+                    if isinstance(result, tuple) and len(result) >= 1:
+                        embeddings = result[0]
+                    else:
+                        embeddings = result
+                        
                 elif model == 'whisper':
+                    # 找到Whisper引擎
                     whisper_engine = None
                     for engine in self.engine_array:
-                        if 'whisper' in str(type(engine)).lower():
+                        if hasattr(engine, 'transcribe'):
                             whisper_engine = engine
                             break
+                    
                     if whisper_engine is None:
                         raise RuntimeError("未找到Whisper模型引擎")
-                    async with whisper_engine:
-                        if isinstance(processed_content, (list, tuple)):
-                            embedding_result = await whisper_engine.transcribe(processed_content)
-                        else:
-                            embedding_result = await whisper_engine.transcribe([processed_content])
+                    
+                    # 对于语音转录
+                    if isinstance(processed_content, (list, tuple)):
+                        result = await whisper_engine.transcribe(processed_content)
+                    else:
+                        result = await whisper_engine.transcribe([processed_content])
+                        
+                    # 提取向量数据
+                    if isinstance(result, tuple) and len(result) >= 1:
+                        embeddings = result[0]
+                    else:
+                        embeddings = result
                 else:
                     raise RuntimeError(f"不支持的模型类型: {model}")
-                
-                # 提取向量数据 - Infinity返回(embeddings, usage)元组
-                if isinstance(embedding_result, tuple) and len(embedding_result) >= 1:
-                    embeddings = embedding_result[0]  # 第一个元素是嵌入向量
-                else:
-                    embeddings = embedding_result
                 
                 # 提取向量 - 处理不同的返回格式
                 if isinstance(embeddings, list) and len(embeddings) > 0:
@@ -250,7 +287,7 @@ class EmbeddingEngine:
                     vector = np.array(vector)
                 
                 # 后处理向量
-                processed_embeddings = self._postprocess_embeddings(embeddings, content_type)
+                processed_embeddings = self._postprocess_embeddings(vector, content_type)
                 
                 self.logger.debug(f"向量生成完成: 形状={processed_embeddings.shape}")
                 return processed_embeddings
@@ -334,7 +371,7 @@ class EmbeddingEngine:
         后处理生成的向量
         
         Args:
-            embeddings: 原始向量（可能是列表、numpy数组等）
+            embeddings: 原始向量(可能是列表、numpy数组等)
             content_type: 内容类型
             
         Returns:
@@ -349,7 +386,7 @@ class EmbeddingEngine:
             if embeddings.dtype != np.float32:
                 embeddings = embeddings.astype(np.float32)
             
-            # 确保向量被归一化（L2归一化）
+            # 确保向量被归一化(L2归一化)
             if len(embeddings.shape) == 1:
                 # 单个向量
                 norm = np.linalg.norm(embeddings)
@@ -370,7 +407,7 @@ class EmbeddingEngine:
     def _mock_embed_content(self, content: Union[str, np.ndarray, List[np.ndarray]], 
                            content_type: str) -> np.ndarray:
         """
-        模拟向量生成（用于测试或Infinity不可用时）
+        模拟向量生成(用于测试或Infinity不可用时)
         
         Args:
             content: 内容数据
@@ -381,20 +418,20 @@ class EmbeddingEngine:
         """
         logger.warning(f"使用模拟向量生成: 内容类型={content_type}")
         
-        # 生成512维的随机向量（模拟）
+        # 生成512维的随机向量(模拟)
         mock_vector = np.random.rand(512).astype(np.float32)
         
-        # 标准化向量（L2归一化）
+        # 标准化向量(L2归一化)
         mock_vector = mock_vector / np.linalg.norm(mock_vector)
         
         return mock_vector
     
-    async def embed_image(self, images: Union[np.ndarray, List[np.ndarray]]) -> np.ndarray:
+    async def embed_image(self, images: Union[np.ndarray, List[np.ndarray], str, List[str]]) -> np.ndarray:
         """
         图片向量化
 
         Args:
-            images: 图片数据 (单张图片或图片列表)
+            images: 图片数据 (单张图片、图片列表、图片路径或路径列表)
 
         Returns:
             图片向量
@@ -417,7 +454,15 @@ class EmbeddingEngine:
         if self.engine_array is not None:
             try:
                 # 查找CLIP模型用于图像向量化
-                clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
+                clip_engine = None
+                for engine in self.engine_array:
+                    if hasattr(engine, 'image_embed'):
+                        clip_engine = engine
+                        break
+                
+                if clip_engine is None:
+                    raise RuntimeError("未找到支持图像嵌入的模型引擎")
+                
                 async with clip_engine:
                     if isinstance(images, list):
                         embeddings, usage = await clip_engine.image_embed(images)
@@ -427,10 +472,10 @@ class EmbeddingEngine:
                         return np.array(embeddings[0])
             except Exception as e:
                 self.logger.error(f"图像向量化失败: {e}")
-                return np.array([])
+                raise
         else:
             self.logger.error("嵌入引擎未正确初始化")
-            return np.array([])
+            raise RuntimeError("嵌入引擎未正确初始化")
     
     async def embed_text(self, text: str) -> np.ndarray:
         """
@@ -444,17 +489,25 @@ class EmbeddingEngine:
         """
         if self.engine_array is not None:
             try:
-                # 查找CLIP模型用于文本向量化
-                clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
+                # 查找支持文本嵌入的模型
+                clip_engine = None
+                for engine in self.engine_array:
+                    if hasattr(engine, 'embed'):
+                        clip_engine = engine
+                        break
+                
+                if clip_engine is None:
+                    raise RuntimeError("未找到支持文本嵌入的模型引擎")
+                
                 async with clip_engine:
                     embeddings, usage = await clip_engine.embed([text])
                     return np.array(embeddings[0])
             except Exception as e:
                 self.logger.error(f"文本向量化失败: {e}")
-                return np.array([])
+                raise
         else:
             self.logger.error("嵌入引擎未正确初始化")
-            return np.array([])
+            raise RuntimeError("嵌入引擎未正确初始化")
     
     async def embed_audio_music(self, audio: np.ndarray) -> np.ndarray:
         """
@@ -480,9 +533,9 @@ class EmbeddingEngine:
         """
         return await self.embed_content(audio, 'audio_speech')
     
-    async def transcribe_speech(self, audio: np.ndarray) -> str:
+    async def transcribe_audio(self, audio: np.ndarray) -> str:
         """
-        使用Whisper模型将语音转换为文本
+        使用Whisper模型将音频转换为文本
         
         Args:
             audio: 音频数据
@@ -496,15 +549,10 @@ class EmbeddingEngine:
                 if not self.model_health.get('whisper', False):
                     raise RuntimeError("Whisper模型不可用")
                 
-                self.logger.debug("使用Whisper模型进行语音转文本")
-                
-                # 使用Whisper模型进行语音转文本
-                # 注意：这里需要特殊的处理，因为Whisper返回的是文本而不是向量
-                # 这里简化实现，实际应用中需要根据infinity_emb的API进行调整
+                # 查找Whisper引擎
                 whisper_engine = None
                 for engine in self.engine_array:
-                    # 尝试找到Whisper模型引擎
-                    if 'whisper' in str(type(engine)).lower():
+                    if hasattr(engine, 'transcribe'):
                         whisper_engine = engine
                         break
                 
@@ -512,17 +560,27 @@ class EmbeddingEngine:
                     raise RuntimeError("未找到Whisper模型引擎")
                 
                 # 使用Whisper引擎进行转录
-                transcription_result = await whisper_engine.transcribe([audio])
+                async with whisper_engine:
+                    transcription_result = await whisper_engine.transcribe([audio])
                 
                 # 提取转录文本
-                if hasattr(transcription_result, 'text'):
+                if hasattr(transcription_result, 'segments'):
+                    # 如果返回的是包含segments的对象
+                    text_result = ' '.join([segment.text for segment in transcription_result.segments])
+                    return text_result.strip()
+                elif hasattr(transcription_result, 'text'):
                     return transcription_result.text
                 elif isinstance(transcription_result, dict) and 'text' in transcription_result:
                     return transcription_result['text']
-                elif isinstance(transcription_result, str):
-                    return transcription_result
+                elif isinstance(transcription_result, list) and len(transcription_result) > 0:
+                    # 如果返回的是列表，取第一个元素
+                    first_item = transcription_result[0]
+                    if hasattr(first_item, 'text'):
+                        return first_item.text
+                    else:
+                        return str(first_item)
                 else:
-                    # 如果返回的是向量或其他格式，尝试转换为文本
+                    # 如果返回的是字符串或其他格式
                     return str(transcription_result)
                     
             except Exception as e:
@@ -530,6 +588,18 @@ class EmbeddingEngine:
                 raise RuntimeError(f"语音转文本失败: {e}")
         else:
             raise RuntimeError("嵌入引擎未正确初始化")
+
+    async def transcribe_speech(self, audio: np.ndarray) -> str:
+        """
+        使用Whisper模型将语音转换为文本（兼容方法）
+        
+        Args:
+            audio: 音频数据
+            
+        Returns:
+            转录文本
+        """
+        return await self.transcribe_audio(audio)
     
     def get_model_status(self) -> Dict[str, bool]:
         """
@@ -585,10 +655,18 @@ class EmbeddingEngine:
             return []
         
         # 如果支持批处理，使用批处理
-        if self.engine_array is not None and self.model_health.get('clip', False):
+        if self.engine_array is not None:
             try:
-                # 使用CLIP模型进行批处理
-                clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
+                # 使用支持文本嵌入的模型
+                clip_engine = None
+                for engine in self.engine_array:
+                    if hasattr(engine, 'embed'):
+                        clip_engine = engine
+                        break
+                
+                if clip_engine is None:
+                    raise RuntimeError("未找到支持文本嵌入的模型引擎")
+                
                 async with clip_engine:
                     embeddings, usage = await clip_engine.embed(texts)
                     
@@ -615,10 +693,18 @@ class EmbeddingEngine:
             return []
         
         # 如果支持批处理，使用批处理
-        if self.engine_array is not None and self.model_health.get('clip', False):
+        if self.engine_array is not None:
             try:
-                # 使用CLIP模型进行批处理
-                clip_engine = self.engine_array[0]  # 假设第一个是CLIP模型
+                # 使用支持图像嵌入的模型
+                clip_engine = None
+                for engine in self.engine_array:
+                    if hasattr(engine, 'image_embed'):
+                        clip_engine = engine
+                        break
+                
+                if clip_engine is None:
+                    raise RuntimeError("未找到支持图像嵌入的模型引擎")
+                
                 async with clip_engine:
                     embeddings, usage = await clip_engine.image_embed(images)
                     
@@ -629,7 +715,15 @@ class EmbeddingEngine:
                 self.logger.error(f"批量图片向量化失败: {e}")
         
         # 回退到逐个处理
-        return [await self.embed_image(image) for image in images]
+        result = []
+        for image in images:
+            try:
+                result.append(await self.embed_image(image))
+            except Exception as e:
+                self.logger.error(f"单个图片向量化失败: {e}")
+                # 添加零向量作为占位符
+                result.append(np.zeros(512, dtype=np.float32))
+        return result
 
 
 # 全局嵌入引擎实例

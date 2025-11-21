@@ -195,7 +195,7 @@ class ConfigDialog(QDialog):
         search_layout.addRow("相似度阈值:", threshold_layout)
         
         # 启用分层检索
-        self.layered_search_checkbox = QCheckBox("启用分层检索（人名搜索优化）")
+        self.layered_search_checkbox = QCheckBox("启用分层检索(人名搜索优化)")
         self.layered_search_checkbox.setChecked(True)
         search_layout.addRow("", self.layered_search_checkbox)
         
@@ -296,7 +296,7 @@ class ConfigDialog(QDialog):
         # 索引参数
         self.index_params_text = QTextEdit()
         self.index_params_text.setMaximumHeight(100)
-        self.index_params_text.setPlaceholderText("索引参数配置（JSON格式）")
+        self.index_params_text.setPlaceholderText("索引参数配置(JSON格式)")
         index_opt_layout.addRow("索引参数:", self.index_params_text)
         
         layout.addWidget(index_opt_group)
@@ -442,7 +442,7 @@ class ConfigDialog(QDialog):
         # 输出格式
         self.log_format_combo = QComboBox()
         self.log_format_combo.addItems([
-            "标准格式", "详细格式（包含文件名和行号）", "简化格式"
+            "标准格式", "详细格式(包含文件名和行号)", "简化格式"
         ])
         output_layout.addWidget(QLabel("日志格式:"))
         output_layout.addWidget(self.log_format_combo)
@@ -538,7 +538,7 @@ class ConfigDialog(QDialog):
         custom_layout = QVBoxLayout(custom_group)
         
         self.custom_config_text = QTextEdit()
-        self.custom_config_text.setPlaceholderText("在此添加自定义配置项（YAML格式）")
+        self.custom_config_text.setPlaceholderText("在此添加自定义配置项(YAML格式)")
         custom_layout.addWidget(self.custom_config_text)
         
         layout.addWidget(custom_group)

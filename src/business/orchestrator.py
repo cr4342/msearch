@@ -160,7 +160,7 @@ class ProcessingOrchestrator:
                 }
                 
             elif file_type == 'video':
-                # 视频向量化（处理关键帧）
+                # 视频向量化(处理关键帧)
                 keyframes = result_data['keyframes']
                 vectors = []
                 
@@ -353,7 +353,7 @@ class ProcessingOrchestrator:
                     logger.warning("向量存储客户端不可用，模拟删除文件")
                     return {
                         'status': 'success',
-                        'message': '模拟删除文件（向量存储不可用）',
+                        'message': '模拟删除文件(向量存储不可用)',
                         'file_path': file_path,
                         'file_type': file_type
                     }
@@ -398,7 +398,7 @@ class ProcessingOrchestrator:
                 else:
                     logger.warning(f"文件向量删除失败: {file_path}")
                 
-                # 5. 删除时间戳信息（如果有）
+                # 5. 删除时间戳信息(如果有)
                 # 这里可以调用时间戳数据库的删除方法
                 
                 logger.info(f"文件删除处理完成: {file_path}")

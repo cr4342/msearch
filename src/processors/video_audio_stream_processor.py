@@ -286,7 +286,7 @@ class VideoAudioStreamProcessor:
                     sync_points.append((video_ts.start_time, closest_audio.start_time))
                     time_diffs.append(time_diff)
             
-            # 计算同步质量（在容差范围内的点的比例）
+            # 计算同步质量(在容差范围内的点的比例)
             total_possible_points = min(len(synced_video), len(synced_audio))
             sync_quality = len(sync_points) / total_possible_points if total_possible_points > 0 else 0.0
             
