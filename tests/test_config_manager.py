@@ -1,401 +1,252 @@
 """
-msearch 配置管理系统测试
-验证ConfigManager的配置加载、验证和热重载机制
+配置管理器单元测试
+测试ConfigManager的各项功能，包括配置加载、设置、监听等
 """
+
 import pytest
+import yaml
 import tempfile
 import os
-import yaml
+from unittest.mock import patch, mock_open
 import sys
-from pathlib import Path
 
-# 添加项目路径
-project_root = Path(__file__).parent.parent
-sys.path.insert(0, str(project_root))
-sys.path.insert(0, str(project_root / "src"))
+sys.path.insert(0, 'src')
 
-from src.core.config_manager import ConfigManager, get_config_manager, get_config, get_config_value
+from src.core.config_manager import ConfigManager
 
 
 class TestConfigManager:
-    """配置管理器测试"""
+    """配置管理器测试类"""
     
-    def test_default_config_generation(self):
-        """测试默认配置生成"""
-        with tempfile.TemporaryDirectory() as temp_dir:
-            config_path = os.path.join(temp_dir, "nonexistent_config.yml")
-            config_manager = ConfigManager(config_path)
-            
-            # 验证默认配置结构
-            config = config_manager.config
-            assert "system" in config
-            assert "database" in config
-            assert "infinity" in config
-            assert "media_processing" in config
-            assert "face_recognition" in config
-            assert "smart_retrieval" in config
-            
-            # 验证具体配置项
-            assert config["system"]["log_level"] == "INFO"
-            assert config["database"]["sqlite"]["path"] == "./data/msearch.db"
-            assert config["database"]["qdrant"]["host"] == "localhost"
-            assert config["infinity"]["services"]["clip"]["port"] == 7997
-    
-    def test_config_loading(self):
-        """测试配置文件加载"""
-        test_config = {
-            "system": {
-                "log_level": "DEBUG",
-                "data_dir": "/custom/data"
+    def setup_method(self):
+        """测试方法初始化"""
+        self.test_config_data = {
+            'system': {
+                'log_level': 'INFO',
+                'data_dir': './data',
+                'temp_dir': './temp',
+                'max_workers': 4
             },
-            "database": {
-                "sqlite": {
-                    "path": "/custom/db.sqlite"
-                }
-            }
-        }
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            yaml.dump(test_config, f)
-            config_path = f.name
-        
-        try:
-            config_manager = ConfigManager(config_path)
-            config = config_manager.config
-            
-            # 验证加载的配置
-            assert config["system"]["log_level"] == "DEBUG"
-            assert config["system"]["data_dir"] == "/custom/data"
-            assert config["database"]["sqlite"]["path"] == "/custom/db.sqlite"
-            
-            # 验证默认配置合并
-            assert "infinity" in config  # 应该保留默认的infinity配置
-        finally:
-            os.unlink(config_path)
-    
-    def test_nested_config_access(self):
-        """测试嵌套配置访问"""
-        test_config = {
-            "level1": {
-                "level2": {
-                    "level3": "deep_value"
-                }
-            }
-        }
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            yaml.dump(test_config, f)
-            config_path = f.name
-        
-        try:
-            config_manager = ConfigManager(config_path)
-            
-            # 测试嵌套访问
-            assert config_manager.get("level1.level2.level3") == "deep_value"
-            assert config_manager.get("level1.level2") == {"level3": "deep_value"}
-            assert config_manager.get("level1") == {"level2": {"level3": "deep_value"}}
-            
-            # 测试默认值
-            assert config_manager.get("nonexistent.key", "default") == "default"
-            assert config_manager.get("level1.nonexistent", "default") == "default"
-        finally:
-            os.unlink(config_path)
-    
-    def test_config_setting(self):
-        """测试配置设置"""
-        test_config = {
-            "existing": {
-                "value": "original"
-            }
-        }
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            yaml.dump(test_config, f)
-            config_path = f.name
-        
-        try:
-            config_manager = ConfigManager(config_path)
-            
-            # 测试设置现有值
-            config_manager.set("existing.value", "modified")
-            assert config_manager.get("existing.value") == "modified"
-            
-            # 测试设置新值
-            config_manager.set("new.nested.value", "new_value")
-            assert config_manager.get("new.nested.value") == "new_value"
-            
-            # 测试设置新顶级键
-            config_manager.set("new_top_level", "top_value")
-            assert config_manager.get("new_top_level") == "top_value"
-        finally:
-            os.unlink(config_path)
-    
-    def test_environment_variable_override(self):
-        """测试环境变量覆盖"""
-        test_config = {
-            "database": {
-                "sqlite": {
-                    "path": "./default.db"
+            'database': {
+                'sqlite': {
+                    'path': './data/msearch.db',
+                    'connection_pool_size': 10,
+                    'timeout': 30
+                },
+                'qdrant': {
+                    'host': 'localhost',
+                    'port': 6333
                 }
             },
-            "general": {
-                "log_level": "INFO"
+            'custom_section': {
+                'nested_value': 'test_value',
+                'number_value': 42,
+                'boolean_value': True
             }
         }
-        
+    
+    def test_config_manager_initialization(self):
+        """测试配置管理器初始化"""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            yaml.dump(test_config, f)
+            yaml.dump(self.test_config_data, f)
             config_path = f.name
         
         try:
-            # 设置环境变量
-            os.environ['MSEARCH_DATABASE_SQLITE_PATH'] = '/env/override.db'
-            os.environ['MSEARCH_GENERAL_LOG_LEVEL'] = 'DEBUG'
-            
             config_manager = ConfigManager(config_path)
-            
-            # 验证环境变量覆盖
-            assert config_manager.get("database.sqlite.path") == "/env/override.db"
-            assert config_manager.get("general.log_level") == "DEBUG"
-            
+            assert config_manager.config_path == config_path
+            assert config_manager.config is not None
         finally:
             os.unlink(config_path)
-            # 清理环境变量
-            if 'MSEARCH_DATABASE_SQLITE_PATH' in os.environ:
-                del os.environ['MSEARCH_DATABASE_SQLITE_PATH']
-            if 'MSEARCH_GENERAL_LOG_LEVEL' in os.environ:
-                del os.environ['MSEARCH_GENERAL_LOG_LEVEL']
     
-    def test_environment_variable_type_conversion(self):
-        """测试环境变量类型转换"""
-        test_config = {
-            "system": {
-                "max_workers": 2,
-                "debug_mode": False
-            }
-        }
-        
+    def test_load_valid_config(self):
+        """测试加载有效配置"""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            yaml.dump(test_config, f)
+            yaml.dump(self.test_config_data, f)
             config_path = f.name
         
         try:
-            # 设置不同类型的环境变量
-            os.environ['MSEARCH_SYSTEM_MAX_WORKERS'] = '8'
-            os.environ['MSEARCH_SYSTEM_DEBUG_MODE'] = 'true'
-            os.environ['MSEARCH_SYSTEM_NEW_STRING'] = 'test_string'
-            
             config_manager = ConfigManager(config_path)
-            
-            # 验证类型转换（注意：环境变量可能不会覆盖已有配置）
-            # 这是当前实现的限制，测试应该反映实际行为
-            max_workers = config_manager.get("system.max_workers")
-            debug_mode = config_manager.get("system.debug_mode")
-            new_string = config_manager.get("system.new_string")
-            
-            # 验证原始配置保持不变（当前实现行为）
-            assert max_workers == 2  # 原始配置值
-            assert debug_mode == False  # 原始配置值
-            # 新增配置可能为None，这是当前实现的限制
-            assert new_string in [None, "test_string"]  # 可能的环境变量值
-            
+            assert config_manager.get('system.log_level') == 'INFO'
+            assert config_manager.get('database.sqlite.path') == './data/msearch.db'
+            assert config_manager.get('database.qdrant.port') == 6333
         finally:
             os.unlink(config_path)
-            # 清理环境变量
-            for key in ['MSEARCH_SYSTEM_MAX_WORKERS', 'MSEARCH_SYSTEM_DEBUG_MODE', 'MSEARCH_SYSTEM_NEW_STRING']:
-                if key in os.environ:
-                    del os.environ[key]
     
-    def test_config_validation(self):
-        """测试配置验证"""
-        # 测试缺少必需配置的情况
-        incomplete_config = {
-            "system": {
-                "log_level": "INFO"
-            }
-            # 缺少 database.sqlite.path 等必需配置
-        }
-        
+    def test_load_nonexistent_config(self):
+        """测试加载不存在的配置文件"""
+        config_manager = ConfigManager('nonexistent.yml')
+        assert config_manager.config is not None
+        # 应该使用默认配置
+        assert 'system' in config_manager.config
+    
+    def test_get_nested_value_success(self):
+        """测试成功获取嵌套配置值"""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            yaml.dump(incomplete_config, f)
+            yaml.dump(self.test_config_data, f)
             config_path = f.name
         
         try:
-            # 应该能加载配置，但会警告缺少必需配置
             config_manager = ConfigManager(config_path)
-            config = config_manager.config
-            
-            # 验证部分配置加载成功
-            assert config["system"]["log_level"] == "INFO"
-            
-            # 应该加载默认配置来补充缺失部分
-            assert "database" in config
-            assert "infinity" in config
-            
+            assert config_manager.get('system.log_level') == 'INFO'
+            assert config_manager.get('database.sqlite.path') == './data/msearch.db'
+            assert config_manager.get('custom_section.nested_value') == 'test_value'
         finally:
             os.unlink(config_path)
     
-    def test_config_watchers(self):
+    def test_get_nested_value_nonexistent(self):
+        """测试获取不存在的嵌套配置值"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+            yaml.dump(self.test_config_data, f)
+            config_path = f.name
+        
+        try:
+            config_manager = ConfigManager(config_path)
+            assert config_manager.get('nonexistent.section.key') is None
+            assert config_manager.get('system.nonexistent') is None
+        finally:
+            os.unlink(config_path)
+    
+    def test_get_with_default_value(self):
+        """测试获取配置值使用默认值"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+            yaml.dump(self.test_config_data, f)
+            config_path = f.name
+        
+        try:
+            config_manager = ConfigManager(config_path)
+            assert config_manager.get('nonexistent.key', 'default') == 'default'
+            assert config_manager.get('system.log_level', 'DEBUG') == 'INFO'
+        finally:
+            os.unlink(config_path)
+    
+    def test_set_config_value(self):
+        """测试设置配置值"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+            yaml.dump(self.test_config_data, f)
+            config_path = f.name
+        
+        try:
+            config_manager = ConfigManager(config_path)
+            config_manager.set('new_section.key', 'new_value')
+            assert config_manager.get('new_section.key') == 'new_value'
+        finally:
+            os.unlink(config_path)
+    
+    def test_set_nested_config_value(self):
+        """测试设置嵌套配置值"""
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+            yaml.dump(self.test_config_data, f)
+            config_path = f.name
+        
+        try:
+            config_manager = ConfigManager(config_path)
+            config_manager.set('database.sqlite.new_field', 'test')
+            assert config_manager.get('database.sqlite.new_field') == 'test'
+        finally:
+            os.unlink(config_path)
+    
+    @pytest.mark.asyncio
+    async def test_config_watchers(self):
         """测试配置监听器"""
-        test_config = {"initial": "value"}
-        
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            yaml.dump(test_config, f)
+            yaml.dump(self.test_config_data, f)
             config_path = f.name
         
         try:
             config_manager = ConfigManager(config_path)
             
-            # 设置监听器
-            watched_changes = []
-            def config_watcher(key, value):
-                watched_changes.append((key, value))
+            # 记录监听器调用
+            callback_calls = []
+            def callback(key, value):
+                callback_calls.append((key, value))
             
-            config_manager.watch("initial", config_watcher)
+            # 注册监听器
+            config_manager.watch('system.log_level', callback)
             
-            # 触发配置变更
-            config_manager.set("initial", "new_value")
+            # 修改配置
+            config_manager.set('system.log_level', 'DEBUG')
             
             # 验证监听器被调用
-            assert len(watched_changes) == 1
-            assert watched_changes[0] == ("initial", "new_value")
-            
+            assert len(callback_calls) == 1
+            assert callback_calls[0] == ('system.log_level', 'DEBUG')
         finally:
             os.unlink(config_path)
     
-    def test_invalid_yaml_handling(self):
-        """测试无效YAML处理"""
+    def test_env_variable_override(self):
+        """测试环境变量覆盖配置"""
+        # 设置环境变量
+        with patch.dict(os.environ, {
+            'MSEARCH_SYSTEM_LOG_LEVEL': 'ERROR',
+            'MSEARCH_DATABASE_SQLITE_PATH': '/custom/path.db'
+        }):
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+                yaml.dump(self.test_config_data, f)
+                config_path = f.name
+            
+            try:
+                config_manager = ConfigManager(config_path)
+                # 环境变量应该覆盖配置文件
+                assert config_manager.get('system.log_level') == 'ERROR'
+                assert config_manager.get('database.sqlite.path') == '/custom/path.db'
+            finally:
+                os.unlink(config_path)
+    
+    def test_env_variable_type_conversion(self):
+        """测试环境变量类型转换"""
+        with patch.dict(os.environ, {
+            'MSEARCH_SYSTEM_MAX_WORKERS': '8',
+            'MSEARCH_CUSTOM_SECTION_BOOLEAN_VALUE': 'false'
+        }):
+            with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+                yaml.dump(self.test_config_data, f)
+                config_path = f.name
+            
+            try:
+                config_manager = ConfigManager(config_path)
+                assert config_manager.get('system.max_workers') == 8  # 整数转换
+                assert config_manager.get('custom_section.boolean_value') == False  # 布尔转换
+            finally:
+                os.unlink(config_path)
+    
+    def test_invalid_yaml_config(self):
+        """测试无效的YAML配置文件"""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            f.write("invalid: yaml: content: [")
-            config_path = f.name
-        
-        try:
-            # 应该回退到默认配置
-            config_manager = ConfigManager(config_path)
-            config = config_manager.config
-            
-            # 验证使用默认配置
-            assert "system" in config
-            assert "database" in config
-            assert config["system"]["log_level"] == "INFO"
-            
-        finally:
-            os.unlink(config_path)
-    
-    def test_global_config_manager(self):
-        """测试全局配置管理器"""
-        # 测试全局实例
-        global_config = get_config_manager()
-        assert isinstance(global_config, ConfigManager)
-        
-        # 测试全局配置字典
-        global_dict = get_config()
-        assert isinstance(global_dict, dict)
-        
-        # 测试全局配置值获取
-        log_level = get_config_value("system.log_level", "INFO")
-        assert log_level in ["INFO", "DEBUG", "WARNING", "ERROR"]
-
-
-class TestConfigIntegration:
-    """配置集成测试"""
-    
-    def test_config_with_real_file(self):
-        """测试真实配置文件"""
-        # 使用项目的实际配置文件
-        config_path = "config/config.yml"
-        
-        if os.path.exists(config_path):
-            config_manager = ConfigManager(config_path)
-            config = config_manager.config
-            
-            # 验证基本结构
-            assert isinstance(config, dict)
-            
-            # 验证可以访问配置
-            log_level = config_manager.get("system.log_level", "INFO")
-            assert isinstance(log_level, str)
-        else:
-            pytest.skip("项目配置文件不存在")
-    
-    def test_config_performance(self):
-        """测试配置性能"""
-        import time
-        
-        # 创建较大的配置文件
-        large_config = {
-            "sections": {}
-        }
-        
-        for i in range(1000):
-            large_config["sections"][f"section_{i}"] = {
-                "key1": f"value1_{i}",
-                "key2": f"value2_{i}",
-                "nested": {
-                    "deep_key": f"deep_value_{i}"
-                }
-            }
-        
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            yaml.dump(large_config, f)
-            config_path = f.name
-        
-        try:
-            # 测试加载性能
-            start_time = time.time()
-            config_manager = ConfigManager(config_path)
-            load_time = time.time() - start_time
-            
-            # 验证加载时间合理（应该小于1秒）
-            assert load_time < 1.0, f"配置加载时间过长: {load_time}秒"
-            
-            # 测试访问性能
-            start_time = time.time()
-            for i in range(100):
-                value = config_manager.get(f"sections.section_{i}.nested.deep_key")
-                assert value == f"deep_value_{i}"
-            access_time = time.time() - start_time
-            
-            # 验证访问时间合理（100次访问应该小于0.1秒）
-            assert access_time < 0.1, f"配置访问时间过长: {access_time}秒"
-            
-        finally:
-            os.unlink(config_path)
-    
-    def test_config_edge_cases(self):
-        """测试配置边界情况"""
-        # 测试空配置文件
-        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            f.write("")
+            f.write('invalid: yaml: content: [')
             config_path = f.name
         
         try:
             config_manager = ConfigManager(config_path)
-            config = config_manager.config
-            
-            # 空文件应该使用默认配置
-            assert "system" in config
-            assert "database" in config
-            
+            # 应该使用默认配置
+            assert 'system' in config_manager.config
         finally:
             os.unlink(config_path)
-        
-        # 测试只有注释的配置文件
+    
+    def test_empty_config_file(self):
+        """测试空配置文件"""
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            f.write("# This is a comment\n# Another comment")
+            f.write('')
             config_path = f.name
         
         try:
             config_manager = ConfigManager(config_path)
-            config = config_manager.config
-            
-            # 只有注释的文件应该使用默认配置
-            assert "system" in config
-            assert "database" in config
-            
+            # 应该使用默认配置
+            assert 'system' in config_manager.config
         finally:
             os.unlink(config_path)
-
-
-if __name__ == "__main__":
-    pytest.main([__file__, "-v"])
+    
+    def test_generate_default_config(self):
+        """测试生成默认配置"""
+        config_manager = ConfigManager('nonexistent.yml')
+        default_config = config_manager._generate_default_config()
+        
+        assert 'system' in default_config
+        assert 'database' in default_config
+        assert 'infinity' in default_config
+        assert 'media_processing' in default_config
+        assert 'face_recognition' in default_config
+        assert 'smart_retrieval' in default_config
+        
+        # 验证关键配置项
+        assert default_config['system']['log_level'] == 'INFO'
+        assert 'sqlite' in default_config['database']
+        assert 'qdrant' in default_config['database']

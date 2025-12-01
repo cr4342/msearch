@@ -1,0 +1,658 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>msearch 多模态检索系统</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px 0;
+            text-align: center;
+            margin-bottom: 30px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+
+        header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+        }
+
+        header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+
+        .search-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .search-tabs {
+            display: flex;
+            margin-bottom: 20px;
+            border-bottom: 2px solid #eee;
+        }
+
+        .search-tab {
+            padding: 12px 24px;
+            cursor: pointer;
+            border: none;
+            background: none;
+            font-size: 16px;
+            color: #666;
+            border-bottom: 3px solid transparent;
+            transition: all 0.3s ease;
+        }
+
+        .search-tab.active {
+            color: #667eea;
+            border-bottom-color: #667eea;
+        }
+
+        .search-tab:hover {
+            color: #667eea;
+        }
+
+        .search-content {
+            display: none;
+        }
+
+        .search-content.active {
+            display: block;
+        }
+
+        .search-input {
+            width: 100%;
+            padding: 15px;
+            border: 2px solid #ddd;
+            border-radius: 8px;
+            font-size: 16px;
+            margin-bottom: 15px;
+            transition: border-color 0.3s ease;
+        }
+
+        .search-input:focus {
+            outline: none;
+            border-color: #667eea;
+        }
+
+        .file-upload {
+            border: 2px dashed #ddd;
+            border-radius: 8px;
+            padding: 40px;
+            text-align: center;
+            margin-bottom: 15px;
+            transition: border-color 0.3s ease;
+        }
+
+        .file-upload:hover {
+            border-color: #667eea;
+        }
+
+        .file-upload.dragover {
+            border-color: #667eea;
+            background-color: #f8f9ff;
+        }
+
+        .search-button {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            border: none;
+            padding: 15px 30px;
+            border-radius: 8px;
+            font-size: 16px;
+            cursor: pointer;
+            transition: transform 0.2s ease;
+        }
+
+        .search-button:hover {
+            transform: translateY(-2px);
+        }
+
+        .search-button:disabled {
+            opacity: 0.6;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .results-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+            margin-bottom: 30px;
+        }
+
+        .results-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .result-item {
+            border: 1px solid #eee;
+            border-radius: 8px;
+            overflow: hidden;
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .result-item:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+        }
+
+        .result-image {
+            width: 100%;
+            height: 150px;
+            object-fit: cover;
+            background-color: #f0f0f0;
+        }
+
+        .result-info {
+            padding: 15px;
+        }
+
+        .result-score {
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .result-name {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 5px;
+        }
+
+        .result-type {
+            font-size: 12px;
+            color: #999;
+        }
+
+        .status-section {
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        .status-card {
+            padding: 20px;
+            border: 1px solid #eee;
+            border-radius: 8px;
+            text-align: center;
+        }
+
+        .status-value {
+            font-size: 2em;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 5px;
+        }
+
+        .status-label {
+            font-size: 14px;
+            color: #666;
+        }
+
+        .loading {
+            text-align: center;
+            padding: 40px;
+            color: #666;
+        }
+
+        .error {
+            background-color: #fee;
+            color: #c33;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .success {
+            background-color: #efe;
+            color: #3c3;
+            padding: 15px;
+            border-radius: 8px;
+            margin-bottom: 20px;
+        }
+
+        .hidden {
+            display: none;
+        }
+
+        footer {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+            margin-top: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>msearch 多模态检索系统</h1>
+            <p>支持文本、图像、视频、音频的智能检索</p>
+        </header>
+
+        <main>
+            <!-- 搜索区域 -->
+            <section class="search-section">
+                <div class="search-tabs">
+                    <button class="search-tab active" data-tab="text">文本搜索</button>
+                    <button class="search-tab" data-tab="image">以图搜图</button>
+                    <button class="search-tab" data-tab="audio">以音频搜音频</button>
+                </div>
+
+                <!-- 文本搜索 -->
+                <div class="search-content active" id="text-search">
+                    <input type="text" class="search-input" id="text-query" placeholder="输入搜索关键词...">
+                    <button class="search-button" onclick="searchText()">搜索</button>
+                </div>
+
+                <!-- 图像搜索 -->
+                <div class="search-content" id="image-search">
+                    <div class="file-upload" id="image-upload">
+                        <p>点击或拖拽图像文件到这里</p>
+                        <input type="file" id="image-file" accept="image/*" style="display: none;">
+                    </div>
+                    <button class="search-button" id="image-search-btn" onclick="searchImage()" disabled>搜索</button>
+                </div>
+
+                <!-- 音频搜索 -->
+                <div class="search-content" id="audio-search">
+                    <div class="file-upload" id="audio-upload">
+                        <p>点击或拖拽音频文件到这里</p>
+                        <input type="file" id="audio-file" accept="audio/*" style="display: none;">
+                    </div>
+                    <button class="search-button" id="audio-search-btn" onclick="searchAudio()" disabled>搜索</button>
+                </div>
+
+                <div id="search-message"></div>
+            </section>
+
+            <!-- 搜索结果 -->
+            <section class="results-section hidden" id="results-section">
+                <h2>搜索结果</h2>
+                <div class="loading hidden" id="results-loading">
+                    <p>正在搜索...</p>
+                </div>
+                <div class="results-grid" id="results-grid"></div>
+            </section>
+
+            <!-- 系统状态 -->
+            <section class="status-section">
+                <h2>系统状态</h2>
+                <div class="status-grid" id="status-grid">
+                    <div class="loading">
+                        <p>正在加载系统状态...</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 msearch 多模态检索系统</p>
+        </footer>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api';
+        
+        // 初始化
+        document.addEventListener('DOMContentLoaded', function() {
+            initSearchTabs();
+            initFileUpload();
+            loadSystemStatus();
+        });
+
+        // 初始化搜索标签
+        function initSearchTabs() {
+            const tabs = document.querySelectorAll('.search-tab');
+            const contents = document.querySelectorAll('.search-content');
+
+            tabs.forEach(tab => {
+                tab.addEventListener('click', () => {
+                    const targetTab = tab.dataset.tab;
+                    
+                    // 更新标签状态
+                    tabs.forEach(t => t.classList.remove('active'));
+                    tab.classList.add('active');
+                    
+                    // 更新内容显示
+                    contents.forEach(content => {
+                        content.classList.remove('active');
+                        if (content.id === `${targetTab}-search`) {
+                            content.classList.add('active');
+                        }
+                    });
+                    
+                    // 清除之前的搜索结果
+                    hideResults();
+                    clearMessage();
+                });
+            });
+        }
+
+        // 初始化文件上传
+        function initFileUpload() {
+            // 图像上传
+            const imageUpload = document.getElementById('image-upload');
+            const imageFile = document.getElementById('image-file');
+            
+            imageUpload.addEventListener('click', () => imageFile.click());
+            imageUpload.addEventListener('dragover', handleDragOver);
+            imageUpload.addEventListener('drop', (e) => handleDrop(e, 'image'));
+            imageFile.addEventListener('change', (e) => handleFileSelect(e, 'image'));
+            
+            // 音频上传
+            const audioUpload = document.getElementById('audio-upload');
+            const audioFile = document.getElementById('audio-file');
+            
+            audioUpload.addEventListener('click', () => audioFile.click());
+            audioUpload.addEventListener('dragover', handleDragOver);
+            audioUpload.addEventListener('drop', (e) => handleDrop(e, 'audio'));
+            audioFile.addEventListener('change', (e) => handleFileSelect(e, 'audio'));
+        }
+
+        function handleDragOver(e) {
+            e.preventDefault();
+            e.currentTarget.classList.add('dragover');
+        }
+
+        function handleDrop(e, type) {
+            e.preventDefault();
+            e.currentTarget.classList.remove('dragover');
+            
+            const files = e.dataTransfer.files;
+            if (files.length > 0) {
+                handleFile(files[0], type);
+            }
+        }
+
+        function handleFileSelect(e, type) {
+            const files = e.target.files;
+            if (files.length > 0) {
+                handleFile(files[0], type);
+            }
+        }
+
+        function handleFile(file, type) {
+            const uploadArea = document.getElementById(`${type}-upload`);
+            const searchBtn = document.getElementById(`${type}-search-btn`);
+            
+            // 验证文件类型
+            if (type === 'image' && !file.type.startsWith('image/')) {
+                showMessage('请选择图像文件', 'error');
+                return;
+            }
+            
+            if (type === 'audio' && !file.type.startsWith('audio/')) {
+                showMessage('请选择音频文件', 'error');
+                return;
+            }
+            
+            // 更新UI
+            uploadArea.innerHTML = `<p>已选择: ${file.name}</p>`;
+            uploadArea.dataset.file = file.name;
+            searchBtn.disabled = false;
+            
+            // 存储文件
+            uploadArea.dataset.fileObject = file;
+        }
+
+        // 文本搜索
+        async function searchText() {
+            const query = document.getElementById('text-query').value.trim();
+            if (!query) {
+                showMessage('请输入搜索关键词', 'error');
+                return;
+            }
+            
+            await performSearch('text', query);
+        }
+
+        // 图像搜索
+        async function searchImage() {
+            const uploadArea = document.getElementById('image-upload');
+            const file = uploadArea.dataset.fileObject;
+            
+            if (!file) {
+                showMessage('请选择图像文件', 'error');
+                return;
+            }
+            
+            await performSearch('image', file);
+        }
+
+        // 音频搜索
+        async function searchAudio() {
+            const uploadArea = document.getElementById('audio-upload');
+            const file = uploadArea.dataset.fileObject;
+            
+            if (!file) {
+                showMessage('请选择音频文件', 'error');
+                return;
+            }
+            
+            await performSearch('audio', file);
+        }
+
+        // 执行搜索
+        async function performSearch(type, query) {
+            showResults();
+            showResultsLoading();
+            clearMessage();
+            
+            try {
+                let response;
+                
+                if (type === 'text') {
+                    response = await fetch(`${API_BASE}/search`, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({
+                            query: query,
+                            query_type: 'text',
+                            top_k: 20
+                        })
+                    });
+                } else if (type === 'image') {
+                    const formData = new FormData();
+                    formData.append('image', query);
+                    formData.append('top_k', '20');
+                    
+                    response = await fetch(`${API_BASE}/search/image`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else if (type === 'audio') {
+                    const formData = new FormData();
+                    formData.append('audio', query);
+                    formData.append('top_k', '20');
+                    
+                    response = await fetch(`${API_BASE}/search/audio`, {
+                        method: 'POST',
+                        body: formData
+                    });
+                }
+                
+                if (!response.ok) {
+                    throw new Error(`搜索失败: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                displayResults(data.results);
+                showMessage(`找到 ${data.total_results} 个结果`, 'success');
+                
+            } catch (error) {
+                console.error('搜索错误:', error);
+                showMessage(`搜索失败: ${error.message}`, 'error');
+                hideResults();
+            }
+        }
+
+        // 显示搜索结果
+        function displayResults(results) {
+            const grid = document.getElementById('results-grid');
+            grid.innerHTML = '';
+            
+            if (results.length === 0) {
+                grid.innerHTML = '<p>没有找到相关结果</p>';
+                return;
+            }
+            
+            results.forEach(result => {
+                const item = createResultItem(result);
+                grid.appendChild(item);
+            });
+        }
+
+        // 创建结果项
+        function createResultItem(result) {
+            const item = document.createElement('div');
+            item.className = 'result-item';
+            
+            // 根据文件类型显示不同的缩略图
+            let thumbnail = '';
+            const fileType = result.file_type || result.metadata?.file_type || '';
+            
+            if (fileType && ['.jpg', '.jpeg', '.png', '.bmp', '.webp'].includes(fileType.toLowerCase())) {
+                thumbnail = `<img src="${result.file_path}" alt="${result.file_name}" class="result-image">`;
+            } else {
+                // 使用占位符
+                thumbnail = `<div class="result-image" style="display: flex; align-items: center; justify-content: center; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; font-size: 24px;">📄</div>`;
+            }
+            
+            item.innerHTML = `
+                ${thumbnail}
+                <div class="result-info">
+                    <div class="result-score">相似度: ${(result.score * 100).toFixed(1)}%</div>
+                    <div class="result-name">${result.file_name || '未知文件'}</div>
+                    <div class="result-type">${fileType || '未知类型'}</div>
+                </div>
+            `;
+            
+            return item;
+        }
+
+        // 加载系统状态
+        async function loadSystemStatus() {
+            try {
+                const response = await fetch(`${API_BASE}/status`);
+                if (!response.ok) {
+                    throw new Error(`获取状态失败: ${response.statusText}`);
+                }
+                
+                const data = await response.json();
+                displaySystemStatus(data.data);
+                
+            } catch (error) {
+                console.error('获取系统状态错误:', error);
+                document.getElementById('status-grid').innerHTML = '<p>无法获取系统状态</p>';
+            }
+        }
+
+        // 显示系统状态
+        function displaySystemStatus(status) {
+            const grid = document.getElementById('status-grid');
+            
+            grid.innerHTML = `
+                <div class="status-card">
+                    <div class="status-value">${status.database.total_files || 0}</div>
+                    <div class="status-label">总文件数</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-value">${status.database.processed_files || 0}</div>
+                    <div class="status-label">已处理文件</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-value">${status.database.pending_files || 0}</div>
+                    <div class="status-label">待处理文件</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-value">${status.database.total_vectors || 0}</div>
+                    <div class="status-label">向量总数</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-value">${status.system.cpu_percent.toFixed(1)}%</div>
+                    <div class="status-label">CPU使用率</div>
+                </div>
+                <div class="status-card">
+                    <div class="status-value">${status.system.memory.percent.toFixed(1)}%</div>
+                    <div class="status-label">内存使用率</div>
+                </div>
+            `;
+        }
+
+        // UI辅助函数
+        function showResults() {
+            document.getElementById('results-section').classList.remove('hidden');
+        }
+
+        function hideResults() {
+            document.getElementById('results-section').classList.add('hidden');
+        }
+
+        function showResultsLoading() {
+            document.getElementById('results-loading').classList.remove('hidden');
+            document.getElementById('results-grid').innerHTML = '';
+        }
+
+        function hideResultsLoading() {
+            document.getElementById('results-loading').classList.add('hidden');
+        }
+
+        function showMessage(message, type = 'info') {
+            const messageDiv = document.getElementById('search-message');
+            messageDiv.className = type;
+            messageDiv.textContent = message;
+            messageDiv.classList.remove('hidden');
+        }
+
+        function clearMessage() {
+            const messageDiv = document.getElementById('search-message');
+            messageDiv.classList.add('hidden');
+            messageDiv.textContent = '';
+        }
+
+        // 定期更新系统状态
+        setInterval(loadSystemStatus, 30000); // 每30秒更新一次
+    </script>
+</body>
+</html>

@@ -109,17 +109,7 @@ class EmbeddingEngine:
             self.logger.error(f"图像向量化失败: {e}")
             raise
     
-    async def embed_image_async(self, image_data: bytes) -> np.ndarray:
-        """
-        异步图像向量化
-        
-        Args:
-            image_data: 图像字节数据
-            
-        Returns:
-            图像向量
-        """
-        return await self.embed_image(image_data)
+    # embed_image_async 函数已移除，直接使用 embed_image（该方法已是异步的）
     
     async def embed_text_for_visual(self, text: str) -> np.ndarray:
         """
@@ -211,17 +201,7 @@ class EmbeddingEngine:
             self.logger.error(f"音频向量化失败: {e}")
             raise
     
-    async def embed_audio_music_async(self, audio_data: bytes) -> np.ndarray:
-        """
-        异步音频向量化（音乐）
-        
-        Args:
-            audio_data: 音频字节数据
-            
-        Returns:
-            音频向量
-        """
-        return await self.embed_audio_music(audio_data)
+    # embed_audio_music_async 函数已移除，直接使用 embed_audio_music（该方法已是异步的）
     
     async def transcribe_audio(self, audio_data: bytes) -> str:
         """
@@ -254,9 +234,9 @@ class EmbeddingEngine:
             self.logger.error(f"语音转录失败: {e}")
             raise
     
-    async def transcribe_and_embed_async(self, audio_data: bytes) -> np.ndarray:
+    async def transcribe_and_embed(self, audio_data: bytes) -> np.ndarray:
         """
-        异步转录并向量化语音
+        转录并向量化语音（使用Whisper + CLIP模型）
         
         Args:
             audio_data: 音频字节数据

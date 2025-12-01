@@ -32,10 +32,14 @@ class DatabaseAdapter:
         
         self.logger.info(f"数据库适配器初始化完成: {self.db_path}")
     
+    def get_connection(self):
+        """获取数据库连接"""
+        return sqlite3.connect(self.db_path, timeout=30)
+    
     def _initialize_database(self):
         """初始化数据库表结构"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 # 创建文件表
@@ -142,7 +146,7 @@ class DatabaseAdapter:
     async def insert_file(self, file_info: Dict[str, Any]) -> str:
         """插入文件记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 cursor.execute("""
@@ -178,7 +182,7 @@ class DatabaseAdapter:
     async def update_file(self, file_id: str, updates: Dict[str, Any]) -> bool:
         """更新文件记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 # 构建更新语句
@@ -204,7 +208,7 @@ class DatabaseAdapter:
     async def update_file_by_path(self, file_path: str, updates: Dict[str, Any]) -> str:
         """根据文件路径更新文件记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 # 构建更新语句
@@ -239,7 +243,7 @@ class DatabaseAdapter:
     async def get_file(self, file_id: str) -> Optional[Dict[str, Any]]:
         """获取文件记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -255,7 +259,7 @@ class DatabaseAdapter:
     async def get_file_by_path(self, file_path: str) -> Optional[Dict[str, Any]]:
         """根据文件路径获取文件记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -271,7 +275,7 @@ class DatabaseAdapter:
     async def get_files_by_path(self, file_path: str) -> List[Dict[str, Any]]:
         """根据文件路径获取文件记录列表"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -287,7 +291,7 @@ class DatabaseAdapter:
     async def get_pending_files(self, limit: int = 10) -> List[Dict[str, Any]]:
         """获取待处理文件列表"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -313,7 +317,7 @@ class DatabaseAdapter:
     async def delete_file(self, file_id: str) -> bool:
         """删除文件记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 # 删除相关的向量记录
@@ -343,7 +347,7 @@ class DatabaseAdapter:
     async def insert_task(self, task_data: Dict[str, Any]) -> str:
         """插入任务记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 cursor.execute("""
@@ -377,7 +381,7 @@ class DatabaseAdapter:
     async def update_task(self, task_id: str, updates: Dict[str, Any]) -> bool:
         """更新任务记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 # 构建更新语句
@@ -401,7 +405,7 @@ class DatabaseAdapter:
     async def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
         """获取任务记录"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -417,7 +421,7 @@ class DatabaseAdapter:
     async def get_tasks_by_status(self, status: str, limit: int = None) -> List[Dict[str, Any]]:
         """根据状态获取任务列表"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -442,7 +446,7 @@ class DatabaseAdapter:
         try:
             current_time = datetime.now().timestamp()
             
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -463,7 +467,7 @@ class DatabaseAdapter:
     async def get_task_statistics(self) -> Dict[str, int]:
         """获取任务统计信息"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 cursor.execute("""
@@ -483,7 +487,7 @@ class DatabaseAdapter:
     async def delete_old_tasks(self, cutoff_time: float) -> int:
         """删除旧任务"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 cursor.execute("DELETE FROM tasks WHERE updated_at < ?", (cutoff_time,))
@@ -503,7 +507,7 @@ class DatabaseAdapter:
         try:
             import json
             
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 # 存储媒体片段信息
@@ -543,7 +547,7 @@ class DatabaseAdapter:
         try:
             import json
             
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 conn.row_factory = sqlite3.Row
                 cursor = conn.cursor()
                 
@@ -580,7 +584,7 @@ class DatabaseAdapter:
         try:
             import pickle
             
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 for i, vector in enumerate(vectors):
@@ -617,7 +621,7 @@ class DatabaseAdapter:
     async def reset_database(self) -> bool:
         """重置数据库"""
         try:
-            with sqlite3.connect(self.db_path) as conn:
+            with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
                 # 清空所有表

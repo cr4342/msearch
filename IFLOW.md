@@ -618,6 +618,31 @@ pytest tests/ --cov=src --cov-report=html
 
 ### 测试基础设施
 
+#### 测试目录规范
+
+1. **统一测试目录结构**
+   - 所有测试代码统一放在 `tests/` 目录下
+   - 单元测试文件以 `test_*.py` 命名
+   - 测试数据与 fixtures 放在 `tests/data/` 子目录，按模块再分二级目录
+   - 性能基准测试放在 `tests/benchmark/` 目录，输出报告统一为 `.benchmark.json`
+   - 任何测试不得污染项目根目录，临时文件统一输出到 `tests/.tmp/`，并在 `.gitignore` 中忽略
+   - 运行入口统一使用 `pytest`，配置文件 `pytest.ini` 置于 `tests/` 下，`conftest.py` 也放在 `tests/` 目录
+
+2. **测试目录结构示例**:
+   ```
+   ├── tests/                   # 测试目录  
+   │   ├── __init__.py
+   │   ├── conftest.py
+   │   ├── test_msearch_core.py
+   │   ├── test_timestamp_accuracy.py
+   │   ├── test_multimodal_fusion.py
+   │   ├── test_config_manager.py
+   │   ├── test_database_architecture.py
+   │   ├── test_api_endpoints.py
+   ```
+
+#### 测试工具与框架
+
 - **测试框架**: pytest + pytest-cov + pytest-asyncio
 - **覆盖率报告**: HTML格式的详细覆盖率报告
 - **测试分类**:

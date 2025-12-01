@@ -824,15 +824,13 @@ RETRY (重试)
 
 | 接口方法 | 输入 | 输出 | 使用模型 | 应用场景 |
 |---------|------|------|---------|---------|
-| `embed_image(image_data)` | 图像字节流 | 512维向量 | CLIP | 图像向量化 |
-| `embed_image_async(...)` | 图像字节流 | 512维向量 | CLIP | 异步图像向量化 |
-| `embed_text_for_visual(text)` | 文本字符串 | 512维向量 | CLIP | 图像/视频检索 |
-| `embed_text_for_music(text)` | 文本字符串 | 512维向量 | CLAP | 音乐检索 |
-| `embed_audio_music(audio_data)` | 音频字节流 | 512维向量 | CLAP | 音乐向量化 |
-| `embed_audio_music_async(...)` | 音频字节流 | 512维向量 | CLAP | 异步音乐向量化 |
-| `transcribe_audio(audio_data)` | 音频字节流 | 文本字符串 | Whisper | 语音转录 |
-| `transcribe_and_embed_async(...)` | 音频字节流 | 512维向量 | Whisper | 异步转录并向量化 |
-| `embed_face(face_data)` | 人脸图像 | 512维向量 | FaceNet | 人脸向量化 |
+| `embed_image(image_data)` | 图像字节流 | 512维向量 | CLIP | 图像向量化（异步方法） |
+| `embed_text_for_visual(text)` | 文本字符串 | 512维向量 | CLIP | 图像/视频检索（异步方法） |
+| `embed_text_for_music(text)` | 文本字符串 | 512维向量 | CLAP | 音乐检索（异步方法） |
+| `embed_audio_music(audio_data)` | 音频字节流 | 512维向量 | CLAP | 音乐向量化（异步方法） |
+| `transcribe_audio(audio_data)` | 音频字节流 | 文本字符串 | Whisper | 语音转录（异步方法） |
+| `transcribe_and_embed(audio_data)` | 音频字节流 | 512维向量 | Whisper + CLIP | 转录并向量化（异步组合方法） |
+| `embed_face(face_data)` | 人脸图像 | 512维向量 | FaceNet | 人脸向量化（异步方法） |
 
 **Infinity引擎集成要点**:
 - 使用AsyncEngineArray管理多个模型

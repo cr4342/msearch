@@ -101,3 +101,9 @@ release/
 *.swp
 *.swo
 *~
+
+# Test temporary files
+tests/.tmp/
+test_/.tmp/
+tests/.data/
+test_/.data/

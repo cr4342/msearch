@@ -26,17 +26,43 @@ class FileMonitorHandler(FileSystemEventHandler):
     def on_created(self, event):
         """文件创建事件"""
         if not event.is_directory:
-            asyncio.create_task(self.file_monitor._handle_file_created(event.src_path))
+            # 使用线程安全的方式调用异步方法
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                # 没有运行的事件循环，创建一个任务队列
+                self.file_monitor._queue_event("created", event.src_path)
+                return
+            
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(
+                self.file_monitor._handle_file_created(event.src_path)
+            ))
     
     def on_modified(self, event):
         """文件修改事件"""
         if not event.is_directory:
-            asyncio.create_task(self.file_monitor._handle_file_modified(event.src_path))
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self.file_monitor._queue_event("modified", event.src_path)
+                return
+            
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(
+                self.file_monitor._handle_file_modified(event.src_path)
+            ))
     
     def on_deleted(self, event):
         """文件删除事件"""
         if not event.is_directory:
-            asyncio.create_task(self.file_monitor._handle_file_deleted(event.src_path))
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                self.file_monitor._queue_event("deleted", event.src_path)
+                return
+            
+            loop.call_soon_threadsafe(lambda: asyncio.create_task(
+                self.file_monitor._handle_file_deleted(event.src_path)
+            ))
 
 
 class FileMonitor:
@@ -45,7 +71,7 @@ class FileMonitor:
     def __init__(self, config_manager):
         self.config_manager = config_manager
         self.logger = logging.getLogger(__name__)
-        self.db_adapter = DatabaseAdapter()
+        self.db_adapter = DatabaseAdapter(config_manager)
         
         # 监控配置
         self.monitored_directories = self.config_manager.get("system.monitored_directories", [])
@@ -58,6 +84,10 @@ class FileMonitor:
         # 防抖处理
         self.pending_files: Dict[str, asyncio.Task] = {}
         
+        # 事件队列（用于线程安全）
+        self.event_queue = asyncio.Queue()
+        self.event_processor_task = None
+        
         # 观察者
         self.observer = Observer()
         self.handler = FileMonitorHandler(self)
@@ -67,6 +97,9 @@ class FileMonitor:
     async def start(self):
         """启动文件监控"""
         self.logger.info("启动文件监控服务")
+        
+        # 启动事件处理器
+        self.event_processor_task = asyncio.create_task(self._process_event_queue())
         
         # 为每个监控目录创建观察者
         for directory in self.monitored_directories:
@@ -84,6 +117,15 @@ class FileMonitor:
     async def stop(self):
         """停止文件监控"""
         self.logger.info("停止文件监控服务")
+        
+        # 停止事件处理器
+        if self.event_processor_task:
+            self.event_processor_task.cancel()
+            try:
+                await self.event_processor_task
+            except asyncio.CancelledError:
+                pass
+        
         self.observer.stop()
         self.observer.join()
         
@@ -226,3 +268,38 @@ class FileMonitor:
             return files[0]['id'] if files else None
         except Exception:
             return None
+    
+    def _queue_event(self, event_type: str, file_path: str):
+        """将事件加入队列（线程安全）"""
+        try:
+            self.event_queue.put_nowait((event_type, file_path))
+        except asyncio.QueueFull:
+            self.logger.warning(f"事件队列已满，丢弃事件: {event_type} - {file_path}")
+    
+    async def _process_event_queue(self):
+        """处理事件队列"""
+        self.logger.info("事件队列处理器启动")
+        
+        while True:
+            try:
+                # 等待事件
+                event_type, file_path = await self.event_queue.get()
+                
+                # 处理事件
+                if event_type == "created":
+                    await self._handle_file_created(file_path)
+                elif event_type == "modified":
+                    await self._handle_file_modified(file_path)
+                elif event_type == "deleted":
+                    await self._handle_file_deleted(file_path)
+                
+                # 标记任务完成
+                self.event_queue.task_done()
+                
+            except asyncio.CancelledError:
+                self.logger.info("事件队列处理器被取消")
+                break
+            except Exception as e:
+                self.logger.error(f"处理事件队列时发生错误: {e}")
+        
+        self.logger.info("事件队列处理器停止")
