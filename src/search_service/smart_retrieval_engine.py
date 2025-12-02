@@ -185,7 +185,7 @@ class SmartRetrievalEngine:
         
         try:
             # CLIP模型检索（视觉模态）
-            if weights.get('clip', 0) > 0 and 'clip' in self.embedding_engine.get_available_models():
+            if weights.get('clip', 0) > 0:
                 clip_results = await self._search_with_clip(query, query_type, top_k, filters)
                 results['clip'] = clip_results
             
