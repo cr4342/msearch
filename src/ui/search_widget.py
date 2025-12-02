@@ -132,32 +132,39 @@ class SearchResultWidget(QWidget):
     def _create_result_item(self, result: Dict[str, Any]) -> QWidget:
         """创建结果项"""
         item = QFrame()
-        item.setFrameStyle(QFrame.Box)
+        item.setFrameStyle(QFrame.NoFrame)
         item.setStyleSheet("""
             QFrame {
-                border: 1px solid #ddd;
-                border-radius: 8px;
+                border: 1px solid #e0e0e0;
+                border-radius: 12px;
                 background: white;
-                padding: 5px;
+                padding: 12px;
+                margin: 8px;
+                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+                transition: all 0.2s ease;
             }
             QFrame:hover {
                 border-color: #0078d4;
-                background: #f8f9ff;
+                background: #f0f7ff;
+                transform: translateY(-2px);
+                box-shadow: 0 4px 16px rgba(0, 120, 212, 0.15);
             }
         """)
         
         layout = QVBoxLayout(item)
-        layout.setContentsMargins(5, 5, 5, 5)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(12)
         
         # 缩略图
         thumbnail = QLabel()
-        thumbnail.setFixedSize(150, 150)
+        thumbnail.setFixedSize(180, 180)
         thumbnail.setAlignment(Qt.AlignCenter)
         thumbnail.setStyleSheet("""
             QLabel {
-                border: 1px solid #eee;
-                border-radius: 4px;
-                background: #f8f8f8;
+                border: 1px solid #f0f0f0;
+                border-radius: 8px;
+                background: linear-gradient(135deg, #f5f7fa 0%, #c3cfe2 100%);
+                font-size: 64px;
             }
         """)
         
@@ -172,30 +179,95 @@ class SearchResultWidget(QWidget):
         else:
             thumbnail.setText("📄")
         
-        thumbnail.setFont(QFont("Arial", 48))
+        thumbnail.setFont(QFont("Segoe UI Emoji", 72))
         layout.addWidget(thumbnail)
         
         # 文件名
         name_label = QLabel(result.get('file_name', '未知文件'))
         name_label.setWordWrap(True)
         name_label.setAlignment(Qt.AlignCenter)
-        name_label.setMaximumHeight(40)
+        name_label.setMaximumHeight(50)
+        name_label.setStyleSheet("font-weight: 600; color: #333333; font-size: 14px;")
         layout.addWidget(name_label)
         
         # 相似度分数
         score = result.get('score', 0)
         score_label = QLabel(f"相似度: {score:.1%}")
         score_label.setAlignment(Qt.AlignCenter)
-        score_label.setStyleSheet("color: #0078d4; font-weight: bold;")
+        score_label.setStyleSheet("color: #0078d4; font-weight: bold; font-size: 16px;")
         layout.addWidget(score_label)
+        
+        # 文件信息
+        file_info = QWidget()
+        info_layout = QVBoxLayout(file_info)
+        info_layout.setContentsMargins(0, 0, 0, 0)
+        info_layout.setSpacing(4)
         
         # 文件大小
         file_size = result.get('file_size', 0)
         size_text = self._format_file_size(file_size)
         size_label = QLabel(size_text)
         size_label.setAlignment(Qt.AlignCenter)
-        size_label.setStyleSheet("color: #666; font-size: 12px;")
-        layout.addWidget(size_label)
+        size_label.setStyleSheet("color: #666666; font-size: 12px;")
+        info_layout.addWidget(size_label)
+        
+        # 文件类型
+        type_label = QLabel(file_type.upper())
+        type_label.setAlignment(Qt.AlignCenter)
+        type_label.setStyleSheet("color: #999999; font-size: 11px; font-weight: 500;")
+        info_layout.addWidget(type_label)
+        
+        layout.addWidget(file_info)
+        
+        # 操作按钮
+        action_widget = QWidget()
+        action_layout = QHBoxLayout(action_widget)
+        action_layout.setContentsMargins(0, 0, 0, 0)
+        action_layout.setSpacing(8)
+        action_layout.addStretch()
+        
+        # 查看按钮
+        view_button = QPushButton("查看")
+        view_button.setStyleSheet("""
+            QPushButton {
+                padding: 6px 12px;
+                background: #0078d4;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: #106ebe;
+            }
+        """)
+        action_layout.addWidget(view_button)
+        
+        # 打开文件夹按钮
+        folder_button = QPushButton("打开")
+        folder_button.setStyleSheet("""
+            QPushButton {
+                padding: 6px 12px;
+                background: #6c757d;
+                color: white;
+                border: none;
+                border-radius: 6px;
+                font-size: 12px;
+                font-weight: 500;
+            }
+            QPushButton:hover {
+                background: #5a6268;
+            }
+        """)
+        action_layout.addWidget(folder_button)
+        
+        action_layout.addStretch()
+        layout.addWidget(action_widget)
+        
+        # 连接信号
+        view_button.clicked.connect(lambda: self._on_view_file(result))
+        folder_button.clicked.connect(lambda: self._on_open_file_folder(result))
         
         return item
     
@@ -540,5 +612,42 @@ class SearchWidget(QWidget):
         
         # 显示搜索按钮
         self.file_search_button.show()
-        
-        self.logger.info(f"选择文件: {file_path}")
+    
+    def _on_view_file(self, result: Dict[str, Any]):
+        """查看文件"""
+        try:
+            file_path = result.get('file_path', '')
+            if not file_path:
+                QMessageBox.warning(self, "警告", "文件路径不存在")
+                return
+            
+            # 使用系统默认程序打开文件
+            import os
+            if os.path.exists(file_path):
+                os.startfile(file_path)  # Windows
+            else:
+                QMessageBox.warning(self, "警告", f"文件不存在: {file_path}")
+        except Exception as e:
+            self.logger.error(f"查看文件失败: {e}")
+            QMessageBox.critical(self, "错误", f"查看文件失败: {e}")
+    
+    def _on_open_file_folder(self, result: Dict[str, Any]):
+        """打开文件所在文件夹"""
+        try:
+            file_path = result.get('file_path', '')
+            if not file_path:
+                QMessageBox.warning(self, "警告", "文件路径不存在")
+                return
+            
+            # 提取文件夹路径
+            import os
+            folder_path = os.path.dirname(file_path)
+            
+            if os.path.exists(folder_path):
+                os.startfile(folder_path)  # Windows
+                self.logger.info(f"打开文件夹: {folder_path}")
+            else:
+                QMessageBox.warning(self, "警告", f"文件夹不存在: {folder_path}")
+        except Exception as e:
+            self.logger.error(f"打开文件夹失败: {e}")
+            QMessageBox.critical(self, "错误", f"打开文件夹失败: {e}")

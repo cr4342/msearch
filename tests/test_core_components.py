@@ -13,31 +13,31 @@ project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 sys.path.insert(0, str(project_root / "src"))
 
-from src.core.config import Config
+from src.core.config_manager import ConfigManager
 from src.core.file_type_detector import FileTypeDetector
-from src.core.infinity_manager import InfinityManager
+from src.core.infinity_manager import InfinityServiceManager
 from src.core.logger_manager import LoggerManager
 from src.core.qdrant_service_manager import QdrantServiceManager
 
 
-class TestConfig:
-    """配置类测试"""
+class TestConfigManager:
+    """配置管理器测试"""
     
     def test_config_creation(self):
         """测试配置创建"""
-        config = Config()
+        config = ConfigManager()
         assert config is not None
     
     def test_config_get_method(self):
         """测试配置获取方法"""
-        config = Config()
+        config = ConfigManager()
         # 测试默认值
         value = config.get("test.key", "default")
         assert value == "default"
     
     def test_config_set_method(self):
         """测试配置设置方法"""
-        config = Config()
+        config = ConfigManager()
         config.set("test.key", "value")
         value = config.get("test.key")
         assert value == "value"
@@ -121,13 +121,13 @@ class TestFileTypeDetector:
         assert detector.get_file_type("test.txt") == "unknown"
 
 
-class TestInfinityManager:
-    """Infinity管理器测试"""
+class TestInfinityServiceManager:
+    """Infinity服务管理器测试"""
     
     def test_manager_initialization(self):
         """测试管理器初始化"""
         try:
-            manager = InfinityManager()
+            manager = InfinityServiceManager()
             assert manager is not None
         except Exception as e:
             # 如果Infinity未安装，跳过测试
@@ -136,9 +136,9 @@ class TestInfinityManager:
     def test_service_status_check(self):
         """测试服务状态检查"""
         try:
-            manager = InfinityManager()
-            status = manager.get_service_status()
-            assert isinstance(status, dict)
+            manager = InfinityServiceManager()
+            # InfinityServiceManager没有get_service_status方法，改为检查服务列表
+            assert isinstance(manager.services, dict)
         except Exception as e:
             pytest.skip(f"Infinity未安装: {e}")
 

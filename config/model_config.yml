@@ -1,0 +1,40 @@
+# MSearch 模型配置文件
+# 用于指定本地模型路径
+
+model_paths:
+  # 文本嵌入模型
+  text_embedding:
+    path: "models/text_embedding"
+    model_name: "sentence-transformers/all-MiniLM-L6-v2"
+    local: true
+    
+  # 图像嵌入模型
+  image_embedding:
+    path: "models/image_embedding"
+    model_name: "google/vit-base-patch16-224"
+    local: true
+    
+  # 音频嵌入模型
+  audio_embedding:
+    path: "models/audio_embedding"
+    model_name: "openai/whisper-small"
+    local: true
+
+# 模型下载配置
+download:
+  # 使用镜像源
+hf_endpoint: "https://hf-mirror.com"
+  
+  # 下载超时设置
+timeout: 300
+  
+  # 重试次数
+max_retries: 3
+
+# 模型加载配置
+loading:
+  # 是否使用本地模型优先
+local_first: true
+  
+  # 模型加载超时
+model_load_timeout: 60
