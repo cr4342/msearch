@@ -552,6 +552,25 @@ download_models() {
         download_models_with_cli
     }
     
+    # 验证本地模型目录结构
+    log_info "验证本地模型目录结构..."
+    mkdir -p "$PROJECT_ROOT/data/models"
+    
+    # 确保模型目录结构正确
+    for model_dir in clip-vit-base-patch32 clap-htsat-fused whisper-base;
+    do
+        if [ -d "$PROJECT_ROOT/data/models/$model_dir" ]; then
+            local file_count=$(find "$PROJECT_ROOT/data/models/$model_dir" -type f | wc -l)
+            log_info "模型目录 $model_dir 包含 $file_count 个文件"
+            
+            if [ "$file_count" -eq 0 ]; then
+                log_warning "模型目录 $model_dir 为空，可能下载不完整"
+            fi
+        else
+            log_warning "模型目录 $model_dir 不存在，可能下载失败"
+        fi
+done
+    
     # 验证下载结果
     log_info "验证模型下载结果..."
     models_count=$(find "$PROJECT_ROOT/data/models" -type f | wc -l)
@@ -590,32 +609,42 @@ def download_model_safe(repo_id, local_path, max_retries=3):
     
     for attempt in range(max_retries):
         try:
+            # 强制使用hf-mirror.com镜像
+            os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
+            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+            
             if "clip" in repo_id.lower():
                 from transformers import CLIPModel, CLIPProcessor
                 print(f"  尝试 {attempt + 1}/{max_retries}: 下载CLIP模型...")
-                model = CLIPModel.from_pretrained(repo_id, cache_dir=local_path)
-                processor = CLIPProcessor.from_pretrained(repo_id, cache_dir=local_path)
+                # 直接下载到本地目录，不使用cache_dir
+                model = CLIPModel.from_pretrained(repo_id)
+                processor = CLIPProcessor.from_pretrained(repo_id)
                 model.save_pretrained(local_path)
                 processor.save_pretrained(local_path)
+                print(f"  ✅ {repo_id} 下载并保存到本地成功")
+                return True
                 
             elif "clap" in repo_id.lower():
                 from transformers import ClapModel, ClapProcessor
                 print(f"  尝试 {attempt + 1}/{max_retries}: 下载CLAP模型...")
-                model = ClapModel.from_pretrained(repo_id, cache_dir=local_path)
-                processor = ClapProcessor.from_pretrained(repo_id, cache_dir=local_path)
+                # 直接下载到本地目录，不使用cache_dir
+                model = ClapModel.from_pretrained(repo_id)
+                processor = ClapProcessor.from_pretrained(repo_id)
                 model.save_pretrained(local_path)
                 processor.save_pretrained(local_path)
+                print(f"  ✅ {repo_id} 下载并保存到本地成功")
+                return True
                 
             elif "whisper" in repo_id.lower():
                 from transformers import WhisperForConditionalGeneration, WhisperProcessor
                 print(f"  尝试 {attempt + 1}/{max_retries}: 下载Whisper模型...")
-                model = WhisperForConditionalGeneration.from_pretrained(repo_id, cache_dir=local_path)
-                processor = WhisperProcessor.from_pretrained(repo_id, cache_dir=local_path)
+                # 直接下载到本地目录，不使用cache_dir
+                model = WhisperForConditionalGeneration.from_pretrained(repo_id)
+                processor = WhisperProcessor.from_pretrained(repo_id)
                 model.save_pretrained(local_path)
                 processor.save_pretrained(local_path)
-            
-            print(f"  ✅ {repo_id} 下载成功")
-            return True
+                print(f"  ✅ {repo_id} 下载并保存到本地成功")
+                return True
             
         except Exception as e:
             print(f"  ❌ 尝试 {attempt + 1} 失败: {e}")
@@ -635,19 +664,22 @@ def main():
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
     
+    # 获取项目根目录
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    
     # 模型列表
     models = [
         {
             "repo_id": "openai/clip-vit-base-patch32",
-            "local_path": "data/models/clip-vit-base-patch32"
+            "local_path": os.path.join(project_root, "data", "models", "clip-vit-base-patch32")
         },
         {
             "repo_id": "laion/clap-htsat-fused", 
-            "local_path": "data/models/clap-htsat-fused"
+            "local_path": os.path.join(project_root, "data", "models", "clap-htsat-fused")
         },
         {
             "repo_id": "openai/whisper-base",
-            "local_path": "data/models/whisper-base"
+            "local_path": os.path.join(project_root, "data", "models", "whisper-base")
         }
     ]
     
@@ -676,6 +708,9 @@ EOF
 # 使用CLI下载模型（备用方案）
 download_models_with_cli() {
     log_info "使用huggingface-cli下载模型..."
+    
+    # 设置HuggingFace镜像
+    export HF_ENDPOINT=https://hf-mirror.com
     
     # 下载CLIP模型（文本-图像检索）
     log_info "1. 下载CLIP模型 (openai/clip-vit-base-patch32)..."

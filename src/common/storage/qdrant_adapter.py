@@ -245,13 +245,24 @@ class QdrantAdapter:
             search_filter = self._build_filter(filters) if filters else None
             
             # 搜索向量
-            search_results = self.client.search(
-                collection_name=collection_name,
-                query_vector=query_vector.tolist(),
-                limit=limit,
-                score_threshold=score_threshold,
-                query_filter=search_filter
-            )
+            # 处理不同版本的Qdrant客户端方法名差异
+            try:
+                search_results = self.client.search(
+                    collection_name=collection_name,
+                    query_vector=query_vector.tolist(),
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    query_filter=search_filter
+                )
+            except AttributeError:
+                # 尝试使用旧版本的方法名
+                search_results = self.client.search_points(
+                    collection_name=collection_name,
+                    query_vector=query_vector.tolist(),
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    query_filter=search_filter
+                )
             
             # 格式化结果
             results = []

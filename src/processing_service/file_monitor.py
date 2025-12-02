@@ -223,11 +223,7 @@ class FileMonitor:
                 if self.orchestrator:
                     try:
                         # 通过orchestrator处理文件
-                        await self.orchestrator.process_file(file_path, {
-                            'source': 'file_monitor',
-                            'event_type': event_type,
-                            'timestamp': asyncio.get_event_loop().time()
-                        })
+                        await self.orchestrator.handle_file_notification(file_path)
                     except Exception as e:
                         self.logger.error(f"通知调度器失败: {e}")
                 else:

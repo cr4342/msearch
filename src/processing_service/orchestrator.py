@@ -113,6 +113,7 @@ class ProcessingOrchestrator:
     
     async def _process_file(self, file_info: Dict[str, Any], task_id: str):
         """处理单个文件"""
+        import traceback
         try:
             self.logger.info(f"开始处理文件: {file_info['file_path']} (任务ID: {task_id})")
             
@@ -120,16 +121,24 @@ class ProcessingOrchestrator:
             await self.task_manager.update_task_status(task_id, 'processing')
             
             # 策略路由：根据文件类型选择处理策略
+            self.logger.debug(f"确定处理策略: {file_info['file_path']}")
             processing_strategy = self._determine_processing_strategy(file_info)
+            self.logger.debug(f"处理策略: {processing_strategy}")
             
             # 阶段一：预处理
+            self.logger.debug(f"开始预处理: {file_info['file_path']}")
             await self._preprocess_file(file_info, task_id, processing_strategy)
+            self.logger.debug(f"预处理完成: {file_info['file_path']}")
             
             # 阶段二：向量化
+            self.logger.debug(f"开始向量化: {file_info['file_path']}")
             await self._vectorize_file(file_info, task_id, processing_strategy)
+            self.logger.debug(f"向量化完成: {file_info['file_path']}")
             
             # 阶段三：存储
+            self.logger.debug(f"开始存储结果: {file_info['file_path']}")
             await self._store_results(file_info, task_id)
+            self.logger.debug(f"结果存储完成: {file_info['file_path']}")
             
             # 更新任务状态为完成
             await self.task_manager.update_task_status(task_id, 'completed')
@@ -141,6 +150,7 @@ class ProcessingOrchestrator:
             
         except Exception as e:
             self.logger.error(f"文件处理失败: {file_info['file_path']}, 错误: {e}")
+            self.logger.error(f"错误堆栈: {traceback.format_exc()}")
             
             # 更新任务状态为失败
             await self.task_manager.update_task_status(task_id, 'failed', str(e))
@@ -230,20 +240,37 @@ class ProcessingOrchestrator:
         vectors = []
         
         if strategy['modality'] == 'image':
-            # 图像向量化
-            vector = await self.embedding_engine.embed_image(processed_data['image_data'])
-            vectors.append(vector)
+            # 图像向量化 - 从segments中获取图像数据
+            for segment in processed_data.get('segments', []):
+                if segment['segment_type'] == 'image':
+                    # 读取图像文件数据
+                    with open(segment['data_path'], 'rb') as f:
+                        image_data = f.read()
+                    # 向量化
+                    vector = await self.embedding_engine.embed_image(image_data)
+                    vectors.append(vector)
         
         elif strategy['modality'] == 'video':
             # 视频帧向量化
-            for frame_data in processed_data['frames']:
-                vector = await self.embedding_engine.embed_image(frame_data)
-                vectors.append(vector)
+            for segment in processed_data.get('segments', []):
+                if segment['segment_type'] == 'video_frame':
+                    # 读取视频帧文件数据
+                    with open(segment['data_path'], 'rb') as f:
+                        frame_data = f.read()
+                    # 向量化
+                    vector = await self.embedding_engine.embed_image(frame_data)
+                    vectors.append(vector)
         
         elif strategy['modality'] == 'audio':
             # 音频向量化
-            vector = await self.embedding_engine.embed_audio_music(processed_data['audio_data'])
-            vectors.append(vector)
+            for segment in processed_data.get('segments', []):
+                if segment['segment_type'] == 'audio':
+                    # 读取音频文件数据
+                    with open(segment['data_path'], 'rb') as f:
+                        audio_data = f.read()
+                    # 向量化
+                    vector = await self.embedding_engine.embed_audio_music(audio_data)
+                    vectors.append(vector)
         
         # 存储向量结果
         await self.db_adapter.store_vectors(

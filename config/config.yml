@@ -6,7 +6,7 @@ system:
   data_dir: ./data
   temp_dir: ./temp
   monitored_directories:
-    - /testdata
+    - ./testdata
   supported_extensions:
     - .jpg
     - .jpeg
@@ -157,9 +157,9 @@ infinity:
     clip:
       model_id: openai/clip-vit-base-patch32
       port: 7997
-      device: cuda:0
+      device: cpu
       max_batch_size: 32
-      dtype: float16
+      dtype: float32
     clap:
       model_id: laion/clap-htsat-fused
       port: 7998
