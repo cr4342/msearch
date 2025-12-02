@@ -68,10 +68,11 @@ class FileMonitorHandler(FileSystemEventHandler):
 class FileMonitor:
     """文件监控器"""
     
-    def __init__(self, config_manager):
+    def __init__(self, config_manager, orchestrator=None):
         self.config_manager = config_manager
         self.logger = logging.getLogger(__name__)
         self.db_adapter = DatabaseAdapter(config_manager)
+        self.orchestrator = orchestrator
         
         # 监控配置
         self.monitored_directories = self.config_manager.get("system.monitored_directories", [])
@@ -219,7 +220,21 @@ class FileMonitor:
                 self.logger.info(f"新增文件记录: {file_path}")
                 
                 # 通知调度器有新文件
-                # TODO: 实现调度器通知机制
+                if self.orchestrator:
+                    try:
+                        # 通过orchestrator处理文件
+                        await self.orchestrator.process_file(file_path, {
+                            'source': 'file_monitor',
+                            'event_type': event_type,
+                            'timestamp': asyncio.get_event_loop().time()
+                        })
+                    except Exception as e:
+                        self.logger.error(f"通知调度器失败: {e}")
+                else:
+                    # 如果没有orchestrator，尝试使用TaskManager处理
+                    from src.processing_service.task_manager import TaskManager
+                    task_manager = TaskManager(self.config_manager)
+                    await task_manager.create_task(file_path, 'process')
         
         except Exception as e:
             self.logger.error(f"处理文件失败: {file_path}, 错误: {e}")

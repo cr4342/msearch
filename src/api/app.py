@@ -38,7 +38,7 @@ async def lifespan(app: FastAPI):
         # 初始化核心组件
         retrieval_engine = SmartRetrievalEngine(config_manager)
         orchestrator = ProcessingOrchestrator(config_manager)
-        file_monitor = FileMonitor(config_manager)
+        file_monitor = FileMonitor(config_manager, orchestrator)
         
         # 启动组件
         await retrieval_engine.start()

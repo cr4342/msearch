@@ -215,19 +215,31 @@ class SmartRetrievalEngine:
             else:
                 return []
             
-            # 执行向量检索（这里应该调用实际的向量数据库）
-            # 暂时返回模拟结果
-            mock_results = [
-                {
-                    'file_id': f'clip_file_{i}',
-                    'score': 0.9 - i * 0.1,
-                    'model': 'clip',
-                    'metadata': {'file_type': 'image', 'file_path': f'/path/to/image_{i}.jpg'}
-                }
-                for i in range(min(top_k, 5))
-            ]
+            # 执行真实的向量检索
+            search_results = await self.embedding_engine.search_vector(
+                collection_type='visual',
+                query_vector=query_vector,
+                limit=top_k,
+                score_threshold=0.7,
+                filters=filters
+            )
             
-            return mock_results
+            # 格式化结果
+            formatted_results = []
+            for result in search_results:
+                formatted_result = {
+                    'file_id': result['payload']['file_id'],
+                    'score': result['score'],
+                    'model': 'clip',
+                    'metadata': {
+                        'segment_id': result['payload'].get('segment_id'),
+                        'created_at': result['payload'].get('created_at'),
+                        **result['payload']
+                    }
+                }
+                formatted_results.append(formatted_result)
+            
+            return formatted_results
             
         except Exception as e:
             self.logger.error(f"CLIP检索失败: {e}")
@@ -244,18 +256,31 @@ class SmartRetrievalEngine:
             else:
                 return []
             
-            # 执行向量检索
-            mock_results = [
-                {
-                    'file_id': f'clap_file_{i}',
-                    'score': 0.85 - i * 0.1,
-                    'model': 'clap',
-                    'metadata': {'file_type': 'audio', 'file_path': f'/path/to/audio_{i}.mp3'}
-                }
-                for i in range(min(top_k, 5))
-            ]
+            # 执行真实的向量检索
+            search_results = await self.embedding_engine.search_vector(
+                collection_type='audio_music',
+                query_vector=query_vector,
+                limit=top_k,
+                score_threshold=0.7,
+                filters=filters
+            )
             
-            return mock_results
+            # 格式化结果
+            formatted_results = []
+            for result in search_results:
+                formatted_result = {
+                    'file_id': result['payload']['file_id'],
+                    'score': result['score'],
+                    'model': 'clap',
+                    'metadata': {
+                        'segment_id': result['payload'].get('segment_id'),
+                        'created_at': result['payload'].get('created_at'),
+                        **result['payload']
+                    }
+                }
+                formatted_results.append(formatted_result)
+            
+            return formatted_results
             
         except Exception as e:
             self.logger.error(f"CLAP检索失败: {e}")
@@ -264,22 +289,49 @@ class SmartRetrievalEngine:
     async def _search_with_whisper(self, query: str, query_type: str, top_k: int, filters: Dict[str, Any]) -> List[Dict[str, Any]]:
         """使用Whisper模型检索"""
         try:
-            # Whisper主要用于语音转文本，这里简化处理
-            if query_type != "text":
+            # Whisper主要用于语音转文本检索
+            if query_type == "text":
+                # 先尝试语音转文本（这里简化处理）
+                # 实际应用中应该从已转录的文本中搜索
+                
+                # 执行真实的语音检索
+                search_results = await self.embedding_engine.search_vector(
+                    collection_type='audio_speech',
+                    query_vector=await self.embedding_engine.embed_text_for_visual(query),  # 使用CLIP进行文本向量化
+                    limit=top_k,
+                    score_threshold=0.7,
+                    filters=filters
+                )
+                
+                # 格式化结果
+                formatted_results = []
+                for result in search_results:
+                    formatted_result = {
+                        'file_id': result['payload']['file_id'],
+                        'score': result['score'],
+                        'model': 'whisper',
+                        'metadata': {
+                            'segment_id': result['payload'].get('segment_id'),
+                            'created_at': result['payload'].get('created_at'),
+                            **result['payload']
+                        }
+                    }
+                    formatted_results.append(formatted_result)
+                
+                return formatted_results
+            elif query_type == "audio":
+                # 音频查询：先转录，然后搜索
+                try:
+                    audio_data = query.encode() if isinstance(query, str) else query
+                    transcription = await self.embedding_engine.transcribe_audio(audio_data)
+                    
+                    # 使用转录结果进行搜索
+                    return await self._search_with_whisper(transcription, "text", top_k, filters)
+                except Exception as e:
+                    self.logger.error(f"音频转录失败: {e}")
+                    return []
+            else:
                 return []
-            
-            # 执行文本检索
-            mock_results = [
-                {
-                    'file_id': f'whisper_file_{i}',
-                    'score': 0.8 - i * 0.1,
-                    'model': 'whisper',
-                    'metadata': {'file_type': 'video', 'file_path': f'/path/to/video_{i}.mp4'}
-                }
-                for i in range(min(top_k, 5))
-            ]
-            
-            return mock_results
             
         except Exception as e:
             self.logger.error(f"Whisper检索失败: {e}")

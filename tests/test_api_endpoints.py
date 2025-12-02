@@ -11,7 +11,7 @@ from pathlib import Path
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root / "src"))
 
-from src.api.main import app
+from src.api.app import app
 
 # 创建测试客户端
 client = TestClient(app)

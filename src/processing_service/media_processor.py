@@ -80,15 +80,19 @@ class MediaProcessor:
                 target_resolution = preprocessing.get('target_resolution', 720)
                 image_data = await self._resize_image(image_data, target_resolution)
             
+            # 获取图像元数据
+            image_metadata = await self._extract_image_metadata(file_path)
+            
             # 创建图像片段
             segment = {
                 'type': 'image',
                 'data_path': file_path,
                 'metadata': {
-                    'width': None,  # TODO: 实现图像尺寸检测
-                    'height': None,
+                    'width': image_metadata.get('width'),
+                    'height': image_metadata.get('height'),
                     'format': Path(file_path).suffix[1:],
-                    'size_bytes': len(image_data)
+                    'size_bytes': len(image_data),
+                    'color_mode': image_metadata.get('color_mode', 'RGB')
                 }
             }
             
@@ -571,3 +575,56 @@ class MediaProcessor:
         except Exception as e:
             self.logger.error(f"音频格式转换失败: {e}")
             return file_path
+    
+    async def _extract_image_metadata(self, file_path: str) -> Dict[str, Any]:
+        """提取图像元数据"""
+        try:
+            # 使用PIL库获取图像元数据
+            from PIL import Image
+            
+            with Image.open(file_path) as img:
+                metadata = {
+                    'width': img.width,
+                    'height': img.height,
+                    'format': img.format,
+                    'color_mode': img.mode,
+                    'has_transparency': img.mode in ('RGBA', 'LA', 'P'),
+                }
+                
+                # 获取更多详细信息
+                if hasattr(img, 'info'):
+                    metadata.update(img.info)
+                
+                return metadata
+                
+        except ImportError:
+            # 如果PIL不可用，使用基础方法
+            try:
+                with open(file_path, 'rb') as f:
+                    # 简单的文件信息
+                    import os
+                    stat = os.stat(file_path)
+                    
+                    return {
+                        'width': None,
+                        'height': None,
+                        'format': Path(file_path).suffix[1:].upper(),
+                        'size_bytes': stat.st_size,
+                        'color_mode': 'Unknown'
+                    }
+            except Exception as e:
+                self.logger.error(f"获取图像元数据失败: {e}")
+                return {
+                    'width': None,
+                    'height': None,
+                    'format': Path(file_path).suffix[1:].upper(),
+                    'color_mode': 'Unknown'
+                }
+        except Exception as e:
+            self.logger.error(f"提取图像元数据失败: {e}")
+            return {
+                'width': None,
+                'height': None,
+                'format': Path(file_path).suffix[1:].upper(),
+                'color_mode': 'Unknown'
+            }
