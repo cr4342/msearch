@@ -1,0 +1,20 @@
+# 简单的Qdrant配置文件
+
+# 服务配置
+service:
+  host: "localhost"
+  port: 6333
+  grpc_port: 6334
+
+# 存储配置
+storage:
+  path: "/data/project/msearch/data/qdrant"
+
+# 日志配置
+logging:
+  level: "INFO"
+  format: "%Y-%m-%d %H:%M:%S %l %m"
+
+# 集群配置（单机版不需要）
+cluster:
+  enabled: false
