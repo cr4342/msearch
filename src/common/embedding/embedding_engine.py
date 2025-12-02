@@ -50,14 +50,14 @@ class EmbeddingEngine:
                 try:
                     device = clip_config.get('device', device)
                     
-                    # 优先使用本地模型
+                    # 必须使用本地模型
                     local_model_path = os.path.join('data', 'models', 'clip-vit-base-patch32')
                     if os.path.exists(local_model_path) and os.path.isdir(local_model_path):
                         model_path = local_model_path
                         self.logger.info(f"使用本地CLIP模型: {model_path}")
                     else:
-                        model_path = clip_config['model_id']
-                        self.logger.info(f"使用远程CLIP模型: {model_path}")
+                        self.logger.error(f"本地CLIP模型不存在: {local_model_path}")
+                        raise FileNotFoundError(f"本地CLIP模型不存在: {local_model_path}")
                         
                     self.engines['clip'] = AsyncEngineArray.from_args([
                         EngineArgs(
@@ -70,7 +70,7 @@ class EmbeddingEngine:
                     ])
                     self.logger.info(f"CLIP模型初始化成功: {model_path} (设备: {device})")
                 except Exception as e:
-                    self.logger.warning(f"CLIP模型初始化失败: {e}")
+                    self.logger.error(f"CLIP模型初始化失败: {e}")
             
             # 初始化CLAP模型
             if 'clap' in self.models_config:
@@ -78,14 +78,14 @@ class EmbeddingEngine:
                 try:
                     device = clap_config.get('device', device)
                     
-                    # 优先使用本地模型
+                    # 必须使用本地模型
                     local_model_path = os.path.join('data', 'models', 'clap-htsat-fused')
                     if os.path.exists(local_model_path) and os.path.isdir(local_model_path):
                         model_path = local_model_path
                         self.logger.info(f"使用本地CLAP模型: {model_path}")
                     else:
-                        model_path = clip_config['model_id']
-                        self.logger.info(f"使用远程CLAP模型: {model_path}")
+                        self.logger.error(f"本地CLAP模型不存在: {local_model_path}")
+                        raise FileNotFoundError(f"本地CLAP模型不存在: {local_model_path}")
                         
                     self.engines['clap'] = AsyncEngineArray.from_args([
                         EngineArgs(
@@ -98,7 +98,7 @@ class EmbeddingEngine:
                     ])
                     self.logger.info(f"CLAP模型初始化成功: {model_path} (设备: {device})")
                 except Exception as e:
-                    self.logger.warning(f"CLAP模型初始化失败: {e}")
+                    self.logger.error(f"CLAP模型初始化失败: {e}")
             
             # 初始化Whisper模型
             if 'whisper' in self.models_config:
@@ -106,14 +106,14 @@ class EmbeddingEngine:
                 try:
                     device = whisper_config.get('device', 'cpu')  # Whisper默认使用CPU
                     
-                    # 优先使用本地模型
+                    # 必须使用本地模型
                     local_model_path = os.path.join('data', 'models', 'whisper-base')
                     if os.path.exists(local_model_path) and os.path.isdir(local_model_path):
                         model_path = local_model_path
                         self.logger.info(f"使用本地Whisper模型: {model_path}")
                     else:
-                        model_path = clip_config['model_id']
-                        self.logger.info(f"使用远程Whisper模型: {model_path}")
+                        self.logger.error(f"本地Whisper模型不存在: {local_model_path}")
+                        raise FileNotFoundError(f"本地Whisper模型不存在: {local_model_path}")
                         
                     self.engines['whisper'] = AsyncEngineArray.from_args([
                         EngineArgs(
@@ -126,11 +126,30 @@ class EmbeddingEngine:
                     ])
                     self.logger.info(f"Whisper模型初始化成功: {model_path} (设备: {device})")
                 except Exception as e:
-                    self.logger.warning(f"Whisper模型初始化失败: {e}")
+                    self.logger.error(f"Whisper模型初始化失败: {e}")
         
         except Exception as e:
             self.logger.error(f"模型初始化失败: {e}")
             # 在测试环境中，如果没有模型，我们也继续执行，使用空列表作为回退
+    
+    async def _start_engine(self, engine) -> bool:
+        """
+        启动单个引擎实例
+        
+        Args:
+            engine: 引擎实例
+            
+        Returns:
+            bool: 启动成功返回True，失败返回False
+        """
+        try:
+            if hasattr(engine, 'astart') and not engine.is_running:
+                await engine.astart()
+                return True
+            return True
+        except Exception as e:
+            self.logger.error(f"引擎启动失败: {e}")
+            return False
     
     def _check_cuda_availability(self) -> bool:
         """检查CUDA可用性"""
@@ -152,29 +171,22 @@ class EmbeddingEngine:
         """
         try:
             if 'clip' not in self.engines:
-                # 在没有模型的情况下返回模拟向量用于测试
-                self.logger.warning("CLIP模型未初始化，返回模拟向量")
-                return np.random.rand(512).astype(np.float32)
+                raise RuntimeError("CLIP模型未初始化")
             
             # 使用CLIP模型进行图像向量化
             engine = self.engines['clip']
             
-            # 在异步上下文中调用同步方法
-            loop = asyncio.get_event_loop()
-            vector = await loop.run_in_executor(
-                None, 
-                lambda: engine.encode(image_data, "image")
-            )
-            
-            return vector
+            # 启动引擎
+            await engine.astart()
+            embeddings, _ = await engine.image_embed(model="clip", images=[image_data])
+            return np.array(embeddings[0], dtype=np.float32)
             
         except Exception as e:
             self.logger.error(f"图像向量化失败: {e}")
-            # 失败时返回模拟向量
-            return np.random.rand(512).astype(np.float32)
-    
-    # embed_image_async 函数已移除，直接使用 embed_image（该方法已是异步的）
-    
+            raise
+
+
+
     async def embed_text_for_visual(self, text: str) -> np.ndarray:
         """
         文本向量化（用于图像/视频检索）
@@ -187,26 +199,19 @@ class EmbeddingEngine:
         """
         try:
             if 'clip' not in self.engines:
-                # 在没有模型的情况下返回模拟向量用于测试
-                self.logger.warning("CLIP模型未初始化，返回模拟向量")
-                return np.random.rand(512).astype(np.float32)
+                raise RuntimeError("CLIP模型未初始化")
             
             # 使用CLIP模型进行文本向量化
             engine = self.engines['clip']
             
-            # 在异步上下文中调用同步方法
-            loop = asyncio.get_event_loop()
-            vector = await loop.run_in_executor(
-                None, 
-                lambda: engine.encode(text, "text")
-            )
-            
-            return vector
+            # 使用异步上下文管理器调用引擎
+            await engine.astart()
+            embeddings, _ = await engine.embed(model="clip", sentences=[text])
+            return np.array(embeddings[0], dtype=np.float32)
             
         except Exception as e:
             self.logger.error(f"文本向量化失败: {e}")
-            # 失败时返回模拟向量
-            return np.random.rand(512).astype(np.float32)
+            raise
     
     async def embed_text_for_music(self, text: str) -> np.ndarray:
         """
@@ -220,26 +225,19 @@ class EmbeddingEngine:
         """
         try:
             if 'clap' not in self.engines:
-                # 在没有模型的情况下返回模拟向量用于测试
-                self.logger.warning("CLAP模型未初始化，返回模拟向量")
-                return np.random.rand(512).astype(np.float32)
+                raise RuntimeError("CLAP模型未初始化")
             
             # 使用CLAP模型进行文本向量化
             engine = self.engines['clap']
             
-            # 在异步上下文中调用同步方法
-            loop = asyncio.get_event_loop()
-            vector = await loop.run_in_executor(
-                None, 
-                lambda: engine.encode(text, "text")
-            )
-            
-            return vector
+            # 启动引擎
+            await engine.astart()
+            embeddings, _ = await engine.embed(model="clap", sentences=[text])
+            return np.array(embeddings[0], dtype=np.float32)
             
         except Exception as e:
             self.logger.error(f"音乐文本向量化失败: {e}")
-            # 失败时返回模拟向量
-            return np.random.rand(512).astype(np.float32)
+            raise
     
     async def embed_audio_music(self, audio_data: bytes) -> np.ndarray:
         """
@@ -258,20 +256,16 @@ class EmbeddingEngine:
             # 使用CLAP模型进行音频向量化
             engine = self.engines['clap']
             
-            # 在异步上下文中调用同步方法
-            loop = asyncio.get_event_loop()
-            vector = await loop.run_in_executor(
-                None, 
-                lambda: engine.encode(audio_data, "audio")
-            )
-            
-            return vector
+            # 启动引擎
+            await engine.astart()
+            embeddings, _ = await engine.audio_embed(model="clap", audios=[audio_data])
+            return np.array(embeddings[0], dtype=np.float32)
             
         except Exception as e:
             self.logger.error(f"音频向量化失败: {e}")
             raise
     
-    # embed_audio_music_async 函数已移除，直接使用 embed_audio_music（该方法已是异步的）
+    
     
     async def transcribe_audio(self, audio_data: bytes) -> str:
         """
@@ -285,27 +279,19 @@ class EmbeddingEngine:
         """
         try:
             if 'whisper' not in self.engines:
-                # 在没有模型的情况下返回模拟转录结果
-                self.logger.warning("Whisper模型未初始化，返回模拟转录结果")
-                return "这是模拟的语音转录结果"
+                raise RuntimeError("Whisper模型未初始化")
             
             # 使用Whisper模型进行语音转录
             engine = self.engines['whisper']
             
-            # 在异步上下文中调用同步方法
-            loop = asyncio.get_event_loop()
-            text = await loop.run_in_executor(
-                None, 
-                lambda: engine.encode(audio_data, "audio")
-            )
-            
-            # Whisper返回的是转录文本
-            return text
+            # 启动引擎
+            await engine.astart()
+            transcriptions, _ = await engine.audio_embed(model="whisper", audios=[audio_data])
+            return transcriptions[0]
             
         except Exception as e:
             self.logger.error(f"语音转录失败: {e}")
-            # 失败时返回模拟转录结果
-            return "语音转录失败"
+            raise
     
     async def transcribe_and_embed(self, audio_data: bytes) -> np.ndarray:
         """
@@ -429,6 +415,18 @@ class EmbeddingEngine:
             模型名称列表
         """
         return list(self.engines.keys())
+    
+    def is_model_available(self, model_name: str) -> bool:
+        """
+        检查模型是否可用
+        
+        Args:
+            model_name: 模型名称
+            
+        Returns:
+            模型是否可用
+        """
+        return model_name in self.engines
     
     async def health_check(self) -> Dict[str, bool]:
         """

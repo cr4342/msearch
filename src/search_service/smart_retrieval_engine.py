@@ -127,10 +127,7 @@ class SmartRetrievalEngine:
         
         query_lower = query.lower()
         
-        # 人名查询检测
-        if self._is_person_query(query):
-            return "person"
-        
+        # 先检测其他类型的查询，最后检测人名查询
         # 音频查询检测
         if self._is_audio_query(query_lower):
             return "audio"
@@ -139,6 +136,10 @@ class SmartRetrievalEngine:
         if self._is_visual_query(query_lower):
             return "visual"
         
+        # 最后检测人名查询
+        if self._is_person_query(query):
+            return "person"
+        
         # 默认通用查询
         return "general"
     
@@ -146,11 +147,22 @@ class SmartRetrievalEngine:
         """检测是否为人名查询"""
         # 简单的人名检测逻辑
         # 实际应用中应该使用更复杂的人名识别算法
-        chinese_name_pattern = r'[\u4e00-\u9fff]{2,4}'
-        matches = re.findall(chinese_name_pattern, query)
+        # 只检测纯人名查询，不包含其他关键词
+        query = query.strip()
         
-        # 如果查询中包含2-4个中文字符，可能是人名
-        return len(matches) > 0 and len(query.strip()) <= 10
+        # 常见姓氏列表（简化版）
+        common_surnames = ['张', '王', '李', '刘', '陈', '杨', '赵', '黄', '周', '吴',
+                          '徐', '孙', '胡', '朱', '高', '林', '何', '郭', '马', '罗']
+        
+        # 简单的人名模式：2-4个中文字符，且第一个字符是常见姓氏
+        if len(query) >= 2 and len(query) <= 4:
+            # 检查是否都是中文字符
+            if all('\u4e00' <= char <= '\u9fff' for char in query):
+                # 检查第一个字符是否是常见姓氏
+                if query[0] in common_surnames:
+                    return True
+        
+        return False
     
     def _is_audio_query(self, query: str) -> bool:
         """检测是否为音频查询"""

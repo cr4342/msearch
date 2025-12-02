@@ -526,11 +526,11 @@ class DatabaseAdapter:
                     """, (
                         segment_id,
                         file_id,
-                        segment.get('type', 'unknown'),
+                        segment.get('segment_type', 'unknown'),
                         i,
-                        segment.get('start_time_ms'),
-                        segment.get('end_time_ms'),
-                        segment.get('duration_ms'),
+                        segment.get('metadata', {}).get('start_time', 0) * 1000,  # 转换为毫秒
+                        segment.get('metadata', {}).get('end_time', 0) * 1000,    # 转换为毫秒
+                        segment.get('metadata', {}).get('duration', 0) * 1000,    # 转换为毫秒
                         segment.get('data_path'),
                         json.dumps(segment.get('metadata', {})),
                         datetime.now().timestamp()

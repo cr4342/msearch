@@ -7,6 +7,7 @@ import asyncio
 import logging
 import os
 import tempfile
+import uuid
 from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 import subprocess
@@ -26,10 +27,9 @@ class MediaProcessor:
         self.audio_config = self.config_manager.get("media_processing.audio", {})
         
         # 支持的文件类型
-        self.image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp'}
-        self.video_extensions = {'.mp4', '.avi', '.mov', '.mkv'}
-        self.audio_extensions = {'.mp3', '.wav', '.flac', '.aac'}
-        
+        self.image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.svg', '.heic', '.heif'}
+        self.video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.mpeg', '.mpg', '.3gp', '.webm', '.m4v', '.mts', '.m2ts'}
+        self.audio_extensions = {'.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.amr', '.aiff', '.au'}
         self.logger.info("媒体处理器初始化完成")
     
     async def process(self, file_path: str, strategy: Dict[str, Any]) -> Dict[str, Any]:
@@ -85,7 +85,8 @@ class MediaProcessor:
             
             # 创建图像片段
             segment = {
-                'type': 'image',
+                'id': str(uuid.uuid4()),
+                'segment_type': 'image',
                 'data_path': file_path,
                 'metadata': {
                     'width': image_metadata.get('width'),
@@ -141,7 +142,8 @@ class MediaProcessor:
                 
                 # 创建音频片段
                 audio_segment = {
-                    'type': 'audio',
+                    'id': str(uuid.uuid4()),
+                    'segment_type': 'audio',
                     'data_path': audio_path,
                     'metadata': {
                         'source': 'video',
@@ -191,7 +193,8 @@ class MediaProcessor:
                 
                 # 创建音频片段
                 segment = {
-                    'type': 'audio',
+                    'id': str(uuid.uuid4()),
+                    'segment_type': 'audio',
                     'data_path': converted_path,
                     'metadata': {
                         'sample_rate': sample_rate,
@@ -205,7 +208,8 @@ class MediaProcessor:
             else:
                 # 使用原始文件
                 segment = {
-                    'type': 'audio',
+                    'id': str(uuid.uuid4()),
+                    'segment_type': 'audio',
                     'data_path': file_path,
                     'metadata': audio_metadata
                 }
@@ -222,11 +226,48 @@ class MediaProcessor:
             raise
     
     async def _resize_image(self, image_data: bytes, target_resolution: int) -> bytes:
-        """调整图像分辨率"""
+        """使用ffmpeg调整图像分辨率"""
         try:
-            # 这里应该使用PIL或OpenCV进行图像处理
-            # 暂时返回原始数据
-            return image_data
+            # 创建临时文件保存输入图像
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_in:
+                tmp_in.write(image_data)
+                tmp_in_path = tmp_in.name
+            
+            # 创建临时文件保存输出图像
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.jpg') as tmp_out:
+                tmp_out_path = tmp_out.name
+            
+            # 使用ffmpeg调整分辨率
+            cmd = [
+                'ffmpeg',
+                '-i', tmp_in_path,
+                '-vf', f'scale=-1:{target_resolution}',  # 保持宽高比，高度为目标分辨率
+                '-y',
+                tmp_out_path
+            ]
+            
+            process = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE
+            )
+            
+            stdout, stderr = await process.communicate()
+            
+            if process.returncode != 0:
+                self.logger.error(f"ffmpeg图像缩放失败: {stderr.decode()}")
+                return image_data
+            
+            # 读取调整后的图像数据
+            with open(tmp_out_path, 'rb') as f:
+                resized_data = f.read()
+            
+            # 清理临时文件
+            os.unlink(tmp_in_path)
+            os.unlink(tmp_out_path)
+            
+            return resized_data
+            
         except Exception as e:
             self.logger.error(f"图像分辨率调整失败: {e}")
             return image_data
@@ -432,7 +473,8 @@ class MediaProcessor:
             
             # 创建片段
             segment = {
-                'type': 'video_frame',
+                'id': str(uuid.uuid4()),
+                'segment_type': 'video_frame',
                 'data_path': frame_path,
                 'metadata': {
                     'start_time': start_time,

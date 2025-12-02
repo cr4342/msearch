@@ -163,7 +163,7 @@ class ProcessingOrchestrator:
         file_type = file_info['file_type']
         
         # 图像处理策略
-        if file_type in ['.jpg', '.jpeg', '.png', '.bmp', '.webp']:
+        if file_type in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.svg', '.heic', '.heif', '.ico']:
             return {
                 'modality': 'image',
                 'preprocessing': {
@@ -177,7 +177,7 @@ class ProcessingOrchestrator:
             }
         
         # 视频处理策略
-        elif file_type in ['.mp4', '.avi', '.mov']:
+        elif file_type in ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv']:
             return {
                 'modality': 'video',
                 'preprocessing': {
@@ -193,7 +193,7 @@ class ProcessingOrchestrator:
             }
         
         # 音频处理策略
-        elif file_type in ['.mp3', '.wav', '.flac']:
+        elif file_type in ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.opus', '.wma']:
             return {
                 'modality': 'audio',
                 'preprocessing': {
@@ -238,9 +238,12 @@ class ProcessingOrchestrator:
         
         # 根据策略进行向量化
         vectors = []
+        segment_metadata = []
         
+        collection_type = None
         if strategy['modality'] == 'image':
             # 图像向量化 - 从segments中获取图像数据
+            collection_type = 'visual'
             for segment in processed_data.get('segments', []):
                 if segment['segment_type'] == 'image':
                     # 读取图像文件数据
@@ -249,9 +252,11 @@ class ProcessingOrchestrator:
                     # 向量化
                     vector = await self.embedding_engine.embed_image(image_data)
                     vectors.append(vector)
+                    segment_metadata.append(segment)
         
         elif strategy['modality'] == 'video':
             # 视频帧向量化
+            collection_type = 'visual'
             for segment in processed_data.get('segments', []):
                 if segment['segment_type'] == 'video_frame':
                     # 读取视频帧文件数据
@@ -260,9 +265,11 @@ class ProcessingOrchestrator:
                     # 向量化
                     vector = await self.embedding_engine.embed_image(frame_data)
                     vectors.append(vector)
+                    segment_metadata.append(segment)
         
         elif strategy['modality'] == 'audio':
             # 音频向量化
+            collection_type = 'audio_music'
             for segment in processed_data.get('segments', []):
                 if segment['segment_type'] == 'audio':
                     # 读取音频文件数据
@@ -271,14 +278,42 @@ class ProcessingOrchestrator:
                     # 向量化
                     vector = await self.embedding_engine.embed_audio_music(audio_data)
                     vectors.append(vector)
+                    segment_metadata.append(segment)
         
-        # 存储向量结果
+        # 存储向量结果到本地SQLite数据库
         await self.db_adapter.store_vectors(
             file_id=file_info['id'],
             task_id=task_id,
             vectors=vectors,
             metadata=strategy['vectorization']
         )
+        
+        # 存储向量到Qdrant向量数据库
+        if vectors and collection_type:
+            # 准备向量数据
+            vectors_data = []
+            for i, (vector, metadata) in enumerate(zip(vectors, segment_metadata)):
+                vectors_data.append((
+                    vector,
+                    file_info['id'],
+                    metadata.get('id'),
+                    {
+                        'file_path': file_info['file_path'],
+                        'file_name': file_info['file_name'],
+                        'file_type': file_info['file_type'],
+                        'modality': strategy['modality'],
+                        'created_at': datetime.now().timestamp(),
+                        **metadata.get('metadata', {})
+                    }
+                ))
+            
+            # 批量存储向量到Qdrant
+            vector_ids = await self.embedding_engine.batch_store_vectors(
+                collection_type=collection_type,
+                vectors_data=vectors_data
+            )
+            
+            self.logger.debug(f"向量存储到Qdrant成功: {len(vector_ids)}个向量")
         
         self.logger.debug(f"文件向量化完成: {file_info['file_path']}")
     
