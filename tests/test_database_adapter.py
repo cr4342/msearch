@@ -101,7 +101,10 @@ def test_database_schema_creation():
             os.unlink(db_path)
 
 
-def test_file_operations():
+import pytest
+
+@pytest.mark.asyncio
+async def test_file_operations():
     """测试文件操作功能"""
     print("测试文件操作功能...")
     
@@ -126,19 +129,19 @@ def test_file_operations():
         }
         
         # 插入文件记录
-        db_adapter.insert_file(test_file)
+        await db_adapter.insert_file(test_file)
         
         # 验证插入成功
-        result = db_adapter.get_file(test_file['id'])
+        result = await db_adapter.get_file(test_file['id'])
         assert result is not None, "应该能找到插入的文件"
         assert result['file_path'] == test_file['file_path'], "文件路径应该匹配"
         assert result['file_name'] == test_file['file_name'], "文件名称应该匹配"
         
         # 测试更新文件状态
-        db_adapter.update_file_status(test_file['id'], 'processing')
+        await db_adapter.update_file_status(test_file['id'], 'processing')
         
         # 验证状态更新
-        updated_result = db_adapter.get_file(test_file['id'])
+        updated_result = await db_adapter.get_file(test_file['id'])
         assert updated_result['status'] == 'processing', "文件状态应该更新为processing"
         
         print("✓ 文件操作功能测试通过")
@@ -148,7 +151,8 @@ def test_file_operations():
             os.unlink(db_path)
 
 
-def test_task_operations():
+@pytest.mark.asyncio
+async def test_task_operations():
     """测试任务操作功能"""
     print("测试任务操作功能...")
     
@@ -171,29 +175,37 @@ def test_task_operations():
             'created_at': datetime.now().timestamp(),
             'modified_at': datetime.now().timestamp()
         }
-        db_adapter.insert_file(test_file)
+        await db_adapter.insert_file(test_file)
         
-        # 创建任务
-        task_id = db_adapter.create_task(
-            file_id=test_file['id'],
-            task_type='processing',
-            status='pending'
-        )
+        # 创建任务数据
+        task_data = {
+            'id': str(uuid.uuid4()),
+            'file_id': test_file['id'],
+            'task_type': 'processing',
+            'status': 'pending',
+            'progress': 0,
+            'created_at': datetime.now(),
+            'updated_at': datetime.now()
+        }
         
-        assert task_id is not None, "任务ID应该生成"
+        # 插入任务
+        await db_adapter.insert_task(task_data)
+        
+        assert task_data['id'] is not None, "任务ID应该生成"
         
         # 验证任务创建
-        task = db_adapter.get_task(task_id)
+        task = await db_adapter.get_task(task_data['id'])
         assert task is not None, "应该能找到创建的任务"
         assert task['task_type'] == 'processing', "任务类型应该正确"
         assert task['status'] == 'pending', "任务状态应该是pending"
         
-        # 测试更新任务状态
-        db_adapter.update_task_status(task_id, 'processing')
+        # 测试更新任务
+        await db_adapter.update_task(task_data['id'], {'status': 'processing', 'progress': 50})
         
         # 验证状态更新
-        updated_task = db_adapter.get_task(task_id)
+        updated_task = await db_adapter.get_task(task_data['id'])
         assert updated_task['status'] == 'processing', "任务状态应该更新为processing"
+        assert updated_task['progress'] == 50, "任务进度应该更新为50"
         
         print("✓ 任务操作功能测试通过")
         
@@ -236,7 +248,8 @@ def test_get_connection():
         db_adapter.db_path = original_path
 
 
-def test_get_pending_files():
+@pytest.mark.asyncio
+async def test_get_pending_files():
     """测试获取待处理文件"""
     print("测试获取待处理文件...")
     
@@ -286,16 +299,16 @@ def test_get_pending_files():
         ]
         
         for file_data in files_data:
-            db_adapter.insert_file(file_data)
+            await db_adapter.insert_file(file_data)
         
         # 获取待处理文件
-        pending_files = db_adapter.get_pending_files(limit=10)
+        pending_files = await db_adapter.get_pending_files(limit=10)
         
         assert len(pending_files) == 1, "应该只有1个待处理文件"
         assert pending_files[0]['file_type'] == '.jpg', "待处理文件应该是jpg文件"
         
         # 测试限制数量
-        limited_pending_files = db_adapter.get_pending_files(limit=1)
+        limited_pending_files = await db_adapter.get_pending_files(limit=1)
         assert len(limited_pending_files) == 1, "应该只返回1个文件"
         
         print("✓ 获取待处理文件测试通过")

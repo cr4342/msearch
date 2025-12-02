@@ -347,6 +347,9 @@ class DatabaseAdapter:
     async def insert_task(self, task_data: Dict[str, Any]) -> str:
         """插入任务记录"""
         try:
+            # 生成唯一ID（如果没有提供）
+            task_id = task_data.get('id', str(uuid.uuid4()))
+            
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
@@ -356,7 +359,7 @@ class DatabaseAdapter:
                         created_at, updated_at, retry_count, max_retry_attempts, retry_at
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    task_data['id'],
+                    task_id,
                     task_data['file_id'],
                     task_data['task_type'],
                     task_data['status'],
@@ -371,8 +374,8 @@ class DatabaseAdapter:
                 
                 conn.commit()
                 
-            self.logger.debug(f"任务记录插入成功: {task_data['id']}")
-            return task_data['id']
+            self.logger.debug(f"任务记录插入成功: {task_id}")
+            return task_id
             
         except Exception as e:
             self.logger.error(f"插入任务记录失败: {e}")

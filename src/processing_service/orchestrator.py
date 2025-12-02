@@ -242,7 +242,7 @@ class ProcessingOrchestrator:
         
         elif strategy['modality'] == 'audio':
             # 音频向量化
-            vector = await self.embedding_engine.embed_audio(processed_data['audio_data'])
+            vector = await self.embedding_engine.embed_audio_music(processed_data['audio_data'])
             vectors.append(vector)
         
         # 存储向量结果

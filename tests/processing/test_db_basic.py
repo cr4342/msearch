@@ -8,11 +8,13 @@ import os
 import tempfile
 import uuid
 from pathlib import Path
+import pytest
 
 from src.core.config_manager import ConfigManager
 from src.common.storage.database_adapter import DatabaseAdapter
 
 
+@pytest.mark.asyncio
 async def test_database_basic_operations():
     """测试数据库基础操作"""
     print("🧪 开始数据库基础功能测试")

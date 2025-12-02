@@ -6,7 +6,7 @@ system:
   data_dir: ./data
   temp_dir: ./temp
   monitored_directories:
-    - ./data/media
+    - /testdata
   supported_extensions:
     - .jpg
     - .jpeg

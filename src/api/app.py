@@ -74,8 +74,11 @@ async def lifespan(app: FastAPI):
 
 def create_app() -> FastAPI:
     """创建FastAPI应用"""
+    # 初始化配置管理器
+    config_manager = get_config_manager()
+    
     # 设置日志
-    setup_logging("INFO")
+    setup_logging(config_manager.get("system.log_level", "INFO"))
     logger = logging.getLogger(__name__)
     
     # 创建FastAPI应用

@@ -200,7 +200,7 @@ class TestConfigManager:
             with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
                 yaml.dump(self.test_config_data, f)
                 config_path = f.name
-            
+        
             try:
                 config_manager = ConfigManager(config_path)
                 assert config_manager.get('system.max_workers') == 8  # 整数转换

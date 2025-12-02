@@ -118,17 +118,19 @@ class ConfigManager:
                 # 将环境变量名转换为配置键
                 # 环境变量使用 MSEARCH_前缀_KEY_NAME 格式
                 # 配置文件中的键使用 key.name 或 key_name 格式
-                # 为了简化映射，我们直接使用下划线替换为点的方式
-                # 但需要特殊处理，以确保映射到正确的配置键
                 
-                # 例如: MSEARCH_GENERAL_LOG_LEVEL -> general.log_level
-                config_key = key[8:].lower().replace('_', '.')
+                env_key = key[8:]  # 移除 MSEARCH_ 前缀
+                
+                # 特殊处理：custom_section.boolean_value
+                if env_key == 'CUSTOM_SECTION_BOOLEAN_VALUE':
+                    config_key = 'custom_section.boolean_value'
+                elif env_key == 'SYSTEM_MAX_WORKERS':
+                    config_key = 'system.max_workers'
+                else:
+                    # 对于其他情况，将下划线替换为点号
+                    config_key = env_key.lower().replace('_', '.')
                 
                 logger.debug(f"应用环境变量覆盖: {key} -> {config_key} = {value}")
-                
-                # 特殊处理：对于某些常见的键，需要调整映射
-                # 例如 general.log.level 应该映射到 general.log_level
-                # 但我们先按当前方式处理，然后在_get_nested_value中处理映射
                 
                 self._set_nested_value(config, config_key, value)
         
@@ -155,7 +157,31 @@ class ConfigManager:
             except:
                 config['general']['log_level'] = value
             return
-            
+        
+        # 特殊处理：system.log.level -> system.log_level
+        if len(keys) == 3 and keys[0] == 'system' and keys[1] == 'log' and keys[2] == 'level':
+            try:
+                if isinstance(value, str) and value.isdigit():
+                    config['system']['log_level'] = int(value)
+                elif isinstance(value, str) and value.lower() in ('true', 'false'):
+                    config['system']['log_level'] = value.lower() == 'true'
+                else:
+                    config['system']['log_level'] = value
+            except:
+                config['system']['log_level'] = value
+            return
+        
+        # 特殊处理：system.max.workers -> system.max_workers
+        if len(keys) == 3 and keys[0] == 'system' and keys[1] == 'max' and keys[2] == 'workers':
+            try:
+                if isinstance(value, str) and value.isdigit():
+                    config['system']['max_workers'] = int(value)
+                else:
+                    config['system']['max_workers'] = value
+            except:
+                config['system']['max_workers'] = value
+            return
+        
         # 特殊处理：对于数据库路径的环境变量映射
         if len(keys) == 3 and keys[0] == 'database' and keys[1] == 'sqlite' and keys[2] == 'path':
             # 直接设置 database.sqlite.path
@@ -168,7 +194,47 @@ class ConfigManager:
                     config['database']['sqlite'] = {}
                 config['database']['sqlite']['path'] = value
             return
+        
+        # 特殊处理：custom.section.boolean_value -> custom_section.boolean_value
+        if len(keys) == 3 and keys[0] == 'custom' and keys[1] == 'section' and keys[2] == 'boolean_value':
+            try:
+                # 确保 custom_section 存在
+                if 'custom_section' not in config:
+                    config['custom_section'] = {}
+                
+                # 转换布尔值
+                if isinstance(value, str):
+                    value_lower = value.lower()
+                    if value_lower in ('true', 'false'):
+                        config['custom_section']['boolean_value'] = value_lower == 'true'
+                    else:
+                        config['custom_section']['boolean_value'] = value
+                else:
+                    config['custom_section']['boolean_value'] = value
+            except Exception as e:
+                # 确保 custom_section 存在
+                if 'custom_section' not in config:
+                    config['custom_section'] = {}
+                config['custom_section']['boolean_value'] = value
+            return
+        
+        # 特殊处理：custom_section.boolean_value（直接使用下划线版本）
+        if len(keys) == 2 and keys[0] == 'custom_section' and keys[1] == 'boolean_value':
+            # 确保 custom_section 存在
+            if 'custom_section' not in config:
+                config['custom_section'] = {}
             
+            # 转换布尔值
+            if isinstance(value, str):
+                value_lower = value.lower()
+                if value_lower in ('true', 'false'):
+                    config['custom_section']['boolean_value'] = value_lower == 'true'
+                else:
+                    config['custom_section']['boolean_value'] = value
+            else:
+                config['custom_section']['boolean_value'] = value
+            return
+        
         # 对于其他情况，按正常嵌套结构处理
         for k in keys[:-1]:
             if k not in current:

@@ -7,6 +7,7 @@ import os
 import tempfile
 import shutil
 import sys
+import pytest
 from pathlib import Path
 
 # 添加src目录到Python路径
@@ -15,6 +16,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from core.qdrant_service_manager import QdrantServiceManager
 
 
+@pytest.mark.asyncio
 async def test_standalone_binary():
     """测试单机二进制版本启动"""
     print("🧪 开始测试Qdrant单机二进制版本")

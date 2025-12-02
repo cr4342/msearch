@@ -382,14 +382,14 @@ download_models() {
     log_info "4. 下载AI模型..."
     
     # 创建模型目录结构
-    mkdir -p "$PROJECT_ROOT/offline/models"
+    mkdir -p "$PROJECT_ROOT/data/models"
     
     # 检查是否已有模型
     local models_exist=true
     local required_models=("clip-vit-base-patch32" "clap-htsat-fused" "whisper-base")
     
     for model in "${required_models[@]}"; do
-        if [ ! -d "$PROJECT_ROOT/offline/models/$model" ] || [ -z "$(ls -A "$PROJECT_ROOT/offline/models/$model" 2>/dev/null)" ]; then
+        if [ ! -d "$PROJECT_ROOT/data/models/$model" ] || [ -z "$(ls -A "$PROJECT_ROOT/data/models/$model" 2>/dev/null)" ]; then
             models_exist=false
             break
         fi
@@ -397,7 +397,7 @@ download_models() {
     
     if [ "$models_exist" = true ]; then
         log_info "所有模型已存在，验证完整性..."
-        local total_files=$(find "$PROJECT_ROOT/offline/models" -type f | wc -l)
+        local total_files=$(find "$PROJECT_ROOT/data/models" -type f | wc -l)
         if [ "$total_files" -gt 20 ]; then
             log_info "模型文件完整，跳过下载"
             return 0
@@ -423,17 +423,17 @@ download_models() {
     
     # 执行模型下载
     log_info "开始下载AI模型..."
-    python3 "$PROJECT_ROOT/offline/download_models.py" || {
+    python3 "$PROJECT_ROOT/data/download_models.py" || {
         log_warning "Python脚本下载失败，尝试使用huggingface-cli..."
         download_models_with_cli
     }
     
     # 验证下载结果
     log_info "验证模型下载结果..."
-    models_count=$(find "$PROJECT_ROOT/offline/models" -type f | wc -l)
+    models_count=$(find "$PROJECT_ROOT/data/models" -type f | wc -l)
     log_info "模型下载完成:"
     log_info "  - 模型文件数量: $models_count"
-    log_info "  - 保存位置: $PROJECT_ROOT/offline/models/"
+    log_info "  - 保存位置: $PROJECT_ROOT/data/models/"
     
     if [ "$models_count" -gt 20 ]; then
         log_info "模型下载完成！"
@@ -446,7 +446,7 @@ download_models() {
 
 # 创建模型下载脚本
 create_model_download_script() {
-    cat > "$PROJECT_ROOT/offline/download_models.py" << 'EOF'
+    cat > "$PROJECT_ROOT/data/download_models.py" << 'EOF'
 #!/usr/bin/env python3
 """
 稳定的模型下载脚本
@@ -515,15 +515,15 @@ def main():
     models = [
         {
             "repo_id": "openai/clip-vit-base-patch32",
-            "local_path": "offline/models/clip-vit-base-patch32"
+            "local_path": "data/models/clip-vit-base-patch32"
         },
         {
             "repo_id": "laion/clap-htsat-fused", 
-            "local_path": "offline/models/clap-htsat-fused"
+            "local_path": "data/models/clap-htsat-fused"
         },
         {
             "repo_id": "openai/whisper-base",
-            "local_path": "offline/models/whisper-base"
+            "local_path": "data/models/whisper-base"
         }
     ]
     
@@ -546,7 +546,7 @@ if __name__ == "__main__":
     sys.exit(main())
 EOF
     
-    chmod +x "$PROJECT_ROOT/offline/download_models.py"
+    chmod +x "$PROJECT_ROOT/data/download_models.py"
 }
 
 # 使用CLI下载模型（备用方案）
@@ -559,7 +559,7 @@ download_models_with_cli() {
         openai/clip-vit-base-patch32 \
         --resume-download \
         --local-dir-use-symlinks False \
-        --local-dir "$PROJECT_ROOT/offline/models/clip-vit-base-patch32" || {
+        --local-dir "$PROJECT_ROOT/data/models/clip-vit-base-patch32" || {
             log_warning "CLIP模型下载失败"
         }
     
@@ -569,7 +569,7 @@ download_models_with_cli() {
         laion/clap-htsat-fused \
         --resume-download \
         --local-dir-use-symlinks False \
-        --local-dir "$PROJECT_ROOT/offline/models/clap-htsat-fused" || {
+        --local-dir "$PROJECT_ROOT/data/models/clap-htsat-fused" || {
             log_warning "CLAP模型下载失败"
         }
     
@@ -579,7 +579,7 @@ download_models_with_cli() {
         openai/whisper-base \
         --resume-download \
         --local-dir-use-symlinks False \
-        --local-dir "$PROJECT_ROOT/offline/models/whisper-base" || {
+        --local-dir "$PROJECT_ROOT/data/models/whisper-base" || {
             log_warning "Whisper模型下载失败"
         }
 }
@@ -947,16 +947,17 @@ main() {
     
     # 验证下载结果
     log_info "8. 验证下载结果..."
-    if [ -d "$PROJECT_ROOT/offline/bin" ] && [ -d "$PROJECT_ROOT/offline/packages" ] && [ -d "$PROJECT_ROOT/offline/models" ]; then
+    if [ -d "$PROJECT_ROOT/offline/bin" ] && [ -d "$PROJECT_ROOT/offline/packages" ] && [ -d "$PROJECT_ROOT/data/models" ]; then
         bin_count=$(find "$PROJECT_ROOT/offline/bin" -type f 2>/dev/null | wc -l)
         packages_count=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" 2>/dev/null | wc -l)
-        models_count=$(find "$PROJECT_ROOT/offline/models" -type f 2>/dev/null | wc -l)
+        models_count=$(find "$PROJECT_ROOT/data/models" -type f 2>/dev/null | wc -l)
         
         log_info "离线资源下载完成:"
         log_info "  - 二进制文件数量: $bin_count"
         log_info "  - 依赖包数量: $packages_count"
         log_info "  - 模型文件数量: $models_count"
-        log_info "  - 保存位置: $PROJECT_ROOT/offline/"
+        log_info "  - 二进制文件和依赖包保存位置: $PROJECT_ROOT/offline/"
+        log_info "  - 模型保存位置: $PROJECT_ROOT/data/models/"
         
         log_info "所有离线资源下载脚本执行完成！"
         log_info ""

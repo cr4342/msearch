@@ -96,7 +96,7 @@ temp/
 # Deployment test directory
 deployment_test/
 release/
-
+/data/
 # IDE files
 *.swp
 *.swo

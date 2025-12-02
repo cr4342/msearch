@@ -58,7 +58,7 @@ class MainWindow(QMainWindow):
         
         # 初始化配置和日志
         self.config_manager = get_config_manager()
-        setup_logging("INFO")
+        setup_logging(self.config_manager.get("system.log_level", "INFO"))
         self.logger = logging.getLogger(__name__)
         
         # 窗口属性
