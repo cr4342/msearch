@@ -153,7 +153,7 @@ download_qdrant() {
     log_info "1. 下载Qdrant向量数据库..."
     
     # 创建目录
-    mkdir -p "$PROJECT_ROOT/offline/bin"
+    mkdir -p "$PROJECT_ROOT/temp/bin"
     
     QDRANT_VERSION="1.11.3"
     QDRANT_URL="https://github.com/qdrant/qdrant/releases/download/v${QDRANT_VERSION}/${QDRANT_FILENAME}"
@@ -166,18 +166,18 @@ download_qdrant() {
     
     # 尝试使用wget下载
     if command -v wget &> /dev/null; then
-        wget --timeout=60 --tries=3 -O "$PROJECT_ROOT/offline/bin/${QDRANT_FILENAME}" "$QDRANT_PROXY_URL" || \
-        wget --timeout=60 --tries=3 -O "$PROJECT_ROOT/offline/bin/${QDRANT_FILENAME}" "$QDRANT_URL"
+        wget --timeout=60 --tries=3 -O "$PROJECT_ROOT/temp/bin/${QDRANT_FILENAME}" "$QDRANT_PROXY_URL" || \
+        wget --timeout=60 --tries=3 -O "$PROJECT_ROOT/temp/bin/${QDRANT_FILENAME}" "$QDRANT_URL"
     elif command -v curl &> /dev/null; then
-        curl --connect-timeout 60 --retry 3 -L -o "$PROJECT_ROOT/offline/bin/${QDRANT_FILENAME}" "$QDRANT_PROXY_URL" || \
-        curl --connect-timeout 60 --retry 3 -L -o "$PROJECT_ROOT/offline/bin/${QDRANT_FILENAME}" "$QDRANT_URL"
+        curl --connect-timeout 60 --retry 3 -L -o "$PROJECT_ROOT/temp/bin/${QDRANT_FILENAME}" "$QDRANT_PROXY_URL" || \
+        curl --connect-timeout 60 --retry 3 -L -o "$PROJECT_ROOT/temp/bin/${QDRANT_FILENAME}" "$QDRANT_URL"
     else
         log_error "未找到wget或curl命令"
         return 1
     fi
     
     # 解压文件
-    cd "$PROJECT_ROOT/offline/bin"
+    cd "$PROJECT_ROOT/temp/bin"
     if [ "$FILE_EXT" = "tar.gz" ]; then
         tar -xzf "${QDRANT_FILENAME}"
     elif [ "$FILE_EXT" = "zip" ]; then
@@ -188,7 +188,7 @@ download_qdrant() {
     rm "${QDRANT_FILENAME}"
     
     # 添加执行权限
-    chmod +x "$PROJECT_ROOT/offline/bin/qdrant"
+    chmod +x "$PROJECT_ROOT/temp/bin/qdrant"
     
     log_info "Qdrant二进制文件下载并解压成功！"
     return 0
@@ -198,25 +198,25 @@ download_qdrant() {
 download_dependencies() {
     log_info "2. 下载Python依赖包..."
     
-    # 创建offline目录结构
-    mkdir -p "$PROJECT_ROOT/offline/packages"
+    # 创建temp目录结构
+    mkdir -p "$PROJECT_ROOT/temp/packages"
     
     # 检查是否已有足够的包
-    existing_packages=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" | wc -l)
+    existing_packages=$(find "$PROJECT_ROOT/temp/packages" -type f -name "*.whl" | wc -l)
     if [ "$existing_packages" -gt 100 ]; then
         log_info "检测到已有 $existing_packages 个包，跳过基础依赖下载"
     else
         # 下载requirements.txt中列出的所有依赖包（使用国内镜像优化）
         log_info "下载requirements.txt中所有依赖包..."
         pip download -r "$PROJECT_ROOT/requirements.txt" \
-            --dest "$PROJECT_ROOT/offline/packages" \
+            --dest "$PROJECT_ROOT/temp/packages" \
             --disable-pip-version-check \
             -i https://pypi.tuna.tsinghua.edu.cn/simple \
             --timeout 60 \
             --retries 3 || {
                 log_warning "使用默认PyPI源重试..."
                 pip download -r "$PROJECT_ROOT/requirements.txt" \
-                    --dest "$PROJECT_ROOT/offline/packages" \
+                    --dest "$PROJECT_ROOT/temp/packages" \
                     --disable-pip-version-check \
                     --timeout 60 \
                     --retries 3
@@ -230,32 +230,33 @@ download_dependencies() {
     # 特别处理inaSpeechSegmenter包（可能需要额外依赖）
     log_info "特别处理inaSpeechSegmenter包..."
     pip download inaspeechsegmenter \
-        --dest "$PROJECT_ROOT/offline/packages" \
+        --dest "$PROJECT_ROOT/temp/packages" \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         --timeout 60 \
         --retries 3 || {
             log_warning "使用默认PyPI源重试..."
             pip download inaspeechsegmenter \
-                --dest "$PROJECT_ROOT/offline/packages" \
+                --dest "$PROJECT_ROOT/temp/packages" \
                 --disable-pip-version-check \
                 --timeout 60 \
                 --retries 3
         }
     
     # 验证下载结果
-    requirements_count=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" | wc -l)
+    requirements_count=$(find "$PROJECT_ROOT/temp/packages" -type f -name "*.whl" | wc -l)
     log_info "依赖包下载完成:"
     log_info "  - Wheel文件数量: $requirements_count"
-    log_info "  - 保存位置: $PROJECT_ROOT/offline/packages/"
+    log_info "  - 保存位置: $PROJECT_ROOT/temp/packages/"
     
     # 检查关键依赖包是否下载成功
     key_packages=("torch" "transformers" "fastapi" "qdrant-client" "inaspeechsegmenter" "infinity_emb")
     missing_packages=()
     
     for package in "${key_packages[@]}"; do
-        if ! find "$PROJECT_ROOT/offline/packages" -type f -name "*${package}*" | grep -q .; then
-            missing_packages+=("$package")
+        if ! find "$PROJECT_ROOT/temp/packages" -type f -name "*${package}*" | grep -q .; then
+            missing_packages+=(
+"$package")
         fi
     done
     
@@ -311,7 +312,7 @@ download_infinity_emb_compatible() {
     # 下载兼容的infinity-emb版本
     log_info "下载infinity-emb基础版本..."
     pip download "infinity-emb==0.0.76" \
-        --dest "$PROJECT_ROOT/offline/packages" \
+        --dest "$PROJECT_ROOT/temp/packages" \
         --no-deps \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
@@ -319,7 +320,7 @@ download_infinity_emb_compatible() {
         --retries 3 || {
             log_warning "使用默认PyPI源重试..."
             pip download "infinity-emb==0.0.76" \
-                --dest "$PROJECT_ROOT/offline/packages" \
+                --dest "$PROJECT_ROOT/temp/packages" \
                 --no-deps \
                 --disable-pip-version-check \
                 --timeout 60 \
@@ -329,14 +330,14 @@ download_infinity_emb_compatible() {
     # 下载兼容的optimum版本（不包含bettertransformer）
     log_info "下载兼容的optimum版本..."
     pip download "optimum>=1.14.0,<2.0.0" \
-        --dest "$PROJECT_ROOT/offline/packages" \
+        --dest "$PROJECT_ROOT/temp/packages" \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         --timeout 60 \
         --retries 3 || {
             log_warning "optimum下载失败，尝试下载特定版本..."
             pip download "optimum==1.21.4" \
-                --dest "$PROJECT_ROOT/offline/packages" \
+                --dest "$PROJECT_ROOT/temp/packages" \
                 --disable-pip-version-check \
                 -i https://pypi.tuna.tsinghua.edu.cn/simple \
                 --timeout 60 \
@@ -346,7 +347,7 @@ download_infinity_emb_compatible() {
     # 下载sentence-transformers兼容版本
     log_info "下载sentence-transformers兼容版本..."
     pip download "sentence-transformers>=3.0.0,<4.0.0" \
-        --dest "$PROJECT_ROOT/offline/packages" \
+        --dest "$PROJECT_ROOT/temp/packages" \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         --timeout 60 \
@@ -365,7 +366,7 @@ download_infinity_emb_compatible() {
     for dep in "${infinity_deps[@]}"; do
         log_info "下载infinity-emb依赖: $dep"
         pip download "$dep" \
-            --dest "$PROJECT_ROOT/offline/packages" \
+            --dest "$PROJECT_ROOT/temp/packages" \
             --disable-pip-version-check \
             -i https://pypi.tuna.tsinghua.edu.cn/simple \
             --timeout 60 \
@@ -626,64 +627,64 @@ check_offline_resources() {
 }
 
 # 安装离线依赖包
-install_offline_packages() {
-    echo -e "${BLUE}安装离线依赖包...${NC}"
-    
-    # 升级pip
-    python3 -m pip install --upgrade pip || true
-    
-    # 安装基础依赖（不使用网络）
-    echo -e "${GREEN}安装基础依赖包...${NC}"
-    python3 -m pip install \
-        --no-index \
-        --find-links="$PROJECT_ROOT/offline/packages" \
-        --force-reinstall \
-        --no-deps \
-        wheel setuptools || true
-    
-    # 安装核心依赖
-    echo -e "${GREEN}安装核心依赖包...${NC}"
-    local core_packages=(
-        "numpy"
-        "torch"
-        "torchvision" 
-        "transformers"
-        "fastapi"
-        "uvicorn"
-        "pydantic"
-        "sqlalchemy"
-        "qdrant-client"
-    )
-    
-    for package in "${core_packages[@]}"; do
-        echo -e "${BLUE}安装 $package...${NC}"
+    install_offline_packages() {
+        echo -e "${BLUE}安装离线依赖包...${NC}"
+        
+        # 升级pip
+        python3 -m pip install --upgrade pip || true
+        
+        # 安装基础依赖（不使用网络）
+        echo -e "${GREEN}安装基础依赖包...${NC}"
         python3 -m pip install \
             --no-index \
-            --find-links="$PROJECT_ROOT/offline/packages" \
-            "$package" || {
-                echo -e "${YELLOW}警告：$package 安装失败${NC}"
+            --find-links="$PROJECT_ROOT/temp/packages" \
+            --force-reinstall \
+            --no-deps \
+            wheel setuptools || true
+        
+        # 安装核心依赖
+        echo -e "${GREEN}安装核心依赖包...${NC}"
+        local core_packages=(
+            "numpy"
+            "torch"
+            "torchvision" 
+            "transformers"
+            "fastapi"
+            "uvicorn"
+            "pydantic"
+            "sqlalchemy"
+            "qdrant-client"
+        )
+        
+        for package in "${core_packages[@]}"; do
+            echo -e "${BLUE}安装 $package...${NC}"
+            python3 -m pip install \
+                --no-index \
+                --find-links="$PROJECT_ROOT/temp/packages" \
+                "$package" || {
+                    echo -e "${YELLOW}警告：$package 安装失败${NC}"
+                }
+        done
+        
+        # 特别处理infinity-emb
+        echo -e "${GREEN}安装infinity-emb兼容版本...${NC}"
+        python3 -m pip install \
+            --no-index \
+            --find-links="$PROJECT_ROOT/temp/packages" \
+            --force-reinstall \
+            "infinity-emb==0.0.76" || {
+                echo -e "${YELLOW}警告：infinity-emb安装失败${NC}"
             }
-    done
-    
-    # 特别处理infinity-emb
-    echo -e "${GREEN}安装infinity-emb兼容版本...${NC}"
-    python3 -m pip install \
-        --no-index \
-        --find-links="$PROJECT_ROOT/offline/packages" \
-        --force-reinstall \
-        "infinity-emb==0.0.76" || {
-            echo -e "${YELLOW}警告：infinity-emb安装失败${NC}"
-        }
-    
-    # 安装其他依赖
-    echo -e "${GREEN}安装其他依赖包...${NC}"
-    python3 -m pip install \
-        --no-index \
-        --find-links="$PROJECT_ROOT/offline/packages" \
-        --requirement "$PROJECT_ROOT/requirements.txt" || {
-            echo -e "${YELLOW}警告：部分依赖安装失败，但继续执行${NC}"
-        }
-}
+        
+        # 安装其他依赖
+        echo -e "${GREEN}安装其他依赖包...${NC}"
+        python3 -m pip install \
+            --no-index \
+            --find-links="$PROJECT_ROOT/temp/packages" \
+            --requirement "$PROJECT_ROOT/requirements.txt" || {
+                echo -e "${YELLOW}警告：部分依赖安装失败，但继续执行${NC}"
+            }
+    }
 
 # 验证安装
 verify_installation() {
@@ -769,36 +770,36 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # 设置Qdrant数据目录
-export QDRANT_DATA_DIR="$PROJECT_ROOT/offline/qdrant_data"
-mkdir -p "$QDRANT_DATA_DIR"
+    export QDRANT_DATA_DIR="$PROJECT_ROOT/data/qdrant"
+    mkdir -p "$QDRANT_DATA_DIR"
 
 # 使用离线下载的Qdrant二进制文件
-if [ -f "$PROJECT_ROOT/offline/bin/qdrant" ]; then
-    echo "使用离线Qdrant二进制文件启动服务..."
-    "$PROJECT_ROOT/offline/bin/qdrant" --config-path "$PROJECT_ROOT/config/qdrant.yml" &
-    QDRANT_PID=$!
-else
-    echo "离线Qdrant二进制文件不存在，尝试使用系统安装的qdrant..."
-    if command -v qdrant &> /dev/null; then
-        qdrant --config-path "$PROJECT_ROOT/config/qdrant.yml" &
+    if [ -f "$PROJECT_ROOT/temp/bin/qdrant" ]; then
+        echo "使用离线Qdrant二进制文件启动服务..."
+        "$PROJECT_ROOT/temp/bin/qdrant" --config-path "$PROJECT_ROOT/config/qdrant.yml" &
         QDRANT_PID=$!
     else
-        echo -e "${YELLOW}警告：未找到Qdrant二进制文件，尝试使用Docker...${NC}"
-        if command -v docker &> /dev/null; then
-            docker run -d \
-                --name qdrant-msearch \
-                -p 6333:6333 \
-                -p 6334:6334 \
-                -v "$QDRANT_DATA_DIR:/qdrant/storage" \
-                qdrant/qdrant:latest
-            echo "Qdrant Docker容器已启动"
-            return 0
+        echo "离线Qdrant二进制文件不存在，尝试使用系统安装的qdrant..."
+        if command -v qdrant &> /dev/null; then
+            qdrant --config-path "$PROJECT_ROOT/config/qdrant.yml" &
+            QDRANT_PID=$!
         else
-            echo "错误：未找到Qdrant二进制文件或Docker"
-            exit 1
+            echo -e "${YELLOW}警告：未找到Qdrant二进制文件，尝试使用Docker...${NC}"
+            if command -v docker &> /dev/null; then
+                docker run -d \
+                    --name qdrant-msearch \
+                    -p 6333:6333 \
+                    -p 6334:6334 \
+                    -v "$QDRANT_DATA_DIR:/qdrant/storage" \
+                    qdrant/qdrant:latest
+                echo "Qdrant Docker容器已启动"
+                return 0
+            else
+                echo "错误：未找到Qdrant二进制文件或Docker"
+                exit 1
+            fi
         fi
     fi
-fi
 
 # 保存PID文件
 echo $QDRANT_PID > /tmp/qdrant.pid
@@ -874,11 +875,11 @@ python3 -m pip uninstall infinity-emb -y || true
 
 # 安装兼容版本
 echo -e "${YELLOW}安装兼容版本的infinity-emb...${NC}"
-if [ -d "$PROJECT_ROOT/offline/packages" ]; then
+if [ -d "$PROJECT_ROOT/temp/packages" ]; then
     # 使用离线包
     python3 -m pip install \
         --no-index \
-        --find-links="$PROJECT_ROOT/offline/packages" \
+        --find-links="$PROJECT_ROOT/temp/packages" \
         --force-reinstall \
         "infinity-emb==0.0.76"
 else
@@ -900,10 +901,10 @@ local deps=(
 )
 
 for dep in "${deps[@]}"; do
-    if [ -d "$PROJECT_ROOT/offline/packages" ]; then
+    if [ -d "$PROJECT_ROOT/temp/packages" ]; then
         python3 -m pip install \
             --no-index \
-            --find-links="$PROJECT_ROOT/offline/packages" \
+            --find-links="$PROJECT_ROOT/temp/packages" \
             "$dep" || echo -e "${YELLOW}警告：$dep 安装失败${NC}"
     else
         python3 -m pip install "$dep" || echo -e "${YELLOW}警告：$dep 安装失败${NC}"
@@ -947,16 +948,16 @@ main() {
     
     # 验证下载结果
     log_info "8. 验证下载结果..."
-    if [ -d "$PROJECT_ROOT/offline/bin" ] && [ -d "$PROJECT_ROOT/offline/packages" ] && [ -d "$PROJECT_ROOT/data/models" ]; then
-        bin_count=$(find "$PROJECT_ROOT/offline/bin" -type f 2>/dev/null | wc -l)
-        packages_count=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" 2>/dev/null | wc -l)
+    if [ -d "$PROJECT_ROOT/temp/bin" ] && [ -d "$PROJECT_ROOT/temp/packages" ] && [ -d "$PROJECT_ROOT/data/models" ]; then
+        bin_count=$(find "$PROJECT_ROOT/temp/bin" -type f 2>/dev/null | wc -l)
+        packages_count=$(find "$PROJECT_ROOT/temp/packages" -type f -name "*.whl" 2>/dev/null | wc -l)
         models_count=$(find "$PROJECT_ROOT/data/models" -type f 2>/dev/null | wc -l)
         
         log_info "离线资源下载完成:"
         log_info "  - 二进制文件数量: $bin_count"
         log_info "  - 依赖包数量: $packages_count"
         log_info "  - 模型文件数量: $models_count"
-        log_info "  - 二进制文件和依赖包保存位置: $PROJECT_ROOT/offline/"
+        log_info "  - 二进制文件和依赖包保存位置: $PROJECT_ROOT/temp/"
         log_info "  - 模型保存位置: $PROJECT_ROOT/data/models/"
         
         log_info "所有离线资源下载脚本执行完成！"

@@ -50,8 +50,8 @@ class EmbeddingEngine:
                 try:
                     device = clip_config.get('device', device)
                     
-                    # 必须使用本地模型
-                    local_model_path = os.path.join('data', 'models', 'clip-vit-base-patch32')
+                    # 从配置文件获取模型路径，默认使用data/models/clip
+                    local_model_path = clip_config.get('model_path', os.path.join('data', 'models', 'clip'))
                     if os.path.exists(local_model_path) and os.path.isdir(local_model_path):
                         model_path = local_model_path
                         self.logger.info(f"使用本地CLIP模型: {model_path}")
@@ -78,8 +78,8 @@ class EmbeddingEngine:
                 try:
                     device = clap_config.get('device', device)
                     
-                    # 必须使用本地模型
-                    local_model_path = os.path.join('data', 'models', 'clap-htsat-fused')
+                    # 从配置文件获取模型路径，默认使用data/models/clap
+                    local_model_path = clap_config.get('model_path', os.path.join('data', 'models', 'clap'))
                     if os.path.exists(local_model_path) and os.path.isdir(local_model_path):
                         model_path = local_model_path
                         self.logger.info(f"使用本地CLAP模型: {model_path}")
@@ -106,8 +106,8 @@ class EmbeddingEngine:
                 try:
                     device = whisper_config.get('device', 'cpu')  # Whisper默认使用CPU
                     
-                    # 必须使用本地模型
-                    local_model_path = os.path.join('data', 'models', 'whisper-base')
+                    # 从配置文件获取模型路径，默认使用data/models/whisper
+                    local_model_path = whisper_config.get('model_path', os.path.join('data', 'models', 'whisper'))
                     if os.path.exists(local_model_path) and os.path.isdir(local_model_path):
                         model_path = local_model_path
                         self.logger.info(f"使用本地Whisper模型: {model_path}")

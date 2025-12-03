@@ -3,11 +3,8 @@
 负责多模态检索、结果排序
 """
 
-import asyncio
 import logging
-import re
-from typing import Dict, Any, List, Optional, Tuple
-import numpy as np
+from typing import Dict, Any, List, Optional
 
 from src.common.storage.database_adapter import DatabaseAdapter
 from src.common.embedding.embedding_engine import EmbeddingEngine
@@ -81,13 +78,14 @@ class SmartRetrievalEngine:
         self.is_running = False
         self.logger.info("智能检索引擎已停止")
     
-    async def search(self, query: str, query_type: str = "text", top_k: int = 10, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+    async def search(self, text: Optional[str] = None, image: Optional[bytes] = None, audio: Optional[bytes] = None, top_k: int = 10, filters: Dict[str, Any] = None) -> List[Dict[str, Any]]:
         """
-        执行检索
+        执行多模态混合检索
         
         Args:
-            query: 查询内容（文本或二进制数据）
-            query_type: 查询类型（text, image, audio）
+            text: 文本查询内容
+            image: 图像查询数据（二进制）
+            audio: 音频查询数据（二进制）
             top_k: 返回结果数量
             filters: 过滤条件
             
@@ -95,16 +93,22 @@ class SmartRetrievalEngine:
             检索结果列表
         """
         try:
-            self.logger.info(f"执行检索: type={query_type}, top_k={top_k}")
+            # 检查是否有查询输入
+            if not text and not image and not audio:
+                self.logger.info("无查询输入，返回空结果")
+                return []
             
-            # 识别查询类型
-            query_intent = self._identify_query_intent(query, query_type)
+            self.logger.info(f"执行多模态检索: text={bool(text)}, image={bool(image)}, audio={bool(audio)}, top_k={top_k}")
             
-            # 根据查询意图选择权重
+            # 识别查询类型和意图
+            query_types = self._get_query_types(text, image, audio)
+            query_intent = self._identify_query_intent(text, query_types)
+            
+            # 根据查询类型和意图选择权重
             weights = self._get_weights_by_intent(query_intent)
             
             # 执行多模态检索
-            results = await self._multimodal_search(query, query_type, weights, top_k, filters)
+            results = await self._multimodal_search(text, image, audio, query_types, weights, top_k, filters)
             
             # 结果融合和排序
             fused_results = self._fuse_results(results, weights)
@@ -120,25 +124,59 @@ class SmartRetrievalEngine:
             self.logger.error(f"检索失败: {e}")
             return []
     
-    def _identify_query_intent(self, query: str, query_type: str) -> str:
-        """识别查询意图"""
-        if query_type != "text":
-            return query_type
+    def _get_query_types(self, text: Optional[str], image: Optional[bytes], audio: Optional[bytes]) -> Dict[str, bool]:
+        """
+        获取查询类型字典
         
-        query_lower = query.lower()
+        Args:
+            text: 文本查询内容
+            image: 图像查询数据
+            audio: 音频查询数据
+            
+        Returns:
+            查询类型字典，包含text、image、audio的布尔值
+        """
+        return {
+            'text': bool(text),
+            'image': bool(image),
+            'audio': bool(audio)
+        }
+    
+    def _identify_query_intent(self, text: Optional[str], query_types: Dict[str, bool]) -> str:
+        """
+        识别查询意图
         
-        # 先检测其他类型的查询，最后检测人名查询
-        # 音频查询检测
-        if self._is_audio_query(query_lower):
-            return "audio"
-        
-        # 视觉查询检测
-        if self._is_visual_query(query_lower):
+        Args:
+            text: 文本查询内容
+            query_types: 查询类型字典
+            
+        Returns:
+            查询意图字符串
+        """
+        # 如果只有图像输入，返回visual
+        if query_types['image'] and not query_types['text'] and not query_types['audio']:
             return "visual"
         
-        # 最后检测人名查询
-        if self._is_person_query(query):
-            return "person"
+        # 如果只有音频输入，返回audio
+        if query_types['audio'] and not query_types['text'] and not query_types['image']:
+            return "audio"
+        
+        # 如果有文本输入，分析文本内容
+        if query_types['text']:
+            query_lower = text.lower()
+            
+            # 先检测其他类型的查询，最后检测人名查询
+            # 音频查询检测
+            if self._is_audio_query(query_lower):
+                return "audio"
+            
+            # 视觉查询检测
+            if self._is_visual_query(query_lower):
+                return "visual"
+            
+            # 最后检测人名查询
+            if self._is_person_query(text):
+                return "person"
         
         # 默认通用查询
         return "general"
@@ -191,25 +229,57 @@ class SmartRetrievalEngine:
         else:
             return self.default_weights
     
-    async def _multimodal_search(self, query: str, query_type: str, weights: Dict[str, float], top_k: int, filters: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
-        """执行多模态检索"""
+    async def _multimodal_search(self, text: Optional[str], image: Optional[bytes], audio: Optional[bytes], query_types: Dict[str, bool], weights: Dict[str, float], top_k: int, filters: Dict[str, Any]) -> Dict[str, List[Dict[str, Any]]]:
+        """
+        执行多模态检索
+        
+        Args:
+            text: 文本查询内容
+            image: 图像查询数据
+            audio: 音频查询数据
+            query_types: 查询类型字典
+            weights: 模型权重字典
+            top_k: 返回结果数量
+            filters: 过滤条件
+            
+        Returns:
+            多模态检索结果字典
+        """
         results = {}
         
         try:
             # CLIP模型检索（视觉模态）
             if weights.get('clip', 0) > 0:
-                clip_results = await self._search_with_clip(query, query_type, top_k, filters)
-                results['clip'] = clip_results
+                # 处理图像输入
+                if query_types['image']:
+                    clip_results = await self._search_with_clip(image, "image", top_k, filters)
+                    results['clip'] = clip_results
+                # 处理文本输入（视觉相关）
+                elif query_types['text']:
+                    clip_results = await self._search_with_clip(text, "text", top_k, filters)
+                    results['clip'] = clip_results
             
             # CLAP模型检索（音频模态）
             if weights.get('clap', 0) > 0 and 'clap' in self.embedding_engine.get_available_models():
-                clap_results = await self._search_with_clap(query, query_type, top_k, filters)
-                results['clap'] = clap_results
+                # 处理音频输入
+                if query_types['audio']:
+                    clap_results = await self._search_with_clap(audio, "audio", top_k, filters)
+                    results['clap'] = clap_results
+                # 处理文本输入（音频相关）
+                elif query_types['text']:
+                    clap_results = await self._search_with_clap(text, "text", top_k, filters)
+                    results['clap'] = clap_results
             
             # Whisper模型检索（语音模态）
             if weights.get('whisper', 0) > 0 and 'whisper' in self.embedding_engine.get_available_models():
-                whisper_results = await self._search_with_whisper(query, query_type, top_k, filters)
-                results['whisper'] = whisper_results
+                # 处理音频输入
+                if query_types['audio']:
+                    whisper_results = await self._search_with_whisper(audio, "audio", top_k, filters)
+                    results['whisper'] = whisper_results
+                # 处理文本输入（语音相关）
+                elif query_types['text']:
+                    whisper_results = await self._search_with_whisper(text, "text", top_k, filters)
+                    results['whisper'] = whisper_results
         
         except Exception as e:
             self.logger.error(f"多模态检索失败: {e}")

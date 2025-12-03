@@ -563,7 +563,7 @@ class QdrantAdapter:
                 
                 # 创建点数据
                 point = PointStruct(
-                    id=uuid.UUID(vector_id),
+                    id=vector_id,
                     vector=vector_data.tolist(),
                     payload=payload
                 )

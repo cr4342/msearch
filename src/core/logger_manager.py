@@ -34,11 +34,13 @@ class LoggerManager:
             cls._instance = super().__new__(cls)
         return cls._instance
     
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_manager=None, config_path: Optional[str] = None):
         """初始化日志管理器"""
         if self._initialized:
             return
             
+        from src.core.config_manager import get_config_manager
+        self.config_manager = config_manager or get_config_manager()
         self.config_path = config_path
         self.config = self._load_config()
         self.loggers: Dict[str, logging.Logger] = {}
@@ -48,6 +50,12 @@ class LoggerManager:
     
     def _load_config(self) -> dict:
         """加载日志配置"""
+        # 从全局配置管理器获取日志配置
+        logging_config = self.config_manager.get("logging", {})
+        if logging_config:
+            return logging_config
+        
+        # 如果没有配置，使用默认配置
         if self.config_path and os.path.exists(self.config_path):
             try:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
@@ -137,7 +145,19 @@ class LoggerManager:
                 )
             
             # 检测磁盘空间
-            log_dir = Path('./data/logs')
+            # 从日志配置中获取日志目录
+            handlers_config = self.config.get('handlers', {})
+            log_dir = None
+            for handler_config in handlers_config.values():
+                if 'path' in handler_config:
+                    log_path = Path(handler_config['path'])
+                    log_dir = log_path.parent
+                    break
+            
+            # 默认使用./data/logs
+            if log_dir is None:
+                log_dir = Path('./data/logs')
+            
             if log_dir.exists():
                 disk_usage = psutil.disk_usage(str(log_dir))
                 free_space_gb = disk_usage.free / (1024**3)
@@ -375,22 +395,34 @@ class LoggerManager:
     def cleanup_old_logs(self, days: int = 30):
         """清理旧日志文件"""
         try:
-            log_dir = Path('./data/logs')
-            if not log_dir.exists():
-                return
+            # 从日志配置中获取日志目录
+            handlers_config = self.config.get('handlers', {})
+            log_dirs = set()
+            for handler_config in handlers_config.values():
+                if 'path' in handler_config:
+                    log_path = Path(handler_config['path'])
+                    log_dirs.add(log_path.parent)
+            
+            # 如果没有配置，使用默认目录
+            if not log_dirs:
+                log_dirs.add(Path('./data/logs'))
             
             import time
             cutoff_time = time.time() - (days * 24 * 60 * 60)
             
             cleaned_files = []
-            for log_file in log_dir.glob('*.log*'):
-                if log_file.stat().st_mtime < cutoff_time:
-                    file_size = log_file.stat().st_size
-                    log_file.unlink()
-                    cleaned_files.append({
-                        'file': str(log_file),
-                        'size_mb': round(file_size / (1024 * 1024), 2)
-                    })
+            for log_dir in log_dirs:
+                if not log_dir.exists():
+                    continue
+                
+                for log_file in log_dir.glob('*.log*'):
+                    if log_file.stat().st_mtime < cutoff_time:
+                        file_size = log_file.stat().st_size
+                        log_file.unlink()
+                        cleaned_files.append({
+                            'file': str(log_file),
+                            'size_mb': round(file_size / (1024 * 1024), 2)
+                        })
             
             if cleaned_files:
                 total_size = sum(f['size_mb'] for f in cleaned_files)

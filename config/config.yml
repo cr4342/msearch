@@ -156,22 +156,25 @@ infinity:
   services:
     clip:
       model_id: openai/clip-vit-base-patch32
+      model_path: data/models/clip
       port: 7997
       device: cpu
       max_batch_size: 32
       dtype: float32
     clap:
       model_id: laion/clap-htsat-fused
+      model_path: data/models/clap
       port: 7998
-      device: cuda:0
+      device: cpu
       max_batch_size: 16
-      dtype: float16
+      dtype: float32
     whisper:
       model_id: openai/whisper-base
+      model_path: data/models/whisper
       port: 7999
-      device: cuda:1
+      device: cpu
       max_batch_size: 8
-      dtype: float16
+      dtype: float32
   health_check:
     interval: 30
     failure_threshold: 3

@@ -304,6 +304,47 @@ class ConfigManager:
                 "temp_dir": "./temp",
                 "max_workers": 4
             },
+            "logging": {
+                "level": "INFO",
+                "format": {
+                    "standard": "%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+                    "detailed": "%(asctime)s - %(name)s - %(levelname)s - %(filename)s:%(lineno)d - %(funcName)s() - %(message)s",
+                    "simple": "%(levelname)s - %(message)s",
+                    "performance": "%(asctime)s - PERF - %(message)s"
+                },
+                "handlers": {
+                    "console": {
+                        "enabled": True, 
+                        "level": "INFO", 
+                        "format": "standard"
+                    },
+                    "file": {
+                        "enabled": True, 
+                        "level": "DEBUG", 
+                        "format": "detailed",
+                        "path": "./data/logs/msearch.log", 
+                        "max_size": "100MB", 
+                        "backup_count": 5,
+                        "encoding": "utf-8"
+                    },
+                    "error_file": {
+                        "enabled": True, 
+                        "level": "ERROR", 
+                        "format": "detailed",
+                        "path": "./data/logs/error.log", 
+                        "max_size": "50MB", 
+                        "backup_count": 10,
+                        "encoding": "utf-8"
+                    }
+                },
+                "loggers": {
+                    "msearch.core": "INFO",
+                    "msearch.business": "INFO",
+                    "msearch.processors": "WARNING",
+                    "msearch.models": "WARNING",
+                    "msearch.storage": "INFO"
+                }
+            },
             "database": {
                 "sqlite": {
                     "path": "./data/msearch.db",
