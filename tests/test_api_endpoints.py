@@ -22,44 +22,44 @@ class TestAPIEndpoints:
     
     def test_health_check(self):
         """测试健康检查端点"""
-        response = client.get("/")
+        response = client.get("/health")
         assert response.status_code == 200
     
     def test_search_text_endpoint(self):
         """测试文本搜索端点"""
-        response = client.post("/api/v1/search/text", params={"query": "测试", "limit": 10})
+        response = client.post("/api/search", data={"text": "测试", "top_k": 10})
         assert response.status_code in [200, 500]  # 可能因为依赖未初始化返回500
         assert "status" in response.json()
     
     def test_search_image_endpoint(self):
         """测试图像搜索端点"""
         # 创建模拟图像文件
-        files = {"file": ("test.jpg", b"fake image data", "image/jpeg")}
-        response = client.post("/api/v1/search/image", files=files, params={"limit": 10})
+        files = {"image": ("test.jpg", b"fake image data", "image/jpeg")}
+        response = client.post("/api/search", files=files, data={"top_k": 10})
         assert response.status_code in [200, 500]
         assert "status" in response.json()
     
     def test_search_audio_endpoint(self):
         """测试音频搜索端点"""
         # 创建模拟音频文件
-        files = {"file": ("test.mp3", b"fake audio data", "audio/mpeg")}
-        response = client.post("/api/v1/search/audio", files=files, params={"limit": 10})
+        files = {"audio": ("test.mp3", b"fake audio data", "audio/mpeg")}
+        response = client.post("/api/search", files=files, data={"top_k": 10})
         assert response.status_code in [200, 500]
         assert "status" in response.json()
     
     def test_search_video_endpoint(self):
         """测试视频搜索端点"""
-        # 创建模拟视频文件
-        files = {"file": ("test.mp4", b"fake video data", "video/mp4")}
-        response = client.post("/api/v1/search/video", files=files, params={"limit": 10})
+        # 视频搜索目前通过图像搜索实现
+        files = {"image": ("test.jpg", b"fake image data", "image/jpeg")}
+        response = client.post("/api/search", files=files, data={"top_k": 10})
         assert response.status_code in [200, 500]
         assert "status" in response.json()
     
     def test_search_multimodal_endpoint(self):
         """测试多模态搜索端点"""
         response = client.post(
-            "/api/v1/search/multimodal",
-            params={"query_text": "测试查询", "limit": 10}
+            "/api/search",
+            data={"text": "测试查询", "top_k": 10}
         )
         assert response.status_code in [200, 500]
         assert "status" in response.json()
@@ -80,19 +80,19 @@ class TestAPIErrorHandling:
     
     def test_invalid_endpoint(self):
         """测试无效端点"""
-        response = client.get("/api/v1/invalid")
+        response = client.get("/api/invalid")
         assert response.status_code == 404
     
     def test_invalid_method(self):
         """测试无效HTTP方法"""
-        response = client.get("/api/v1/search/text")
+        response = client.get("/api/search")
         assert response.status_code == 405  # Method Not Allowed
     
     def test_missing_query_parameter(self):
         """测试缺少查询参数"""
-        response = client.post("/api/v1/search/text")
+        response = client.post("/api/search")
         # FastAPI会自动处理必需参数缺失
-        assert response.status_code in [422, 500]  # 422=Unprocessable Entity
+        assert response.status_code in [200, 500]  # 所有参数都是可选的
 
 
 class TestAPIResponseFormat:
@@ -100,17 +100,17 @@ class TestAPIResponseFormat:
     
     def test_response_structure(self):
         """测试响应结构"""
-        response = client.post("/api/v1/search/text", params={"query": "测试", "limit": 5})
+        response = client.post("/api/search", data={"text": "测试", "top_k": 5})
         json_response = response.json()
         
         # 验证响应结构
-        required_fields = ["status", "query", "results", "total"]
+        required_fields = ["status", "text_query", "has_image", "has_audio", "total_results", "results", "execution_time"]
         for field in required_fields:
             assert field in json_response, f"响应缺少必需字段: {field}"
     
     def test_error_response_structure(self):
         """测试错误响应结构"""
-        response = client.post("/api/v1/search/text", params={"query": "", "limit": 5})
+        response = client.post("/api/search", data={"text": "", "top_k": 5})
         json_response = response.json()
         
         # 验证错误响应结构

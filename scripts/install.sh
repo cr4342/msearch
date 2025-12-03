@@ -239,7 +239,7 @@ detect_offline_resources() {
     log_info "检查离线资源..."
     
     # 离线资源目录
-    OFFLINE_DIR="${PROJECT_ROOT}/offline"
+    OFFLINE_DIR="${PROJECT_ROOT}/temp"
     OFFLINE_BIN_DIR="${OFFLINE_DIR}/bin"
     OFFLINE_PACKAGES_DIR="${OFFLINE_DIR}/packages"
     OFFLINE_MODELS_DIR="${OFFLINE_DIR}/models"
@@ -361,25 +361,25 @@ download_qdrant() {
 download_dependencies() {
     log_info "2. 下载Python依赖包..."
     
-    # 创建offline目录结构
-    mkdir -p "$PROJECT_ROOT/offline/packages"
+    # 创建temp目录结构
+    mkdir -p "$PROJECT_ROOT/temp/packages"
     
     # 检查是否已有足够的包
-    existing_packages=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" | wc -l)
+    existing_packages=$(find "$PROJECT_ROOT/temp/packages" -type f -name "*.whl" | wc -l)
     if [ "$existing_packages" -gt 100 ]; then
         log_info "检测到已有 $existing_packages 个包，跳过基础依赖下载"
     else
         # 下载requirements.txt中列出的所有依赖包（使用国内镜像优化）
         log_info "下载requirements.txt中所有依赖包..."
         pip download -r "$PROJECT_ROOT/requirements.txt" \
-            --dest "$PROJECT_ROOT/offline/packages" \
+            --dest "$PROJECT_ROOT/temp/packages" \
             --disable-pip-version-check \
             -i https://pypi.tuna.tsinghua.edu.cn/simple \
             --timeout 60 \
             --retries 3 || {
                 log_warning "使用默认PyPI源重试..."
                 pip download -r "$PROJECT_ROOT/requirements.txt" \
-                    --dest "$PROJECT_ROOT/offline/packages" \
+                    --dest "$PROJECT_ROOT/temp/packages" \
                     --disable-pip-version-check \
                     --timeout 60 \
                     --retries 3
@@ -393,32 +393,32 @@ download_dependencies() {
     # 特别处理inaSpeechSegmenter包（可能需要额外依赖）
     log_info "特别处理inaSpeechSegmenter包..."
     pip download inaspeechsegmenter \
-        --dest "$PROJECT_ROOT/offline/packages" \
+        --dest "$PROJECT_ROOT/temp/packages" \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         --timeout 60 \
         --retries 3 || {
             log_warning "使用默认PyPI源重试..."
             pip download inaspeechsegmenter \
-                --dest "$PROJECT_ROOT/offline/packages" \
+                --dest "$PROJECT_ROOT/temp/packages" \
                 --disable-pip-version-check \
                 --timeout 60 \
                 --retries 3
         }
     
     # 验证下载结果
-    requirements_count=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" | wc -l)
+    requirements_count=$(find "$PROJECT_ROOT/temp/packages" -type f -name "*.whl" | wc -l)
     log_info "依赖包下载完成:"
     log_info "  - Wheel文件数量: $requirements_count"
-    log_info "  - 保存位置: $PROJECT_ROOT/offline/packages/"
+    log_info "  - 保存位置: $PROJECT_ROOT/temp/packages/"
     
     # 检查关键依赖包是否下载成功
     key_packages=()
     missing_packages=()
     
     for package in "${key_packages[@]}"; do
-        if ! find "$PROJECT_ROOT/offline/packages" -type f -name "*${package}*" | grep -q .; then
-            missing_packages+=("$package")
+        if ! find "$PROJECT_ROOT/temp/packages" -type f -name "*${package}*" | grep -q .; then
+            missing_packages+=(("$package"))
         fi
     done
     
@@ -439,7 +439,7 @@ download_infinity_emb_compatible() {
     # 下载兼容的infinity-emb版本
     log_info "下载infinity-emb基础版本..."
     pip download "infinity-emb==0.0.76" \
-        --dest "$PROJECT_ROOT/offline/packages" \
+        --dest "$PROJECT_ROOT/temp/packages" \
         --no-deps \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
@@ -447,7 +447,7 @@ download_infinity_emb_compatible() {
         --retries 3 || {
             log_warning "使用默认PyPI源重试..."
             pip download "infinity-emb==0.0.76" \
-                --dest "$PROJECT_ROOT/offline/packages" \
+                --dest "$PROJECT_ROOT/temp/packages" \
                 --no-deps \
                 --disable-pip-version-check \
                 --timeout 60 \
@@ -457,14 +457,14 @@ download_infinity_emb_compatible() {
     # 下载兼容的optimum版本（不包含bettertransformer）
     log_info "下载兼容的optimum版本..."
     pip download "optimum>=1.14.0,<2.0.0" \
-        --dest "$PROJECT_ROOT/offline/packages" \
+        --dest "$PROJECT_ROOT/temp/packages" \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         --timeout 60 \
         --retries 3 || {
             log_warning "optimum下载失败，尝试下载特定版本..."
             pip download "optimum==1.21.4" \
-                --dest "$PROJECT_ROOT/offline/packages" \
+                --dest "$PROJECT_ROOT/temp/packages" \
                 --disable-pip-version-check \
                 -i https://pypi.tuna.tsinghua.edu.cn/simple \
                 --timeout 60 \
@@ -474,7 +474,7 @@ download_infinity_emb_compatible() {
     # 下载sentence-transformers兼容版本
     log_info "下载sentence-transformers兼容版本..."
     pip download "sentence-transformers>=3.0.0,<4.0.0" \
-        --dest "$PROJECT_ROOT/offline/packages" \
+        --dest "$PROJECT_ROOT/temp/packages" \
         --disable-pip-version-check \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         --timeout 60 \
@@ -493,7 +493,7 @@ download_infinity_emb_compatible() {
     for dep in "${infinity_deps[@]}"; do
         log_info "下载infinity-emb依赖: $dep"
         pip download "$dep" \
-            --dest "$PROJECT_ROOT/offline/packages" \
+            --dest "$PROJECT_ROOT/temp/packages" \
             --disable-pip-version-check \
             -i https://pypi.tuna.tsinghua.edu.cn/simple \
             --timeout 60 \
@@ -1459,10 +1459,10 @@ export QDRANT_DATA_DIR="${PROJECT_ROOT}/data/qdrant"
 mkdir -p "${QDRANT_DATA_DIR}"
 
 # 使用离线下载的Qdrant二进制文件
-if [ -f "${PROJECT_ROOT}/offline/bin/qdrant" ]; then
-    echo "使用离线Qdrant二进制文件启动服务..."
-    "${PROJECT_ROOT}/offline/bin/qdrant" --storage-path "${QDRANT_DATA_DIR}" &
-    QDRANT_PID=$!
+    if [ -f "${PROJECT_ROOT}/temp/bin/qdrant" ]; then
+        echo "使用离线Qdrant二进制文件启动服务..."
+        "${PROJECT_ROOT}/temp/bin/qdrant" --storage-path "${QDRANT_DATA_DIR}" &
+        QDRANT_PID=$!
 elif command -v qdrant &> /dev/null; then
     echo "使用系统安装的Qdrant二进制文件启动服务..."
     qdrant --storage-path "${QDRANT_DATA_DIR}" &

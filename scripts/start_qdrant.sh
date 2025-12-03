@@ -11,36 +11,37 @@ NC='\033[0m' # No Color
 echo -e "\033[0;32m[INFO]\033[0m 启动Qdrant向量数据库服务..."
 
 # 获取脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
+SCRIPT_DIR="/data/project/msearch/scripts"
+PROJECT_ROOT="/data/project/msearch"
 
 # 设置Qdrant数据目录
-export QDRANT_DATA_DIR="${PROJECT_ROOT}/data/qdrant"
-QDRANT_STORAGE_DIR="${QDRANT_DATA_DIR}/storage"
+QDRANT_DATA_DIR="${PROJECT_ROOT}/data/qdrant"
+STORAGE_PATH="${QDRANT_DATA_DIR}/storage"
+PID_FILE="${QDRANT_DATA_DIR}/qdrant.pid"
 
-# 创建目录
-mkdir -p "${QDRANT_DATA_DIR}"
-mkdir -p "${QDRANT_STORAGE_DIR}"
-mkdir -p "${QDRANT_DATA_DIR}/logs"
+# 创建必要的目录
+mkdir -p "${STORAGE_PATH}"
 
-# 使用data目录下的Qdrant二进制文件
-if [ -f "${PROJECT_ROOT}/data/qdrant/bin/qdrant" ]; then
-    echo "使用data目录下的Qdrant二进制文件启动服务..."
-    # 从data/qdrant目录启动，这样它会默认使用storage子目录
-    cd "${PROJECT_ROOT}/data/qdrant" && "${PROJECT_ROOT}/data/qdrant/bin/qdrant" &
+# 使用本地下载的Qdrant二进制文件
+QDRANT_BIN="${QDRANT_DATA_DIR}/bin/qdrant"
+if [ -f "${QDRANT_BIN}" ]; then
+    echo "使用本地Qdrant二进制文件启动服务..."
+    # 从Qdrant数据目录启动，使用默认配置文件
+    cd "${QDRANT_DATA_DIR}" && "${QDRANT_BIN}" &
     QDRANT_PID=$!
-elif [ -f "/data/project/msearch/offline/bin/qdrant" ]; then
-    echo "使用离线Qdrant二进制文件启动服务..."
-    cd "${PROJECT_ROOT}/data/qdrant" && "/data/project/msearch/offline/bin/qdrant" &
-    QDRANT_PID=$!
+    # 保存PID文件
+    echo "${QDRANT_PID}" > "${PID_FILE}"
 elif command -v qdrant &> /dev/null; then
     echo "使用系统安装的Qdrant二进制文件启动服务..."
-    cd "${PROJECT_ROOT}/data/qdrant" && qdrant &
+    # 从Qdrant数据目录启动，使用默认配置文件
+    cd "${QDRANT_DATA_DIR}" && qdrant &
     QDRANT_PID=$!
+    # 保存PID文件
+    echo "${QDRANT_PID}" > "${PID_FILE}"
 else
     echo -e "\033[1;33m警告：未找到Qdrant二进制文件，尝试使用Docker...\033[0m"
     if command -v docker &> /dev/null; then
-        docker run -d --name qdrant-msearch -p 6333:6333 -p 6334:6334 -v "${QDRANT_STORAGE_DIR}:/qdrant/storage" qdrant/qdrant:latest
+        docker run -d --name qdrant-msearch -p 6333:6333 -p 6334:6334 -v "${STORAGE_PATH}:/qdrant/storage" qdrant/qdrant:latest
         echo "Qdrant Docker容器已启动"
         return 0
     else
@@ -49,14 +50,10 @@ else
     fi
 fi
 
-# 保存PID文件
-echo "${QDRANT_PID}" > "${QDRANT_DATA_DIR}/qdrant.pid"
-
 echo -e "\033[0;32m[INFO]\033[0m Qdrant服务启动完成！"
 echo "Qdrant服务PID: ${QDRANT_PID}"
 echo "服务地址: http://localhost:6333"
 echo "Web UI: http://localhost:6333/dashboard"
-echo "数据目录: ${QDRANT_STORAGE_DIR}"
 echo ""
 echo "服务健康检查:"
 echo "curl http://localhost:6333/health"
