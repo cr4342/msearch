@@ -1,4 +1,4 @@
-# 临时requirements文件，排除有问题的包
+# msearch 多模态检索系统依赖
 
 # 核心依赖
 torch>=2.2.0
@@ -21,10 +21,10 @@ watchdog>=3.0.0
 
 # AI模型相关
 openai-whisper>=20230314
-inaspeechsegmenter>=0.0.9
+# inaspeechsegmenter>=0.0.9
 facenet-pytorch>=2.5.0
 mtcnn>=0.1.1
-# insightface>=0.7.0  # 排除，有编译问题
+# insightface>=0.7.0
 sentence-transformers>=2.2.0
 infinity-emb[all]>=0.0.20
 

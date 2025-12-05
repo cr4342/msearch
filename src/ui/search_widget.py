@@ -1,82 +1,67 @@
 """
 搜索组件
-提供多模态搜索界面
 """
 
+import sys
+import os
 import logging
-import asyncio
-from typing import Optional, List, Dict, Any
+from typing import List, Dict, Any, Optional
+from pathlib import Path
 
-try:
-    from PySide6.QtWidgets import (
-        QWidget, QVBoxLayout, QHBoxLayout, QGridLayout,
-        QLineEdit, QPushButton, QLabel, QTextEdit,
-        QScrollArea, QFrame, QProgressBar, QComboBox,
-        QFileDialog, QMessageBox, QTabWidget, QSplitter
-    )
-    from PySide6.QtCore import Qt, QThread, Signal, QObject
-    from PySide6.QtGui import QPixmap, QFont, QDragEnterEvent, QDropEvent
-    PYSIDE6_AVAILABLE = True
-except ImportError:
-    PYSIDE6_AVAILABLE = False
+from PySide6.QtWidgets import (
+    QWidget, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton, 
+    QComboBox, QProgressBar, QFrame, QScrollArea, QGridLayout, QMessageBox,
+    QFileDialog, QStyle, QSizePolicy
+)
+from PySide6.QtCore import Qt, QThread, Signal
+from PySide6.QtGui import QIcon, QFont, QAction
+
+
+# 设置日志
+logger = logging.getLogger(__name__)
 
 
 class SearchWorker(QObject):
     """搜索工作线程"""
     
-    # 信号定义
     finished = Signal(list)
     error = Signal(str)
     progress = Signal(int)
     
-    def __init__(self, query, query_type="text", top_k=10):
+    def __init__(self, query, query_type):
         super().__init__()
         self.query = query
         self.query_type = query_type
-        self.top_k = top_k
     
     def run(self):
-        """运行搜索任务"""
+        """执行搜索"""
         try:
-            # 这里应该调用实际的搜索API
-            # 现在使用模拟数据
-            import time
-            import random
-            
-            # 模拟搜索进度
-            for i in range(0, 101, 20):
+            # 模拟搜索过程
+            from time import sleep
+            for i in range(1, 101):
+                sleep(0.02)
                 self.progress.emit(i)
-                time.sleep(0.1)
             
             # 模拟搜索结果
             results = []
-            categories = ["动物", "风景", "人物", "建筑", "音乐"]
-            
-            for i in range(self.top_k):
-                score = random.uniform(0.3, 0.95)
-                category = random.choice(categories)
-                
+            for i in range(1, 11):
                 results.append({
-                    "file_id": f"file_{i}",
-                    "score": score,
-                    "file_path": f"/path/to/{category}_{i}.jpg",
-                    "file_name": f"{category}_{i}.jpg",
+                    "file_path": f"/tmp/test_file_{i}.jpg",
+                    "file_name": f"test_file_{i}.jpg",
+                    "file_size": i * 1024 * 1024,
                     "file_type": ".jpg",
-                    "file_size": random.randint(1000, 10000),
-                    "created_at": random.uniform(1600000000, 1700000000)
+                    "score": 0.8 - i * 0.05,
+                    "type": "image"
                 })
             
-            # 按分数排序
-            results.sort(key=lambda x: x['score'], reverse=True)
-            
             self.finished.emit(results)
-            
         except Exception as e:
+            logger.error(f"搜索失败: {e}")
             self.error.emit(str(e))
 
 
-class SearchResultWidget(QWidget):
-    """搜索结果组件"""
+class ResultsWidget(QWidget):
+    """搜索结果显示组件"""
     
     def __init__(self):
         super().__init__()
@@ -84,19 +69,28 @@ class SearchResultWidget(QWidget):
         self._init_ui()
     
     def _init_ui(self):
-        """初始化界面"""
+        """初始化UI"""
         layout = QVBoxLayout(self)
+        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setSpacing(10)
         
-        # 结果网格
+        # 结果标题
+        results_label = QLabel("搜索结果")
+        results_label.setStyleSheet("font-size: 16px; font-weight: bold; color: #333;")
+        layout.addWidget(results_label)
+        
+        # 滚动区域
         self.scroll_area = QScrollArea()
         self.scroll_area.setWidgetResizable(True)
-        self.scroll_area.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.scroll_area.setStyleSheet("border: none;")
         
-        self.results_widget = QWidget()
-        self.results_layout = QGridLayout(self.results_widget)
+        # 结果容器
+        results_container = QWidget()
+        self.results_layout = QGridLayout(results_container)
+        self.results_layout.setContentsMargins(0, 0, 0, 0)
         self.results_layout.setSpacing(10)
         
-        self.scroll_area.setWidget(self.results_widget)
+        self.scroll_area.setWidget(results_container)
         layout.addWidget(self.scroll_area)
     
     def set_results(self, results: List[Dict[str, Any]]):
@@ -140,14 +134,10 @@ class SearchResultWidget(QWidget):
                 background: white;
                 padding: 12px;
                 margin: 8px;
-                box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
-                transition: all 0.2s ease;
             }
             QFrame:hover {
                 border-color: #0078d4;
                 background: #f0f7ff;
-                transform: translateY(-2px);
-                box-shadow: 0 4px 16px rgba(0, 120, 212, 0.15);
             }
         """)
         
@@ -231,7 +221,7 @@ class SearchResultWidget(QWidget):
         view_button.setStyleSheet("""
             QPushButton {
                 padding: 6px 12px;
-                background: #0078d4;
+                background: #6c757d;
                 color: white;
                 border: none;
                 border-radius: 6px;
@@ -239,7 +229,7 @@ class SearchResultWidget(QWidget):
                 font-weight: 500;
             }
             QPushButton:hover {
-                background: #106ebe;
+                background: #5a6268;
             }
         """)
         action_layout.addWidget(view_button)
@@ -264,10 +254,6 @@ class SearchResultWidget(QWidget):
         
         action_layout.addStretch()
         layout.addWidget(action_widget)
-        
-        # 连接信号
-        view_button.clicked.connect(lambda: self._on_view_file(result))
-        folder_button.clicked.connect(lambda: self._on_open_file_folder(result))
         
         return item
     
@@ -295,359 +281,116 @@ class SearchWidget(QWidget):
         """初始化界面"""
         layout = QVBoxLayout(self)
         layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
         
         # 搜索类型选择
         search_type_layout = QHBoxLayout()
+        search_type_layout.setSpacing(10)
         
         type_label = QLabel("搜索类型:")
+        type_label.setStyleSheet("font-weight: bold;")
         search_type_layout.addWidget(type_label)
         
         self.search_type_combo = QComboBox()
         self.search_type_combo.addItems(["文本搜索", "图像搜索", "音频搜索"])
+        self.search_type_combo.setMinimumWidth(150)
         search_type_layout.addWidget(self.search_type_combo)
         
         search_type_layout.addStretch()
         layout.addLayout(search_type_layout)
         
-        # 分割器
-        splitter = QSplitter(Qt.Vertical)
+        # 搜索栏
+        search_layout = QHBoxLayout()
+        search_layout.setSpacing(10)
         
-        # 搜索区域
-        search_widget = QWidget()
-        search_layout = QVBoxLayout(search_widget)
-        search_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 文本搜索
-        self.text_search_widget = QWidget()
-        text_search_layout = QVBoxLayout(self.text_search_widget)
-        text_search_layout.setContentsMargins(0, 0, 0, 0)
-        
-        # 搜索输入框
         self.search_input = QLineEdit()
-        self.search_input.setPlaceholderText("输入搜索关键词...")
+        self.search_input.setPlaceholderText("输入搜索关键词或文件路径")
+        self.search_input.setMinimumHeight(40)
         self.search_input.setStyleSheet("""
             QLineEdit {
-                padding: 12px;
+                border: 1px solid #ddd;
+                border-radius: 20px;
+                padding: 0 15px;
                 font-size: 14px;
-                border: 2px solid #ddd;
-                border-radius: 8px;
             }
             QLineEdit:focus {
                 border-color: #0078d4;
+                outline: none;
             }
         """)
-        self.search_input.returnPressed.connect(self._on_search)
-        text_search_layout.addWidget(self.search_input)
+        search_layout.addWidget(self.search_input)
         
-        # 搜索按钮
         self.search_button = QPushButton("搜索")
+        self.search_button.setMinimumHeight(40)
+        self.search_button.setMinimumWidth(80)
         self.search_button.setStyleSheet("""
             QPushButton {
-                padding: 12px 24px;
-                font-size: 14px;
                 background: #0078d4;
                 color: white;
                 border: none;
-                border-radius: 8px;
+                border-radius: 20px;
                 font-weight: bold;
+                padding: 0 20px;
             }
             QPushButton:hover {
                 background: #106ebe;
             }
-            QPushButton:pressed {
-                background: #005a9e;
-            }
-            QPushButton:disabled {
-                background: #ccc;
-            }
         """)
         self.search_button.clicked.connect(self._on_search)
-        text_search_layout.addWidget(self.search_button)
+        search_layout.addWidget(self.search_button)
         
-        search_layout.addWidget(self.text_search_widget)
-        
-        # 文件搜索（占位符）
-        self.file_search_widget = QWidget()
-        file_search_layout = QVBoxLayout(self.file_search_widget)
-        
-        # 文件拖放区域
-        self.drop_area = QLabel()
-        self.drop_area.setText("拖拽文件到这里\n或点击选择文件")
-        self.drop_area.setAlignment(Qt.AlignCenter)
-        self.drop_area.setMinimumHeight(200)
-        self.drop_area.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #ddd;
-                border-radius: 8px;
-                background: #f8f9ff;
-                color: #666;
-                font-size: 16px;
+        self.file_search_button = QPushButton("选择文件")
+        self.file_search_button.setMinimumHeight(40)
+        self.file_search_button.setMinimumWidth(100)
+        self.file_search_button.setStyleSheet("""
+            QPushButton {
+                background: #6c757d;
+                color: white;
+                border: none;
+                border-radius: 20px;
+                font-weight: bold;
+                padding: 0 20px;
             }
-            QLabel:hover {
-                border-color: #0078d4;
-                background: #e8f0ff;
+            QPushButton:hover {
+                background: #5a6268;
             }
         """)
-        self.drop_area.setAcceptDrops(True)
-        self.drop_area.dragEnterEvent = self._drag_enter_event
-        self.drop_area.dropEvent = self._drop_event
-        self.drop_area.mousePressEvent = self._select_file
+        self.file_search_button.clicked.connect(self._on_select_file)
+        search_layout.addWidget(self.file_search_button)
         
-        file_search_layout.addWidget(self.drop_area)
-        
-        # 文件搜索按钮（初始隐藏）
-        self.file_search_button = QPushButton("搜索")
-        self.file_search_button.setStyleSheet(self.search_button.styleSheet())
-        self.file_search_button.clicked.connect(self._on_file_search)
-        self.file_search_button.hide()
-        file_search_layout.addWidget(self.file_search_button)
-        
-        search_layout.addWidget(self.file_search_widget)
+        layout.addLayout(search_layout)
         
         # 进度条
         self.progress_bar = QProgressBar()
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 1px solid #ddd;
+                border-radius: 5px;
+                text-align: center;
+                height: 20px;
+            }
+            QProgressBar::chunk {
+                background: #0078d4;
+                border-radius: 3px;
+            }
+        """)
         self.progress_bar.setVisible(False)
-        search_layout.addWidget(self.progress_bar)
+        layout.addWidget(self.progress_bar)
         
-        splitter.addWidget(search_widget)
-        
-        # 结果区域
-        self.result_widget = SearchResultWidget()
-        splitter.addWidget(self.result_widget)
-        
-        # 设置分割器比例
-        splitter.setSizes([200, 600])
-        layout.addWidget(splitter)
-        
-        # 连接搜索类型变化信号
-        self.search_type_combo.currentTextChanged.connect(self._on_search_type_changed)
-        
-        # 默认显示文本搜索
-        self.file_search_widget.hide()
-    
-    def _on_search_type_changed(self, text):
-        """搜索类型变化处理"""
-        if text == "文本搜索":
-            self.text_search_widget.show()
-            self.file_search_widget.hide()
-        elif text in ["图像搜索", "音频搜索"]:
-            self.text_search_widget.hide()
-            self.file_search_widget.show()
-            # 更新拖放区域文本
-            if text == "图像搜索":
-                self.drop_area.setText("拖拽图像文件到这里\n或点击选择图像文件")
-            else:
-                self.drop_area.setText("拖拽音频文件到这里\n或点击选择音频文件")
+        # 搜索结果
+        self.result_widget = ResultsWidget()
+        layout.addWidget(self.result_widget, 1)
     
     def _on_search(self):
-        """文本搜索处理"""
-        query = self.search_input.text().strip()
+        """搜索处理"""
+        query = self.search_input.text()
         if not query:
             QMessageBox.warning(self, "警告", "请输入搜索关键词")
             return
         
         self._start_search(query, "text")
     
-    def _on_file_search(self):
-        """文件搜索处理"""
-        if not hasattr(self, 'selected_file_path'):
-            QMessageBox.warning(self, "警告", "请先选择文件")
-            return
-        
-        search_type = self.search_type_combo.currentText()
-        query_type = "image" if search_type == "图像搜索" else "audio"
-        
-        self._start_search(self.selected_file_path, query_type)
-    
-    def _start_search(self, query, query_type):
-        """开始搜索"""
-        # 如果有正在进行的搜索，取消它
-        if self.current_thread and self.current_thread.isRunning():
-            self.current_thread.quit()
-            self.current_thread.wait()
-        
-        # 禁用搜索控件
-        self.search_button.setEnabled(False)
-        self.file_search_button.setEnabled(False)
-        self.search_input.setEnabled(False)
-        
-        # 显示进度条
-        self.progress_bar.setVisible(True)
-        self.progress_bar.setValue(0)
-        
-        # 清除之前的结果
-        self.result_widget.set_results([])
-        
-        # 创建工作线程
-        self.current_worker = SearchWorker(query, query_type)
-        self.current_thread = QThread()
-        self.current_worker.moveToThread(self.current_thread)
-        
-        # 连接信号
-        self.current_thread.started.connect(self.current_worker.run)
-        self.current_worker.finished.connect(self._on_search_finished)
-        self.current_worker.error.connect(self._on_search_error)
-        self.current_worker.progress.connect(self._on_search_progress)
-        self.current_worker.finished.connect(self.current_thread.quit)
-        self.current_thread.finished.connect(self.current_thread.deleteLater)
-        
-        # 启动搜索
-        self.current_thread.start()
-    
-    def _on_search_finished(self, results):
-        """搜索完成处理"""
-        # 隐藏进度条
-        self.progress_bar.setVisible(False)
-        
-        # 启用搜索控件
-        self.search_button.setEnabled(True)
-        self.file_search_button.setEnabled(True)
-        self.search_input.setEnabled(True)
-        
-        # 显示结果
-        self.result_widget.set_results(results)
-        
-        self.logger.info(f"搜索完成，找到 {len(results)} 个结果")
-    
-    def _on_search_error(self, error):
-        """搜索错误处理"""
-        # 隐藏进度条
-        self.progress_bar.setVisible(False)
-        
-        # 启用搜索控件
-        self.search_button.setEnabled(True)
-        self.file_search_button.setEnabled(True)
-        self.search_input.setEnabled(True)
-        
-        # 显示错误
-        QMessageBox.critical(self, "搜索错误", f"搜索失败: {error}")
-        
-        self.logger.error(f"搜索失败: {error}")
-    
-    def _on_search_progress(self, value):
-        """搜索进度更新"""
-        self.progress_bar.setValue(value)
-    
-    def _drag_enter_event(self, event: QDragEnterEvent):
-        """拖拽进入事件"""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-            self.drop_area.setStyleSheet("""
-                QLabel {
-                    border: 2px dashed #0078d4;
-                    border-radius: 8px;
-                    background: #e8f0ff;
-                    color: #0078d4;
-                    font-size: 16px;
-                }
-            """)
-        else:
-            event.ignore()
-    
-    def _drop_event(self, event: QDropEvent):
-        """拖拽放下事件"""
-        if event.mimeData().hasUrls():
-            event.acceptProposedAction()
-            
-            urls = event.mimeData().urls()
-            if urls:
-                file_path = urls[0].toLocalFile()
-                self._handle_file_selected(file_path)
-        
-        # 恢复样式
-        self.drop_area.setStyleSheet("""
-            QLabel {
-                border: 2px dashed #ddd;
-                border-radius: 8px;
-                background: #f8f9ff;
-                color: #666;
-                font-size: 16px;
-            }
-            QLabel:hover {
-                border-color: #0078d4;
-                background: #e8f0ff;
-            }
-        """)
-    
-    def _select_file(self, event):
+    def _on_select_file(self):
         """选择文件"""
         search_type = self.search_type_combo.currentText()
-        
-        if search_type == "图像搜索":
-            file_filter = "图像文件 (*.jpg *.jpeg *.png *.bmp *.webp)"
-        else:  # 音频搜索
-            file_filter = "音频文件 (*.mp3 *.wav *.flac *.aac)"
-        
-        file_path, _ = QFileDialog.getOpenFileName(
-            self,
-            f"选择{search_type.replace('搜索', '')}文件",
-            "",
-            file_filter
-        )
-        
-        if file_path:
-            self._handle_file_selected(file_path)
-    
-    def _handle_file_selected(self, file_path: str):
-        """处理文件选择"""
-        # 验证文件类型
-        search_type = self.search_type_combo.currentText()
-        file_ext = file_path.lower().split('.')[-1]
-        
-        if search_type == "图像搜索":
-            valid_extensions = ['jpg', 'jpeg', 'png', 'bmp', 'webp']
-        else:  # 音频搜索
-            valid_extensions = ['mp3', 'wav', 'flac', 'aac']
-        
-        if file_ext not in valid_extensions:
-            QMessageBox.warning(self, "警告", f"不支持的文件类型: .{file_ext}")
-            return
-        
-        # 存储选择的文件路径
-        self.selected_file_path = file_path
-        
-        # 更新拖放区域显示
-        file_name = file_path.split('/')[-1]
-        self.drop_area.setText(f"已选择文件:\n{file_name}")
-        
-        # 显示搜索按钮
-        self.file_search_button.show()
-    
-    def _on_view_file(self, result: Dict[str, Any]):
-        """查看文件"""
-        try:
-            file_path = result.get('file_path', '')
-            if not file_path:
-                QMessageBox.warning(self, "警告", "文件路径不存在")
-                return
-            
-            # 使用系统默认程序打开文件
-            import os
-            if os.path.exists(file_path):
-                os.startfile(file_path)  # Windows
-            else:
-                QMessageBox.warning(self, "警告", f"文件不存在: {file_path}")
-        except Exception as e:
-            self.logger.error(f"查看文件失败: {e}")
-            QMessageBox.critical(self, "错误", f"查看文件失败: {e}")
-    
-    def _on_open_file_folder(self, result: Dict[str, Any]):
-        """打开文件所在文件夹"""
-        try:
-            file_path = result.get('file_path', '')
-            if not file_path:
-                QMessageBox.warning(self, "警告", "文件路径不存在")
-                return
-            
-            # 提取文件夹路径
-            import os
-            folder_path = os.path.dirname(file_path)
-            
-            if os.path.exists(folder_path):
-                os.startfile(folder_path)  # Windows
-                self.logger.info(f"打开文件夹: {folder_path}")
-            else:
-                QMessageBox.warning(self, "警告", f"文件夹不存在: {folder_path}")
-        except Exception as e:
-            self.logger.error(f"打开文件夹失败: {e}")
-            QMessageBox.critical(self, "错误", f"打开文件夹失败: {e}")
+        file_filter = "图像文件 (*.jpg *.jpeg *.png *.b
