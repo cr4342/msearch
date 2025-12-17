@@ -31,9 +31,10 @@ class TaskManager:
         self.db_adapter = DatabaseAdapter()
         
         # 配置参数
-        self.max_retry_attempts = self.config_manager.get("task_manager.max_retry_attempts", 3)
-        self.retry_delay = self.config_manager.get("task_manager.retry_delay", 60)  # 秒
-        self.task_timeout = self.config_manager.get("task_manager.task_timeout", 3600)  # 秒
+        self.max_retry_attempts = self.config_manager.get("task_management.max_retries", 5)
+        self.retry_delay = self.config_manager.get("task_management.retry_delay", 1)  # 秒
+        self.retry_multiplier = self.config_manager.get("task_management.retry_multiplier", 2)  # 重试倍数
+        self.task_timeout = self.config_manager.get("task_management.task_timeout", 3600)  # 秒
         
         # 运行状态
         self.is_running = False
@@ -143,9 +144,13 @@ class TaskManager:
             if status == TaskStatus.FAILED.value:
                 task = await self.get_task(task_id)
                 if task and task['retry_count'] < task['max_retry_attempts']:
+                    # 计算指数退避延迟：初始延迟 * (重试倍数 ^ 重试次数)
+                    retry_count = task['retry_count']
+                    exponential_delay = self.retry_delay * (self.retry_multiplier ** retry_count)
+                    
                     updates['status'] = TaskStatus.RETRY.value
-                    updates['retry_count'] = task['retry_count'] + 1
-                    updates['retry_at'] = datetime.now().timestamp() + self.retry_delay
+                    updates['retry_count'] = retry_count + 1
+                    updates['retry_at'] = datetime.now().timestamp() + exponential_delay
             
             success = await self.db_adapter.update_task(task_id, updates)
             

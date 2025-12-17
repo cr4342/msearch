@@ -258,6 +258,196 @@ async def health_check():
         }
 
 
+@router.get("/health")
+async def health():
+    """
+    系统整体健康检查
+    
+    Returns:
+        系统健康状态
+    """
+    return await health_check()
+
+
+@router.get("/health/orchestrator")
+async def health_orchestrator():
+    """
+    调度器健康检查
+    
+    Returns:
+        调度器健康状态
+    """
+    try:
+        from fastapi import Request
+        app_state = Request.app.state
+        
+        if hasattr(app_state, 'orchestrator') and app_state.orchestrator:
+            try:
+                health_status = {
+                    "status": "healthy" if app_state.orchestrator.is_running else "unhealthy",
+                    "is_running": app_state.orchestrator.is_running,
+                    "check_interval": app_state.orchestrator.check_interval,
+                    "max_concurrent_tasks": app_state.orchestrator.max_concurrent_tasks
+                }
+            except Exception as e:
+                health_status = {
+                    "status": "error",
+                    "error": str(e)
+                }
+        else:
+            health_status = {
+                "status": "unhealthy",
+                "error": "调度器未初始化"
+            }
+        
+        return {
+            "component": "orchestrator",
+            "status": health_status["status"],
+            "details": health_status
+        }
+    except Exception as e:
+        return {
+            "component": "orchestrator",
+            "status": "error",
+            "details": {
+                "error": str(e)
+            }
+        }
+
+
+@router.get("/health/task-manager")
+async def health_task_manager():
+    """
+    任务管理器健康检查
+    
+    Returns:
+        任务管理器健康状态
+    """
+    try:
+        from src.processing_service.task_manager import TaskManager
+        from src.core.config_manager import get_config_manager
+        
+        config_manager = get_config_manager()
+        task_manager = TaskManager(config_manager)
+        
+        # 获取任务统计
+        stats = await task_manager.get_task_statistics()
+        
+        health_status = {
+            "status": "healthy",
+            "is_running": task_manager.is_running,
+            "task_statistics": stats,
+            "max_retry_attempts": task_manager.max_retry_attempts,
+            "retry_delay": task_manager.retry_delay,
+            "retry_multiplier": task_manager.retry_multiplier
+        }
+        
+        return {
+            "component": "task_manager",
+            "status": "healthy",
+            "details": health_status
+        }
+    except Exception as e:
+        return {
+            "component": "task_manager",
+            "status": "error",
+            "details": {
+                "error": str(e)
+            }
+        }
+
+
+@router.get("/health/media-processor")
+async def health_media_processor():
+    """
+    媒体处理器健康检查
+    
+    Returns:
+        媒体处理器健康状态
+    """
+    try:
+        from src.processing_service.media_processor import MediaProcessor
+        from src.core.config_manager import get_config_manager
+        
+        config_manager = get_config_manager()
+        media_processor = MediaProcessor(config_manager)
+        
+        health_status = {
+            "status": "healthy",
+            "supported_formats": {
+                "image": list(media_processor.image_extensions),
+                "video": list(media_processor.video_extensions),
+                "audio": list(media_processor.audio_extensions)
+            }
+        }
+        
+        return {
+            "component": "media_processor",
+            "status": "healthy",
+            "details": health_status
+        }
+    except Exception as e:
+        return {
+            "component": "media_processor",
+            "status": "error",
+            "details": {
+                "error": str(e)
+            }
+        }
+
+
+@router.get("/health/embedding-engine")
+async def health_embedding_engine():
+    """
+    向量化引擎健康检查
+    
+    Returns:
+        向量化引擎健康状态
+    """
+    try:
+        from src.common.embedding.embedding_engine import EmbeddingEngine
+        from src.core.config_manager import get_config_manager
+        
+        config_manager = get_config_manager()
+        embedding_engine = EmbeddingEngine(config_manager)
+        
+        # 检查模型可用性
+        available_models = embedding_engine.get_available_models()
+        model_info = {}
+        for model in available_models:
+            try:
+                model_info[model] = embedding_engine.get_model_info(model)
+            except Exception as e:
+                model_info[model] = {
+                    "status": "error",
+                    "error": str(e)
+                }
+        
+        # 执行简单的健康检查
+        health_check_result = await embedding_engine.health_check()
+        
+        health_status = {
+            "status": "healthy" if all(health_check_result.values()) else "unhealthy",
+            "available_models": available_models,
+            "model_info": model_info,
+            "health_check": health_check_result
+        }
+        
+        return {
+            "component": "embedding_engine",
+            "status": health_status["status"],
+            "details": health_status
+        }
+    except Exception as e:
+        return {
+            "component": "embedding_engine",
+            "status": "error",
+            "details": {
+                "error": str(e)
+            }
+        }
+
+
 @router.get("/status/performance")
 async def get_performance_metrics():
     """

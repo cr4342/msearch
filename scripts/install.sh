@@ -170,12 +170,123 @@ detect_project_root() {
     echo "开始时间: $(date)" >> "${LOG_FILE}"
     echo "当前目录: ${CURRENT_DIR}" >> "${LOG_FILE}"
     echo "脚本目录: ${SCRIPT_DIR}" >> "${LOG_FILE}"
-    echo "项目目录: ${PROJECT_ROOT}" >> "${LOG_FILE}"
+    echo "项目目录: ${PROJECT_ROOT}" >> "${LOG_FILE}"  
     echo "安装模式: ${INSTALL_MODE}" >> "${LOG_FILE}"
     echo "日志级别: ${LOG_LEVEL}" >> "${LOG_FILE}"
     echo "===============================================" >> "${LOG_FILE}"
     
     return 0
+}
+
+# 执行硬件分析
+perform_hardware_analysis() {
+    log_info "==============================================="
+    log_info "        执行硬件分析"
+    log_info "==============================================="
+    
+    # 检查Python是否可用
+    if ! command -v python3 &> /dev/null; then
+        log_warning "Python3 不可用，跳过硬件分析"
+        return
+    fi
+    
+    # 检查psutil是否已安装，如未安装则尝试安装
+    if ! python3 -c "import psutil" 2>/dev/null; then
+        log_info "安装psutil用于硬件分析..."
+        pip install psutil -i https://pypi.tuna.tsinghua.edu.cn/simple --upgrade || true
+    fi
+    
+    # 执行硬件分析脚本
+    log_info "执行硬件分析脚本..."
+    hardware_analysis_script="${SCRIPT_DIR}/hardware_analysis.py"
+    
+    if [ -f "${hardware_analysis_script}" ]; then
+        python3 "${hardware_analysis_script}" "${PROJECT_ROOT}/hardware_info.json"
+        
+        if [ $? -eq 0 ]; then
+            log_success "硬件分析完成，结果已保存到: ${PROJECT_ROOT}/hardware_info.json"
+        else
+            log_warning "硬件分析失败，使用默认配置"
+        fi
+    else
+        log_warning "硬件分析脚本不存在，跳过硬件分析"
+    fi
+    
+    # 如果硬件分析结果存在，生成配置建议
+    if [ -f "${PROJECT_ROOT}/hardware_info.json" ]; then
+        log_info "生成配置建议..."
+        generate_config_from_hardware
+    fi
+    
+    log_info "==============================================="
+}
+
+# 根据硬件分析生成配置建议
+generate_config_from_hardware() {
+    # 检查jq是否可用，如不可用则跳过配置生成
+    if ! command -v jq &> /dev/null; then
+        log_warning "jq 不可用，跳过配置生成"
+        return
+    fi
+    
+    # 读取硬件信息
+    hardware_info="${PROJECT_ROOT}/hardware_info.json"
+    if [ ! -f "${hardware_info}" ]; then
+        return
+    fi
+    
+    # 生成配置文件
+    config_dir="${PROJECT_ROOT}/config"
+    mkdir -p "${config_dir}"
+    
+    # 读取推荐配置
+    clip_model=$(jq -r '.recommendations.model_selection.clip' "${hardware_info}")
+    clap_model=$(jq -r '.recommendations.model_selection.clap' "${hardware_info}")
+    whisper_model=$(jq -r '.recommendations.model_selection.whisper' "${hardware_info}")
+    backend=$(jq -r '.recommendations.model_selection.backend' "${hardware_info}")
+    batch_size=$(jq -r '.recommendations.optimization.batch_size' "${hardware_info}")
+    num_workers=$(jq -r '.recommendations.optimization.num_workers' "${hardware_info}")
+    use_half_precision=$(jq -r '.recommendations.optimization.use_half_precision' "${hardware_info}")
+    max_concurrent_tasks=$(jq -r '.recommendations.configuration.max_concurrent_tasks' "${hardware_info}")
+    check_interval=$(jq -r '.recommendations.configuration.check_interval' "${hardware_info}")
+    
+    # 写入配置文件
+    config_file="${config_dir}/hardware_recommended_config.yml"
+    cat > "${config_file}" << EOF
+# 基于硬件分析的推荐配置
+# 生成时间: $(date)
+
+# 模型配置
+models:
+  clip:
+    model_name: "${clip_model}"
+    device: "${backend}"
+  clap:
+    model_name: "${clap_model}"
+    device: "${backend}"
+  whisper:
+    model_name: "${whisper_model}"
+    device: "${backend}"
+
+# 优化配置
+optimization:
+  batch_size: ${batch_size}
+  num_workers: ${num_workers}
+  use_half_precision: ${use_half_precision}
+  max_concurrent_tasks: ${max_concurrent_tasks}
+
+# 调度器配置
+orchestrator:
+  check_interval: ${check_interval}
+EOF
+    
+    log_success "推荐配置已生成: ${config_file}"
+    
+    # 如果主配置文件不存在，复制推荐配置为主配置
+    if [ ! -f "${config_dir}/config.yml" ]; then
+        log_info "主配置文件不存在，使用推荐配置作为主配置"
+        cp "${config_file}" "${config_dir}/config.yml"
+    fi
 }
 
 # 显示帮助信息
@@ -418,8 +529,8 @@ download_dependencies() {
     
     for package in "${key_packages[@]}"; do
         if ! find "$PROJECT_ROOT/temp/packages" -type f -name "*${package}*" | grep -q .; then
-            missing_packages+=(("$package"))
-        fi
+        missing_packages+=("$package")
+    fi
     done
     
     if [ ${#missing_packages[@]} -eq 0 ]; then
@@ -1732,10 +1843,13 @@ main_online() {
     # 3. 下载和配置AI模型
     download_models_online || log_warning "模型下载部分失败，但继续安装"
     
-    # 4. 配置项目文件
+    # 4. 执行硬件分析
+    perform_hardware_analysis
+    
+    # 5. 配置项目文件
     configure_project_online || handle_error "项目配置失败"
     
-    # 5. 生成启动脚本
+    # 6. 生成启动脚本
     generate_startup_scripts || handle_error "启动脚本生成失败"
     
     # 6. 创建安装说明文件
@@ -1766,16 +1880,19 @@ main_offline() {
     # 5. 复制模型文件
     copy_models || handle_error "模型文件复制失败"
     
-    # 6. 初始化配置
+    # 6. 执行硬件分析
+    perform_hardware_analysis
+    
+    # 7. 初始化配置
     init_config || handle_error "配置初始化失败"
     
-    # 7. 初始化数据目录
+    # 8. 初始化数据目录
     init_data_dirs || handle_error "数据目录初始化失败"
     
-    # 8. 初始化数据库
+    # 9. 初始化数据库
     init_database || handle_error "数据库初始化失败"
     
-    # 9. 生成启动脚本
+    # 10. 生成启动脚本
     generate_startup_scripts || handle_error "启动脚本生成失败"
     
     # 10. 创建安装说明文件

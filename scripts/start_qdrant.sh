@@ -11,44 +11,36 @@ NC='\033[0m' # No Color
 echo -e "\033[0;32m[INFO]\033[0m 启动Qdrant向量数据库服务..."
 
 # 获取脚本目录
-SCRIPT_DIR="/data/project/msearch/scripts"
-PROJECT_ROOT="/data/project/msearch"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "${SCRIPT_DIR}")"
 
 # 设置Qdrant数据目录
-QDRANT_DATA_DIR="${PROJECT_ROOT}/data/qdrant"
-STORAGE_PATH="${QDRANT_DATA_DIR}/storage"
-PID_FILE="${QDRANT_DATA_DIR}/qdrant.pid"
+export QDRANT_DATA_DIR="${PROJECT_ROOT}/data/qdrant"
+mkdir -p "${QDRANT_DATA_DIR}"
 
-# 创建必要的目录
-mkdir -p "${STORAGE_PATH}"
-
-# 使用本地下载的Qdrant二进制文件
-QDRANT_BIN="${QDRANT_DATA_DIR}/bin/qdrant"
-if [ -f "${QDRANT_BIN}" ]; then
-    echo "使用本地Qdrant二进制文件启动服务..."
-    # 从Qdrant数据目录启动，使用默认配置文件
-    cd "${QDRANT_DATA_DIR}" && "${QDRANT_BIN}" &
+# 使用离线下载的Qdrant二进制文件
+if [ -f "${PROJECT_ROOT}/data/qdrant/bin/qdrant" ]; then
+    echo "使用离线Qdrant二进制文件启动服务..."
+    "${PROJECT_ROOT}/data/qdrant/bin/qdrant" --storage-path "${QDRANT_DATA_DIR}" &
     QDRANT_PID=$!
-    # 保存PID文件
-    echo "${QDRANT_PID}" > "${PID_FILE}"
 elif command -v qdrant &> /dev/null; then
     echo "使用系统安装的Qdrant二进制文件启动服务..."
-    # 从Qdrant数据目录启动，使用默认配置文件
-    cd "${QDRANT_DATA_DIR}" && qdrant &
+    qdrant --storage-path "${QDRANT_DATA_DIR}" &
     QDRANT_PID=$!
-    # 保存PID文件
-    echo "${QDRANT_PID}" > "${PID_FILE}"
 else
     echo -e "\033[1;33m警告：未找到Qdrant二进制文件，尝试使用Docker...\033[0m"
     if command -v docker &> /dev/null; then
-        docker run -d --name qdrant-msearch -p 6333:6333 -p 6334:6334 -v "${STORAGE_PATH}:/qdrant/storage" qdrant/qdrant:latest
+        docker run -d --name qdrant-msearch -p 6333:6333 -p 6334:6334 -v "${QDRANT_DATA_DIR}:/qdrant/storage" qdrant/qdrant:latest
         echo "Qdrant Docker容器已启动"
-        return 0
+        exit 0
     else
         echo "错误：未找到Qdrant二进制文件或Docker"
         exit 1
     fi
 fi
+
+# 保存PID文件
+echo ${QDRANT_PID} > /tmp/qdrant.pid
 
 echo -e "\033[0;32m[INFO]\033[0m Qdrant服务启动完成！"
 echo "Qdrant服务PID: ${QDRANT_PID}"

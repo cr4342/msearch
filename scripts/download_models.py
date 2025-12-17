@@ -1,156 +1,113 @@
-#!/usr/bin/env python
-# -*- coding: utf-8 -*-
-"""
-MSearch 模型下载脚本
-自动从 Hugging Face 或 hf-mirror.com 下载所需模型到本地
-"""
-
 import os
 import sys
-import requests
-from huggingface_hub import hf_hub_download, snapshot_download
-import argparse
+import time
+from pathlib import Path
+from transformers import (
+    CLIPModel, CLIPProcessor, 
+    ClapModel, ClapProcessor, 
+    WhisperForConditionalGeneration, WhisperProcessor,
+    AutoModel, AutoProcessor, AutoTokenizer
+)
+import torch
 
-# 模型列表配置
-MODELS_CONFIG = {
-    "text_embedding": {
-        "model_name": "sentence-transformers/all-MiniLM-L6-v2",
-        "local_dir": "models/text_embedding",
-        "file_patterns": ["*.json", "*.bin", "*.txt", "*.model", "*.py"]
-    },
-    "image_embedding": {
-        "model_name": "google/vit-base-patch16-224",
-        "local_dir": "models/image_embedding",
-        "file_patterns": ["*.json", "*.bin", "*.txt", "*.index", "*.py"]
-    },
-    "audio_embedding": {
-        "model_name": "openai/whisper-small",
-        "local_dir": "models/audio_embedding",
-        "file_patterns": ["*.json", "*.bin", "*.txt", "*.model", "*.py"]
-    }
-}
-
-def set_hf_mirror():
-    """设置 HF_ENDPOINT 为镜像地址"""
-    os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-    print(f"设置 HF_ENDPOINT 为: {os.environ['HF_ENDPOINT']}")
-
-
-def download_model_with_snapshot(model_name, local_dir, force_download=False):
-    """使用 snapshot_download 下载整个模型仓库"""
-    try:
-        print(f"\n正在下载模型: {model_name}")
-        print(f"保存路径: {local_dir}")
-        
-        # 确保本地目录存在
-        os.makedirs(local_dir, exist_ok=True)
-        
-        # 下载模型
-        snapshot_download(
-            repo_id=model_name,
-            local_dir=local_dir,
-            local_dir_use_symlinks=False,
-            force_download=force_download,
-            resume_download=True
-        )
-        
-        print(f"✓ 模型 {model_name} 下载完成")
-        return True
-    except Exception as e:
-        print(f"✗ 模型 {model_name} 下载失败: {e}")
-        return False
-
-
-def download_model_with_hf_hub(model_name, local_dir, file_patterns, force_download=False):
-    """使用 hf_hub_download 下载特定文件"""
-    try:
-        print(f"\n正在下载模型: {model_name}")
-        print(f"保存路径: {local_dir}")
-        
-        # 确保本地目录存在
-        os.makedirs(local_dir, exist_ok=True)
-        
-        # 下载指定文件
-        for file_pattern in file_patterns:
-            print(f"  下载文件: {file_pattern}")
-            hf_hub_download(
-                repo_id=model_name,
-                filename=file_pattern,
-                local_dir=local_dir,
-                local_dir_use_symlinks=False,
-                force_download=force_download,
-                resume_download=True
-            )
-        
-        print(f"✓ 模型 {model_name} 下载完成")
-        return True
-    except Exception as e:
-        print(f"✗ 模型 {model_name} 下载失败: {e}")
-        return False
-
-
-def download_model(model_config, force_download=False):
-    """下载单个模型"""
-    model_name = model_config["model_name"]
-    local_dir = model_config["local_dir"]
-    file_patterns = model_config["file_patterns"]
+def download_model(repo_id, local_path, components):
+    """下载单个模型及其组件"""
+    print(f"\n[INFO] 下载模型: {repo_id} 到 {local_path}")
     
-    # 尝试使用 snapshot_download 下载整个模型
-    success = download_model_with_snapshot(model_name, local_dir, force_download)
+    # 确保输出目录存在
+    os.makedirs(local_path, exist_ok=True)
     
-    # 如果失败，尝试使用 hf_hub_download 下载特定文件
-    if not success:
-        print("  尝试使用 hf_hub_download 下载特定文件...")
-        success = download_model_with_hf_hub(model_name, local_dir, file_patterns, force_download)
+    # 下载模型组件
+    success = True
+    
+    if 'model' in components:
+        try:
+            print("  - 下载模型组件...")
+            model = AutoModel.from_pretrained(repo_id, cache_dir=local_path, trust_remote_code=True)
+            model.save_pretrained(local_path)
+            print("  ✓ 模型组件下载完成")
+        except Exception as e:
+            print(f"  ✗ 模型组件下载失败: {str(e)}")
+            success = False
+    
+    if 'processor' in components:
+        try:
+            print("  - 下载处理器组件...")
+            processor = AutoProcessor.from_pretrained(repo_id, cache_dir=local_path, trust_remote_code=True)
+            processor.save_pretrained(local_path)
+            print("  ✓ 处理器组件下载完成")
+        except Exception as e:
+            print(f"  ✗ 处理器组件下载失败: {str(e)}")
+            success = False
     
     return success
 
-
-def main(args):
-    """主函数"""
-    print("=== MSearch 模型下载脚本 ===")
-    print("正在准备下载模型...")
+def download_models(models_dir):
+    """下载所有必要的模型"""
+    print(f"[INFO] 模型下载目录: {models_dir}")
     
-    # 设置镜像地址
-    set_hf_mirror()
+    # 模型列表
+    models = [
+        {
+            'name': 'clip',
+            'repo_id': 'openai/clip-vit-base-patch32',
+            'local_path': os.path.join(models_dir, 'clip-vit-base-patch32'),
+            'components': ['model', 'processor']
+        },
+        {
+            'name': 'clap',
+            'repo_id': 'laion/clap-htsat-unfused',
+            'local_path': os.path.join(models_dir, 'clap-htsat-fused'),
+            'components': ['model', 'processor']
+        },
+        {
+            'name': 'whisper',
+            'repo_id': 'openai/whisper-base',
+            'local_path': os.path.join(models_dir, 'whisper-base'),
+            'components': ['model', 'processor']
+        }
+    ]
     
-    # 下载指定模型或所有模型
-    all_success = True
+    # 下载每个模型
+    success_count = 0
+    total_count = len(models)
     
-    if args.model:
-        # 下载指定模型
-        if args.model in MODELS_CONFIG:
-            model_config = MODELS_CONFIG[args.model]
-            print(f"\n--- 下载 {args.model} 模型 ---")
-            if not download_model(model_config, args.force):
-                all_success = False
-        else:
-            print(f"✗ 未知模型类型: {args.model}")
-            print(f"  可用模型类型: {list(MODELS_CONFIG.keys())}")
-            return 1
-    else:
-        # 下载所有模型
-        for model_type, model_config in MODELS_CONFIG.items():
-            print(f"\n--- 下载 {model_type} 模型 ---")
-            if not download_model(model_config, args.force):
-                all_success = False
+    for i, model_info in enumerate(models, 1):
+        print(f"\n[{i}/{total_count}] 开始下载 {model_info['name']}...")
+        
+        # 检查是否已存在
+        if os.path.exists(os.path.join(model_info['local_path'], 'config.json')):
+            print(f"[INFO] {model_info['name']} 模型已存在，跳过下载")
+            success_count += 1
+            continue
+        
+        # 尝试下载，最多3次重试
+        max_retries = 3
+        for retry in range(max_retries):
+            if download_model(
+                model_info['repo_id'],
+                model_info['local_path'],
+                model_info['components']
+            ):
+                success_count += 1
+                break
+            else:
+                if retry < max_retries - 1:
+                    wait_time = (retry + 1) * 5
+                    print(f"[WARNING] 下载失败，{wait_time}秒后重试 ({retry + 1}/{max_retries})")
+                    time.sleep(wait_time)
+                else:
+                    print(f"[ERROR] {model_info['name']} 模型下载失败，达到最大重试次数")
     
-    print("\n=== 下载完成 ===")
-    if all_success:
-        print("✓ 所有模型下载成功!")
-        print("\n模型保存位置:")
-        for model_type, model_config in MODELS_CONFIG.items():
-            print(f"  {model_type}: {model_config['local_dir']}")
-        return 0
-    else:
-        print("✗ 部分模型下载失败，请检查错误信息")
-        return 1
-
+    print(f"\n[INFO] 模型下载完成: {success_count}/{total_count} 个模型成功")
+    
+    return success_count == total_count
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser(description="MSearch 模型下载脚本")
-    parser.add_argument("--force", action="store_true", help="强制重新下载所有模型")
-    parser.add_argument("--model", type=str, help="指定要下载的模型类型 (text_embedding, image_embedding, audio_embedding)")
-    args = parser.parse_args()
+    if len(sys.argv) < 2:
+        print("[ERROR] 缺少模型目录参数")
+        sys.exit(1)
     
-    sys.exit(main(args))
+    models_dir = sys.argv[1]
+    success = download_models(models_dir)
+    sys.exit(0 if success else 1)

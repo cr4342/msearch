@@ -5,7 +5,7 @@ echo "停止Qdrant服务..."
 
 # 停止进程
 if [ -f /tmp/qdrant.pid ]; then
-    kill 890088 2>/dev/null && rm /tmp/qdrant.pid
+    kill  2>/dev/null && rm /tmp/qdrant.pid
     echo "Qdrant进程已停止"
 fi
 

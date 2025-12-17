@@ -27,8 +27,10 @@ async def get_tasks(
     """
     try:
         from src.processing_service.task_manager import TaskManager
+        from src.core.config_manager import get_config_manager
         
-        task_manager = TaskManager(None)  # 使用默认配置
+        config_manager = get_config_manager()
+        task_manager = TaskManager(config_manager)
         
         if status:
             if status == "pending":
@@ -82,8 +84,10 @@ async def get_task(task_id: str):
     """
     try:
         from src.processing_service.task_manager import TaskManager
+        from src.core.config_manager import get_config_manager
         
-        task_manager = TaskManager(None)  # 使用默认配置
+        config_manager = get_config_manager()
+        task_manager = TaskManager(config_manager)
         task = await task_manager.get_task(task_id)
         
         if not task:
@@ -114,8 +118,10 @@ async def retry_task(task_id: str):
     """
     try:
         from src.processing_service.task_manager import TaskManager
+        from src.core.config_manager import get_config_manager
         
-        task_manager = TaskManager(None)  # 使用默认配置
+        config_manager = get_config_manager()
+        task_manager = TaskManager(config_manager)
         success = await task_manager.retry_failed_task(task_id)
         
         if not success:
@@ -143,8 +149,10 @@ async def get_task_statistics():
     """
     try:
         from src.processing_service.task_manager import TaskManager
+        from src.core.config_manager import get_config_manager
         
-        task_manager = TaskManager(None)  # 使用默认配置
+        config_manager = get_config_manager()
+        task_manager = TaskManager(config_manager)
         stats = await task_manager.get_task_statistics()
         
         return {
@@ -172,8 +180,10 @@ async def cleanup_old_tasks(
     """
     try:
         from src.processing_service.task_manager import TaskManager
+        from src.core.config_manager import get_config_manager
         
-        task_manager = TaskManager(None)  # 使用默认配置
+        config_manager = get_config_manager()
+        task_manager = TaskManager(config_manager)
         deleted_count = await task_manager.cleanup_old_tasks(days)
         
         return {
@@ -306,8 +316,10 @@ async def get_task_queue_status():
     try:
         from src.processing_service.task_manager import TaskManager
         from src.common.storage.database_adapter import DatabaseAdapter
+        from src.core.config_manager import get_config_manager
         
-        task_manager = TaskManager(None)  # 使用默认配置
+        config_manager = get_config_manager()
+        task_manager = TaskManager(config_manager)
         db_adapter = DatabaseAdapter()
         
         # 获取各状态任务数量

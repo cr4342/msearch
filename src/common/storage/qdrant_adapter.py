@@ -196,7 +196,7 @@ class QdrantAdapter:
             
             # 创建点数据
             point = PointStruct(
-                id=uuid.UUID(vector_id) if isinstance(vector_id, str) else vector_id,
+                id=vector_id,
                 vector=vector_data.tolist(),
                 payload=payload
             )
@@ -350,7 +350,7 @@ class QdrantAdapter:
             points = []
             for i, (vector, point_id, payload) in enumerate(zip(vectors, point_ids, payloads)):
                 point = PointStruct(
-                    id=uuid.UUID(point_id),
+                    id=point_id,
                     vector=vector,
                     payload=payload
                 )
