@@ -864,7 +864,7 @@ download_all_resources() {
     detect_architecture
     
     # 执行下载任务
-    download_qdrant || log_warning "Qdrant下载失败，但继续执行"
+    log_info "FAISS不需要单独下载，通过pip安装即可"
     download_dependencies || log_warning "依赖包下载失败，但继续执行"
     download_models || log_warning "模型下载失败，但继续执行"
     
@@ -1547,7 +1547,7 @@ EOF
     chmod +x "${START_SCRIPT}"
     
     # 生成Qdrant启动脚本
-    QDRANT_SCRIPT="${PROJECT_ROOT}/scripts/start_qdrant.sh"
+
     cat > "${QDRANT_SCRIPT}" << EOF
 #!/bin/bash
 # Qdrant向量数据库服务启动脚本

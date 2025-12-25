@@ -73,83 +73,14 @@ database:
     path: ./data/msearch.db
     connection_pool_size: 10
     timeout: 30
-  qdrant:
-    host: localhost
-    port: 6333
-    timeout: 30
+  faiss:
+    data_dir: ./data/faiss
     collections:
       visual_vectors: visual_vectors
       audio_music_vectors: audio_music_vectors
       audio_speech_vectors: audio_speech_vectors
       face_vectors: face_vectors
       text_vectors: text_vectors
-    # 向量存储配置
-    vector_storage:
-      # 默认向量维度
-      default_dimensions:
-        visual: 512
-        audio_music: 512
-        audio_speech: 512
-        face: 512
-        text: 512
-      
-      # 搜索配置
-      search:
-        # 默认搜索限制
-        default_limit: 20
-        # 最大搜索限制
-        max_limit: 1000
-        # 默认相似度阈值
-        default_score_threshold: 0.7
-        # 批量操作大小
-        batch_size: 100
-      
-      # 集合配置
-      collections:
-        visual_vectors:
-          name: "视觉向量集合"
-          description: "用于图像和视频检索的向量集合"
-          distance: "Cosine"
-          hnsw:
-            m: 16
-            ef_construct: 200
-            ef_search: 64
-        
-        audio_music_vectors:
-          name: "音频音乐向量集合"
-          description: "用于音乐检索的向量集合"
-          distance: "Cosine"
-          hnsw:
-            m: 16
-            ef_construct: 200
-            ef_search: 64
-        
-        audio_speech_vectors:
-          name: "音频语音向量集合"
-          description: "用于语音检索的向量集合"
-          distance: "Cosine"
-          hnsw:
-            m: 16
-            ef_construct: 200
-            ef_search: 64
-        
-        face_vectors:
-          name: "人脸向量集合"
-          description: "用于人脸识别和检索的向量集合"
-          distance: "Cosine"
-          hnsw:
-            m: 16
-            ef_construct: 200
-            ef_search: 64
-        
-        text_vectors:
-          name: "文本向量集合"
-          description: "用于文本检索的向量集合"
-          distance: "Cosine"
-          hnsw:
-            m: 16
-            ef_construct: 200
-            ef_search: 64
 
 # Infinity服务配置
 infinity:
@@ -287,55 +218,3 @@ task_manager:
   max_retry_attempts: 3
   retry_delay: 60
   task_timeout: 3600
-
-# Qdrant服务配置
-qdrant_service:
-  # 启动模式: binary(二进制) 或 docker
-  startup_mode: binary
-  
-  # 二进制文件配置
-  binary:
-    # 版本
-    version: "v1.7.0"
-    # 下载URL模板
-    download_url_template: "https://github.com/qdrant/qdrant/releases/download/{version}/{binary_name}"
-    # 本地存储路径
-    storage_path: "./data/qdrant/bin"
-    # 自动下载
-    auto_download: true
-  
-  # Docker配置
-  docker:
-    # 容器名称
-    container_name: "msearch-qdrant"
-    # 镜像版本
-    image: "qdrant/qdrant:latest"
-    # 重启策略
-    restart_policy: "unless-stopped"
-    # 端口映射
-    port_mappings:
-      http: "6333:6333"
-      grpc: "6334:6334"
-    # 卷映射
-    volume_mappings:
-      storage: "./data/qdrant:/qdrant/storage"
-  
-  # 服务健康检查
-  health_check:
-    # 健康检查间隔（秒）
-    interval: 5
-    # 启动超时（秒）
-    startup_timeout: 30
-    # 健康检查URL
-    url: "http://{host}:{port}/health"
-  
-  # 监控配置
-  monitoring:
-    # 启用监控
-    enabled: true
-    # 指标收集间隔（秒）
-    metrics_interval: 60
-    # 日志收集
-    collect_logs: true
-    # 性能监控
-    performance_monitoring: true

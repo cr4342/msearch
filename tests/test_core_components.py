@@ -17,7 +17,6 @@ from src.core.config_manager import ConfigManager
 from src.core.file_type_detector import FileTypeDetector
 from src.core.infinity_manager import InfinityServiceManager
 from src.core.logger_manager import LoggerManager
-from src.core.qdrant_service_manager import QdrantServiceManager
 
 
 class TestConfigManager:
@@ -172,26 +171,7 @@ class TestLoggerManager:
         assert logger is not None
 
 
-class TestQdrantServiceManager:
-    """Qdrant服务管理器测试"""
-    
-    def test_manager_initialization(self):
-        """测试管理器初始化"""
-        try:
-            manager = QdrantServiceManager()
-            assert manager is not None
-        except Exception as e:
-            # 如果Qdrant未安装，跳过测试
-            pytest.skip(f"Qdrant未安装: {e}")
-    
-    def test_service_health_check(self):
-        """测试服务健康检查"""
-        try:
-            manager = QdrantServiceManager()
-            health = manager.check_health()
-            assert isinstance(health, dict)
-        except Exception as e:
-            pytest.skip(f"Qdrant未安装: {e}")
+
 
 
 if __name__ == "__main__":

@@ -14,7 +14,7 @@ pydantic>=2.5.0
 
 # 数据库
 sqlalchemy>=2.0.0
-qdrant-client>=1.6.0
+faiss-cpu>=1.7.4
 
 # 文件监控
 watchdog>=3.0.0

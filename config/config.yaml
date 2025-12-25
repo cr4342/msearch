@@ -1,2 +1,2 @@
 storage:
-  path: /data/project/msearch/data/qdrant
+  path: /data/project/msearch/data/faiss

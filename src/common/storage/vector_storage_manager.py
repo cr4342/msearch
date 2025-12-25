@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional, Tuple, Union
 from dataclasses import dataclass
 from enum import Enum
 
-from src.common.storage.qdrant_adapter import QdrantAdapter
+from src.common.storage.faiss_adapter import FaissAdapter
 from src.core.config_manager import get_config_manager
 
 
@@ -86,14 +86,8 @@ class VectorStorageManager:
             self.config_manager = config_manager or get_config_manager()
             self.logger = logging.getLogger(__name__)
 
-            # 初始化Qdrant适配器 - 用于连接和操作向量数据库
-            try:
-                self.qdrant_adapter = QdrantAdapter(config_manager)
-            except Exception as adapter_error:
-                self.logger.error(f"向量存储适配器初始化失败: {adapter_error}")
-                raise ValueError(
-                    f"无法初始化向量存储适配器: {str(adapter_error)}"
-                ) from adapter_error
+            # 初始化FAISS适配器 - 用于连接和操作向量数据库
+            self.faiss_adapter = FaissAdapter(config_manager)
 
             # 向量维度配置 - 定义不同类型向量的维度
             self.vector_dimensions = {
@@ -118,6 +112,11 @@ class VectorStorageManager:
             self.dimension_adjustment_enabled = True  # 启用维度调整
 
             self.logger.info("向量存储管理器初始化完成")
+        except Exception as adapter_error:
+            self.logger.error(f"向量存储适配器初始化失败: {adapter_error}")
+            raise ValueError(
+                f"无法初始化向量存储适配器: {str(adapter_error)}"
+            ) from adapter_error
         except Exception as e:
             self.logger.error(f"向量存储管理器初始化失败: {e}")
             raise
@@ -125,10 +124,10 @@ class VectorStorageManager:
     async def initialize(self) -> bool:
         """初始化向量存储"""
         try:
-            # 连接Qdrant
-            success = await self.qdrant_adapter.connect()
+            # 连接FAISS
+            success = await self.faiss_adapter.connect()
             if not success:
-                self.logger.error("Qdrant连接失败")
+                self.logger.error("FAISS连接失败")
                 return False
 
             # 创建必要的集合
@@ -163,7 +162,7 @@ class VectorStorageManager:
                         self.logger.error(f"确保集合存在: {error_msg}")
                         raise ValueError(error_msg)
 
-                    success = await self.qdrant_adapter.create_collection(
+                    success = await self.faiss_adapter.create_collection(
                         collection_name=collection_name,
                         vector_size=dimension,
                         distance_metric="cosine",
@@ -243,7 +242,7 @@ class VectorStorageManager:
                 payload.update(metadata.additional_data)
 
             # 存储向量
-            vector_id = await self.qdrant_adapter.store_vector(
+            vector_id = await self.faiss_adapter.store_vector(
                 collection_type=vector_type.value,
                 vector_data=vector_data,
                 file_id=metadata.file_id,
@@ -339,7 +338,7 @@ class VectorStorageManager:
                 filters = self._optimize_filter_conditions(filters)
 
             # 搜索向量
-            raw_results = await self.qdrant_adapter.search_vectors(
+            raw_results = await self.faiss_adapter.search_vectors(
                 collection_type=vector_type.value,
                 query_vector=query_vector,
                 limit=limit,
@@ -616,7 +615,7 @@ class VectorStorageManager:
                             'payloads': batch_payloads
                         }
                         # 执行向量存储
-                        store_method = self.qdrant_adapter.store_vectors
+                        store_method = self.faiss_adapter.store_vectors
                         batch_stored_ids = await store_method(**store_params)
                         stored_ids.extend(batch_stored_ids)
                     except Exception as e:
@@ -673,7 +672,7 @@ class VectorStorageManager:
 
             for vector_type in VectorType:
                 try:
-                    count = await self.qdrant_adapter.delete_vectors_by_file(
+                    count = await self.faiss_adapter.delete_vectors_by_file(
                         collection_type=vector_type.value, file_id=file_id
                     )
                     deleted_counts[vector_type.value] = count
@@ -731,7 +730,7 @@ class VectorStorageManager:
         """
         try:
             if vector_type:
-                count = await self.qdrant_adapter.get_vector_count(
+                count = await self.faiss_adapter.get_vector_count(
                     vector_type.value
                 )
                 return count
@@ -739,7 +738,7 @@ class VectorStorageManager:
                 counts = {}
                 for vt in VectorType:
                     try:
-                        count = await self.qdrant_adapter.get_vector_count(
+                        count = await self.faiss_adapter.get_vector_count(
                             vt.value
                         )
                         counts[vt.value] = count
@@ -872,7 +871,7 @@ class VectorStorageManager:
             # 遍历所有集合类型
             for vt, cn in self.collection_mapping.items():
                 try:
-                    info = await self.qdrant_adapter.get_collection_info(cn)
+                    info = await self.faiss_adapter.get_collection_info(cn)
                     # 统计
                     s = stats[vt.value] = {}
                     s["col"] = cn
@@ -894,8 +893,8 @@ class VectorStorageManager:
     async def health_check(self) -> Dict[str, Any]:
         """健康检查"""
         try:
-            # Qdrant健康检查
-            qdrant_health = await self.qdrant_adapter.health_check()
+            # FAISS健康检查
+            faiss_health = await self.faiss_adapter.health_check()
 
             # 获取统计信息
             stats = await self.get_collection_stats()
@@ -910,10 +909,10 @@ class VectorStorageManager:
             return {
                 "status": (
                     "healthy"
-                    if qdrant_health.get("status") == "healthy"
+                    if faiss_health.get("status") == "healthy"
                     else "unhealthy"
                 ),
-                "qdrant": qdrant_health,
+                "faiss": faiss_health,
                 "collections": stats,
                 "total_vectors": total_vectors,
                 "supported_types": [vt.value for vt in VectorType],
@@ -926,7 +925,7 @@ class VectorStorageManager:
     async def cleanup(self) -> bool:
         """清理资源"""
         try:
-            await self.qdrant_adapter.disconnect()
+            await self.faiss_adapter.disconnect()
             self.logger.info("向量存储管理器清理完成")
             return True
         except Exception as e:
