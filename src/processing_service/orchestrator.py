@@ -5,6 +5,7 @@
 
 import asyncio
 import logging
+import uuid
 from typing import Dict, Any, List, Optional
 from datetime import datetime
 
@@ -162,8 +163,19 @@ class ProcessingOrchestrator:
         """根据文件类型确定处理策略"""
         file_type = file_info['file_type']
         
+        # 文本处理策略
+        if file_type in ['.txt', '.md', '.json', '.csv', '.xml', '.html', '.log']:
+            return {
+                'modality': 'text',
+                'preprocessing': None,  # 文本文件不需要预处理
+                'vectorization': {
+                    'model': 'clip',
+                    'method': 'embed_text'
+                }
+            }
+        
         # 图像处理策略
-        if file_type in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.svg', '.heic', '.heif', '.ico']:
+        elif file_type in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.svg', '.heic', '.heif', '.ico']:
             return {
                 'modality': 'image',
                 'preprocessing': {
@@ -214,6 +226,11 @@ class ProcessingOrchestrator:
         """预处理文件"""
         self.logger.debug(f"开始预处理文件: {file_info['file_path']}")
         
+        # 文本文件不需要预处理
+        if strategy['modality'] == 'text':
+            self.logger.debug(f"文本文件跳过预处理: {file_info['file_path']}")
+            return
+        
         # 调用媒体处理器进行预处理
         processed_data = await self.media_processor.process(
             file_path=file_info['file_path'],
@@ -241,7 +258,27 @@ class ProcessingOrchestrator:
         segment_metadata = []
         
         collection_type = None
-        if strategy['modality'] == 'image':
+        if strategy['modality'] == 'text':
+            # 文本向量化
+            collection_type = 'text'
+            # 读取文本文件内容
+            with open(file_info['file_path'], 'r', encoding='utf-8') as f:
+                text_content = f.read()
+            # 向量化
+            vector = await self.embedding_engine.embed_text(text_content)
+            vectors.append(vector)
+            segment_metadata.append({
+                'id': str(uuid.uuid4()),
+                'segment_type': 'text',
+                'start_time': 0,
+                'end_time': 0,
+                'metadata': {
+                    'text_length': len(text_content),
+                    'content_preview': text_content[:100] if len(text_content) > 100 else text_content
+                }
+            })
+        
+        elif strategy['modality'] == 'image':
             # 图像向量化 - 从segments中获取图像数据
             collection_type = 'visual'
             for segment in processed_data.get('segments', []):

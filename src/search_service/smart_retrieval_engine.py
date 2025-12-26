@@ -20,7 +20,7 @@ class SmartRetrievalEngine:
         
         # 初始化组件
         self.db_adapter = DatabaseAdapter()
-        self.embedding_engine = EmbeddingEngine()
+        self.embedding_engine = EmbeddingEngine(config_manager)
         
         # 检索配置
         self.default_weights = self.config_manager.get("smart_retrieval.default_weights", {

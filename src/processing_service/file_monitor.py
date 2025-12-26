@@ -93,11 +93,20 @@ class FileMonitor:
         self.observer = Observer()
         self.handler = FileMonitorHandler(self)
         
+        # 运行状态
+        self._is_running = False
+        
         self.logger.info(f"文件监控器初始化完成，监控目录: {self.monitored_directories}")
+    
+    @property
+    def is_running(self) -> bool:
+        """获取运行状态"""
+        return self._is_running
     
     async def start(self):
         """启动文件监控"""
         self.logger.info("启动文件监控服务")
+        self._is_running = True
         
         # 启动事件处理器
         self.event_processor_task = asyncio.create_task(self._process_event_queue())
@@ -118,6 +127,7 @@ class FileMonitor:
     async def stop(self):
         """停止文件监控"""
         self.logger.info("停止文件监控服务")
+        self._is_running = False
         
         # 停止事件处理器
         if self.event_processor_task:

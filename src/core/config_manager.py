@@ -343,6 +343,10 @@ class ConfigManager:
         
         # 比较配置变化并通知监听器
         self._notify_config_changes(old_config, new_config)
+    
+    async def reload_config(self):
+        """异步重新加载配置文件"""
+        self.reload()
         
     def _notify_config_changes(self, old_config: Dict, new_config: Dict):
         """通知配置变化"""

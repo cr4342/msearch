@@ -6,14 +6,14 @@ import logging
 import psutil
 import time
 from typing import Dict, Any
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
 @router.get("/status")
-async def get_system_status():
+async def get_system_status(request: Request):
     """
     获取系统状态
     
@@ -38,8 +38,7 @@ async def get_system_status():
         uptime = time.time() - boot_time
         
         # 获取服务状态
-        from fastapi import Request
-        app_state = Request.app.state
+        app_state = request.app.state
         
         service_status = {
             "retrieval_engine": getattr(app_state, 'retrieval_engine', None) is not None,
@@ -140,7 +139,7 @@ async def get_system_status():
 
 
 @router.get("/status/health")
-async def health_check():
+async def health_check(request: Request):
     """
     健康检查
     
@@ -148,8 +147,7 @@ async def health_check():
         健康状态
     """
     try:
-        from fastapi import Request
-        app_state = Request.app.state
+        app_state = request.app.state
         
         # 检查核心服务状态
         services_healthy = True
@@ -270,7 +268,7 @@ async def health():
 
 
 @router.get("/health/orchestrator")
-async def health_orchestrator():
+async def health_orchestrator(request: Request):
     """
     调度器健康检查
     
@@ -278,8 +276,7 @@ async def health_orchestrator():
         调度器健康状态
     """
     try:
-        from fastapi import Request
-        app_state = Request.app.state
+        app_state = request.app.state
         
         if hasattr(app_state, 'orchestrator') and app_state.orchestrator:
             try:

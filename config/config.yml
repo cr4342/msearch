@@ -19,6 +19,7 @@ system:
     - .mp3
     - .wav
     - .flac
+    - .txt
   debounce_delay: 0.5
   max_workers: 4
 

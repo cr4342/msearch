@@ -4,7 +4,7 @@
 
 import logging
 from typing import Dict, Any, List
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, HTTPException, Request
 
 from src.core.config_manager import get_config_manager
 
@@ -71,7 +71,7 @@ async def get_monitored_directories():
 
 
 @router.post("/config/monitored-directories")
-async def add_monitored_directory(directory: str):
+async def add_monitored_directory(directory: str, request: Request):
     """
     添加监控目录
     
@@ -111,9 +111,9 @@ async def add_monitored_directory(directory: str):
         await config_manager.reload_config()
         
         # 通知文件监控器
-        from fastapi import Request
-        file_monitor = Request.app.state.file_monitor
-        await file_monitor.add_directory(directory)
+        file_monitor = request.app.state.file_monitor
+        if file_monitor:
+            await file_monitor.add_directory(directory)
         
         logger.info(f"添加监控目录: {directory}")
         
@@ -131,7 +131,7 @@ async def add_monitored_directory(directory: str):
 
 
 @router.delete("/config/monitored-directories")
-async def remove_monitored_directory(directory: str):
+async def remove_monitored_directory(directory: str, request: Request):
     """
     移除监控目录
     
@@ -157,9 +157,9 @@ async def remove_monitored_directory(directory: str):
         await config_manager.reload_config()
         
         # 通知文件监控器
-        from fastapi import Request
-        file_monitor = Request.app.state.file_monitor
-        await file_monitor.remove_directory(directory)
+        file_monitor = request.app.state.file_monitor
+        if file_monitor:
+            await file_monitor.remove_directory(directory)
         
         logger.info(f"移除监控目录: {directory}")
         
@@ -223,7 +223,7 @@ async def reload_config():
 
 
 @router.get("/config/models")
-async def get_model_config():
+async def get_model_config(request: Request):
     """
     获取模型配置信息
     
@@ -237,8 +237,7 @@ async def get_model_config():
         infinity_config = config_manager.get("infinity.services", {})
         
         # 获取模型状态
-        from fastapi import Request
-        retrieval_engine = Request.app.state.retrieval_engine
+        retrieval_engine = request.app.state.retrieval_engine
         
         model_status = {}
         if retrieval_engine and retrieval_engine.embedding_engine:

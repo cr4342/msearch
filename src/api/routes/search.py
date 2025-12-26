@@ -4,7 +4,7 @@
 
 import logging
 from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, Request
 from pydantic import BaseModel
 
 from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
@@ -34,6 +34,7 @@ class SearchResponse(BaseModel):
 
 @router.post("/search", response_model=SearchResponse)
 async def search(
+    request: Request,
     text: Optional[str] = Form(None),
     image: Optional[UploadFile] = File(None),
     audio: Optional[UploadFile] = File(None),
@@ -44,6 +45,7 @@ async def search(
     执行多模态混合检索
     
     Args:
+        request: FastAPI请求对象
         text: 文本查询内容
         image: 图像查询数据
         audio: 音频查询数据
@@ -76,12 +78,8 @@ async def search(
             audio_data = await audio.read()
         
         # 获取检索引擎
-        from fastapi import Request
-        
-        # 在测试环境中，Request可能没有正确的app state
-        # 我们直接创建或使用全局实例
         try:
-            retrieval_engine: SmartRetrievalEngine = Request.app.state.retrieval_engine
+            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
         except AttributeError:
             # 测试环境回退方案
             from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
@@ -118,6 +116,7 @@ async def search(
 
 @router.post("/search/image", response_model=SearchResponse)
 async def search_by_image(
+    request: Request,
     image: UploadFile = File(...),
     top_k: int = Form(10),
     filters: Optional[str] = Form(None)
@@ -126,6 +125,7 @@ async def search_by_image(
     以图搜图
     
     Args:
+        request: FastAPI请求对象
         image: 图像文件
         top_k: 返回结果数量
         filters: 过滤条件（JSON字符串）
@@ -150,12 +150,8 @@ async def search_by_image(
                 logger.warning(f"无效的过滤条件JSON: {filters}")
         
         # 获取检索引擎
-        from fastapi import Request
-        
-        # 在测试环境中，Request可能没有正确的app state
-        # 我们直接创建或使用全局实例
         try:
-            retrieval_engine: SmartRetrievalEngine = Request.app.state.retrieval_engine
+            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
         except AttributeError:
             # 测试环境回退方案
             from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
@@ -190,6 +186,7 @@ async def search_by_image(
 
 @router.post("/search/audio", response_model=SearchResponse)
 async def search_by_audio(
+    request: Request,
     audio: UploadFile = File(...),
     top_k: int = Form(10),
     filters: Optional[str] = Form(None)
@@ -198,6 +195,7 @@ async def search_by_audio(
     以音频搜音频
     
     Args:
+        request: FastAPI请求对象
         audio: 音频文件
         top_k: 返回结果数量
         filters: 过滤条件（JSON字符串）
@@ -222,12 +220,8 @@ async def search_by_audio(
                 logger.warning(f"无效的过滤条件JSON: {filters}")
         
         # 获取检索引擎
-        from fastapi import Request
-        
-        # 在测试环境中，Request可能没有正确的app state
-        # 我们直接创建或使用全局实例
         try:
-            retrieval_engine: SmartRetrievalEngine = Request.app.state.retrieval_engine
+            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
         except AttributeError:
             # 测试环境回退方案
             from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
@@ -262,6 +256,7 @@ async def search_by_audio(
 
 @router.get("/similar/{file_id}")
 async def get_similar_files(
+    request: Request,
     file_id: str,
     top_k: int = Query(10, ge=1, le=100)
 ):
@@ -269,6 +264,7 @@ async def get_similar_files(
     获取相似文件
     
     Args:
+        request: FastAPI请求对象
         file_id: 文件ID
         top_k: 返回结果数量
         
@@ -277,12 +273,8 @@ async def get_similar_files(
     """
     try:
         # 获取检索引擎
-        from fastapi import Request
-        
-        # 在测试环境中，Request可能没有正确的app state
-        # 我们直接创建或使用全局实例
         try:
-            retrieval_engine: SmartRetrievalEngine = Request.app.state.retrieval_engine
+            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
         except AttributeError:
             # 测试环境回退方案
             from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
@@ -308,6 +300,7 @@ async def get_similar_files(
 
 @router.get("/suggestions")
 async def get_search_suggestions(
+    request: Request,
     query: str = Query(..., min_length=1),
     limit: int = Query(10, ge=1, le=50)
 ):
@@ -315,6 +308,7 @@ async def get_search_suggestions(
     获取搜索建议
     
     Args:
+        request: FastAPI请求对象
         query: 部分查询
         limit: 返回建议数量
         
@@ -323,12 +317,8 @@ async def get_search_suggestions(
     """
     try:
         # 获取检索引擎
-        from fastapi import Request
-        
-        # 在测试环境中，Request可能没有正确的app state
-        # 我们直接创建或使用全局实例
         try:
-            retrieval_engine: SmartRetrievalEngine = Request.app.state.retrieval_engine
+            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
         except AttributeError:
             # 测试环境回退方案
             from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
@@ -353,12 +343,14 @@ async def get_search_suggestions(
 
 @router.get("/popular")
 async def get_popular_searches(
+    request: Request,
     limit: int = Query(10, ge=1, le=50)
 ):
     """
     获取热门搜索
     
     Args:
+        request: FastAPI请求对象
         limit: 返回热门搜索数量
         
     Returns:
@@ -366,12 +358,8 @@ async def get_popular_searches(
     """
     try:
         # 获取检索引擎
-        from fastapi import Request
-        
-        # 在测试环境中，Request可能没有正确的app state
-        # 我们直接创建或使用全局实例
         try:
-            retrieval_engine: SmartRetrievalEngine = Request.app.state.retrieval_engine
+            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
         except AttributeError:
             # 测试环境回退方案
             from src.search_service.smart_retrieval_engine import SmartRetrievalEngine

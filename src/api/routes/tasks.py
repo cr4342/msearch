@@ -4,7 +4,7 @@
 
 import logging
 from typing import Dict, Any, List
-from fastapi import APIRouter, HTTPException, Query
+from fastapi import APIRouter, HTTPException, Query, Request
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -239,7 +239,7 @@ async def get_file_tasks(file_id: str):
 
 
 @router.post("/tasks/pause")
-async def pause_task_processing():
+async def pause_task_processing(request: Request):
     """
     暂停任务处理
     
@@ -247,8 +247,7 @@ async def pause_task_processing():
         操作结果
     """
     try:
-        from fastapi import Request
-        orchestrator = Request.app.state.orchestrator
+        orchestrator = request.app.state.orchestrator
         
         if not orchestrator:
             raise HTTPException(status_code=503, detail="调度器服务不可用")
@@ -271,7 +270,7 @@ async def pause_task_processing():
 
 
 @router.post("/tasks/resume")
-async def resume_task_processing():
+async def resume_task_processing(request: Request):
     """
     恢复任务处理
     
@@ -279,8 +278,7 @@ async def resume_task_processing():
         操作结果
     """
     try:
-        from fastapi import Request
-        orchestrator = Request.app.state.orchestrator
+        orchestrator = request.app.state.orchestrator
         
         if not orchestrator:
             raise HTTPException(status_code=503, detail="调度器服务不可用")
