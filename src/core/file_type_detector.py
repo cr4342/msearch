@@ -109,24 +109,24 @@ def normalize_path(file_path: str) -> str:
 class FileTypeDetector:
     """文件类型检测器"""
     
-    def __init__(self, config: Dict[str, Any]):
+    def __init__(self, config: Dict[str, Any] = None):
         """
         初始化文件类型检测器
         
         Args:
-            config: 配置字典
+            config: 配置字典，默认为None
         """
-        self.config = config
+        self.config = config or {}
         
         # 从配置加载文件类型映射
-        self.file_extensions = config.get('file_monitoring.file_extensions', {
+        self.file_extensions = self.config.get('file_monitoring.file_extensions', {
             'image': ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp'],
             'video': ['.mp4', '.avi', '.mov', '.mkv', '.webm'],
             'audio': ['.mp3', '.wav', '.ogg', '.flac', '.aac'],
             'text': ['.txt', '.md', '.csv', '.json', '.xml']
         })
         
-        self.mime_types = config.get('file_monitoring.mime_types', {
+        self.mime_types = self.config.get('file_monitoring.mime_types', {
             'image': ['image/jpeg', 'image/png', 'image/bmp', 'image/gif', 'image/webp'],
             'video': ['video/mp4', 'video/x-msvideo', 'video/quicktime', 'video/x-matroska', 'video/webm'],
             'audio': ['audio/mpeg', 'audio/wav', 'audio/ogg', 'audio/flac', 'audio/aac'],

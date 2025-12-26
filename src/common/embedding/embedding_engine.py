@@ -11,7 +11,7 @@ import numpy as np
 from infinity_emb import AsyncEngineArray, EngineArgs
 
 from src.core.config_manager import get_config_manager
-from src.common.storage.qdrant_adapter import QdrantAdapter
+from src.common.storage.faiss_adapter import FaissAdapter
 
 
 class EmbeddingEngine:
@@ -27,8 +27,8 @@ class EmbeddingEngine:
         # 引擎实例
         self.engines: Dict[str, Any] = {}
         
-        # Qdrant适配器
-        self.qdrant_adapter = QdrantAdapter(config_manager)
+        # FAISS适配器
+        self.faiss_adapter = FaissAdapter(config_manager)
         
         # 初始化模型
         self._initialize_models()
@@ -476,7 +476,7 @@ class EmbeddingEngine:
             搜索结果列表
         """
         try:
-            return await self.qdrant_adapter.search_vectors(
+            return await self.faiss_adapter.search_vectors(
                 collection_type=collection_type,
                 query_vector=query_vector,
                 limit=limit,
@@ -493,9 +493,10 @@ class EmbeddingEngine:
                           vector_data: np.ndarray, 
                           file_id: str,
                           segment_id: Optional[str] = None,
-                          metadata: Optional[Dict[str, Any]] = None) -> str:
+                          metadata: Optional[Dict[str, Any]] = None,
+                          vector_id: Optional[str] = None) -> str:
         """
-        存储向量到Qdrant
+        存储向量到FAISS
         
         Args:
             collection_type: 集合类型
@@ -503,17 +504,19 @@ class EmbeddingEngine:
             file_id: 文件ID
             segment_id: 片段ID（可选）
             metadata: 元数据
+            vector_id: 向量ID（可选）
             
         Returns:
             向量ID
         """
         try:
-            return await self.qdrant_adapter.store_vector(
+            return await self.faiss_adapter.store_vector(
                 collection_type=collection_type,
                 vector_data=vector_data,
                 file_id=file_id,
                 segment_id=segment_id,
-                metadata=metadata
+                metadata=metadata,
+                vector_id=vector_id
             )
         except Exception as e:
             self.logger.error(f"向量存储失败: {e}")
@@ -535,7 +538,7 @@ class EmbeddingEngine:
             向量ID列表
         """
         try:
-            return await self.qdrant_adapter.batch_store_vectors(
+            return await self.faiss_adapter.batch_store_vectors(
                 collection_type=collection_type,
                 vectors_data=vectors_data,
                 batch_size=batch_size
@@ -556,7 +559,7 @@ class EmbeddingEngine:
             删除的向量数量
         """
         try:
-            return await self.qdrant_adapter.delete_vectors_by_file(
+            return await self.faiss_adapter.delete_vectors_by_file(
                 collection_type=collection_type,
                 file_id=file_id
             )
@@ -575,22 +578,22 @@ class EmbeddingEngine:
             向量数量
         """
         try:
-            return await self.qdrant_adapter.get_vector_count(collection_type)
+            return await self.faiss_adapter.get_vector_count(collection_type)
         except Exception as e:
             self.logger.error(f"获取向量数量失败: {e}")
             return 0
     
-    async def qdrant_health_check(self) -> Dict[str, Any]:
+    async def faiss_health_check(self) -> Dict[str, Any]:
         """
-        Qdrant健康检查
+        FAISS健康检查
         
         Returns:
             健康检查结果
         """
         try:
-            return await self.qdrant_adapter.health_check()
+            return await self.faiss_adapter.health_check()
         except Exception as e:
-            self.logger.error(f"Qdrant健康检查失败: {e}")
+            self.logger.error(f"FAISS健康检查失败: {e}")
             return {
                 'status': 'unhealthy',
                 'error': str(e)

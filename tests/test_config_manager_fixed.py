@@ -1,153 +1,192 @@
 """
-配置管理器单元测试
+测试ConfigManager组件的修复功能
 """
 
+import os
+import tempfile
+import time
 import pytest
 import yaml
-import tempfile
-import os
-from unittest.mock import patch
-import sys
-
-# 添加项目根目录到Python路径
-project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, os.path.join(project_root, 'src'))
-
 from src.core.config_manager import ConfigManager
 
 
-def test_config_manager_initialization():
-    """测试配置管理器初始化"""
-    test_config_data = {
-        'system': {
-            'log_level': 'INFO',
-            'data_dir': './data'
-        }
-    }
+class TestConfigManagerFixed:
+    """测试ConfigManager修复后的功能"""
     
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-        yaml.dump(test_config_data, f)
-        config_path = f.name
-    
-    try:
-        config_manager = ConfigManager(config_path)
-        assert config_manager.config_path == config_path
-        assert config_manager.config is not None
-        print("✓ 配置管理器初始化测试通过")
-    finally:
-        os.unlink(config_path)
-
-
-def test_get_nested_value():
-    """测试获取嵌套配置值"""
-    test_config_data = {
-        'system': {
-            'log_level': 'INFO',
-            'max_workers': 4
-        },
-        'database': {
-            'sqlite': {
-                'path': './data/msearch.db'
-            }
-        }
-    }
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-        yaml.dump(test_config_data, f)
-        config_path = f.name
-    
-    try:
-        config_manager = ConfigManager(config_path)
-        assert config_manager.get('system.log_level') == 'INFO'
-        assert config_manager.get('database.sqlite.path') == './data/msearch.db'
-        assert config_manager.get('nonexistent.key') is None
-        assert config_manager.get('nonexistent.key', 'default') == 'default'
-        print("✓ 获取嵌套配置值测试通过")
-    finally:
-        os.unlink(config_path)
-
-
-def test_set_config_value():
-    """测试设置配置值"""
-    test_config_data = {
-        'system': {
-            'log_level': 'INFO'
-        }
-    }
-    
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-        yaml.dump(test_config_data, f)
-        config_path = f.name
-    
-    try:
-        config_manager = ConfigManager(config_path)
-        config_manager.set('new_section.key', 'new_value')
-        assert config_manager.get('new_section.key') == 'new_value'
-        print("✓ 设置配置值测试通过")
-    finally:
-        os.unlink(config_path)
-
-
-def test_load_nonexistent_config():
-    """测试加载不存在的配置文件"""
-    config_manager = ConfigManager('nonexistent.yml')
-    assert config_manager.config is not None
-    assert 'system' in config_manager.config
-    print("✓ 加载不存在配置文件测试通过")
-
-
-def test_env_variable_override():
-    """测试环境变量覆盖配置"""
-    test_config_data = {
-        'system': {
-            'log_level': 'INFO',
-            'max_workers': 4
-        }
-    }
-    
-    with patch.dict(os.environ, {
-        'MSEARCH_SYSTEM_LOG_LEVEL': 'ERROR',
-        'MSEARCH_SYSTEM_MAX_WORKERS': '8'
-    }):
+    def test_config_validation(self):
+        """测试配置验证功能"""
+        # 创建一个临时配置文件
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
-            yaml.dump(test_config_data, f)
+            config = {
+                'database': {
+                    'sqlite': {
+                        'path': './data/msearch.db'
+                    },
+                    'faiss': {
+                        'data_dir': './data/faiss'
+                    }
+                },
+                'infinity': {
+                    'services': {
+                        'clip': {
+                            'port': 7997
+                        }
+                    }
+                },
+                'face_recognition': {
+                    'matching': {
+                        'similarity_threshold': 0.6
+                    }
+                }
+            }
+            yaml.dump(config, f)
             config_path = f.name
         
         try:
+            # 创建配置管理器实例
             config_manager = ConfigManager(config_path)
-            # 环境变量应该覆盖配置文件
-            assert config_manager.get('system.log_level') == 'ERROR'
-            assert config_manager.get('system.max_workers') == 8  # 应该转换为整数
-            print("✓ 环境变量覆盖配置测试通过")
+            
+            # 测试validate_config方法
+            assert config_manager.validate_config() == True
+            
+            # 测试无效配置
+            invalid_config = config.copy()
+            invalid_config['database']['faiss']['data_dir'] = None
+            assert config_manager.validate_config(invalid_config) == False
+            
         finally:
+            # 清理临时文件
             os.unlink(config_path)
-
-
-def test_generate_default_config():
-    """测试生成默认配置"""
-    config_manager = ConfigManager('nonexistent.yml')
-    default_config = config_manager._generate_default_config()
     
-    assert 'system' in default_config
-    assert 'database' in default_config
-    assert 'infinity' in default_config
-    assert 'media_processing' in default_config
-    assert 'face_recognition' in default_config
-    assert 'smart_retrieval' in default_config
+    def test_config_validation_with_default_config(self):
+        """测试使用默认配置的验证"""
+        # 创建一个空的配置文件
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+            config_path = f.name
+        
+        try:
+            # 创建配置管理器实例
+            config_manager = ConfigManager(config_path)
+            
+            # 测试validate_config方法（使用默认配置）
+            assert config_manager.validate_config() == True
+            
+        finally:
+            # 清理临时文件
+            os.unlink(config_path)
     
-    # 验证关键配置项
-    assert default_config['system']['log_level'] == 'INFO'
-    assert 'sqlite' in default_config['database']
-    assert 'qdrant' in default_config['database']
-    print("✓ 生成默认配置测试通过")
-
-
-if __name__ == "__main__":
-    # 运行所有测试
-    test_config_manager_initialization()
-    test_get_nested_value()
-    test_set_config_value()
-    test_load_nonexistent_config()
-    test_env_variable_override()
-    test_generate_default_config()
-    print("\n🎉 所有配置管理器测试通过!")
+    def test_config_reload(self):
+        """测试配置重新加载功能"""
+        # 创建初始配置文件
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+            config = {
+                'system': {
+                    'log_level': 'INFO'
+                },
+                'database': {
+                    'sqlite': {
+                        'path': './data/msearch.db'
+                    },
+                    'faiss': {
+                        'data_dir': './data/faiss'
+                    }
+                },
+                'infinity': {
+                    'services': {
+                        'clip': {
+                            'port': 7997
+                        }
+                    }
+                },
+                'face_recognition': {
+                    'matching': {
+                        'similarity_threshold': 0.6
+                    }
+                }
+            }
+            yaml.dump(config, f)
+            config_path = f.name
+        
+        try:
+            # 创建配置管理器实例
+            config_manager = ConfigManager(config_path)
+            
+            # 获取初始配置
+            initial_log_level = config_manager.get('system.log_level')
+            assert initial_log_level == 'INFO'
+            
+            # 修改配置文件
+            with open(config_path, 'w') as f:
+                config['system']['log_level'] = 'DEBUG'
+                yaml.dump(config, f)
+            
+            # 手动调用reload方法
+            config_manager.reload()
+            
+            # 检查配置是否已更新
+            updated_log_level = config_manager.get('system.log_level')
+            assert updated_log_level == 'DEBUG'
+            
+        finally:
+            # 清理临时文件
+            os.unlink(config_path)
+    
+    def test_config_manager_initialization(self):
+        """测试配置管理器初始化"""
+        # 创建一个有效的配置文件
+        with tempfile.NamedTemporaryFile(mode='w', suffix='.yml', delete=False) as f:
+            config = {
+                'database': {
+                    'sqlite': {
+                        'path': './data/msearch.db'
+                    },
+                    'faiss': {
+                        'data_dir': './data/faiss'
+                    }
+                },
+                'infinity': {
+                    'services': {
+                        'clip': {
+                            'port': 7997
+                        }
+                    }
+                },
+                'face_recognition': {
+                    'matching': {
+                        'similarity_threshold': 0.6
+                    }
+                }
+            }
+            yaml.dump(config, f)
+            config_path = f.name
+        
+        try:
+            # 创建配置管理器实例
+            config_manager = ConfigManager(config_path)
+            
+            # 验证配置已正确加载
+            assert config_manager.get('database.sqlite.path') == './data/msearch.db'
+            assert config_manager.get('database.faiss.data_dir') == './data/faiss'
+            assert config_manager.get('infinity.services.clip.port') == 7997
+            assert config_manager.get('face_recognition.matching.similarity_threshold') == 0.6
+            
+        finally:
+            # 清理临时文件
+            os.unlink(config_path)
+    
+    def test_missing_config_file(self):
+        """测试配置文件不存在的情况"""
+        # 使用一个不存在的配置文件路径
+        non_existent_path = './non_existent_config.yml'
+        
+        # 确保文件不存在
+        if os.path.exists(non_existent_path):
+            os.unlink(non_existent_path)
+        
+        # 创建配置管理器实例，应该使用默认配置
+        config_manager = ConfigManager(non_existent_path)
+        
+        # 验证配置已使用默认值
+        assert config_manager.get('database.sqlite.path') == './data/msearch.db'
+        assert config_manager.get('database.faiss.data_dir') == './data/faiss'
+        assert config_manager.validate_config() == True

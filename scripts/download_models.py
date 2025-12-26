@@ -57,7 +57,7 @@ def download_models(models_dir):
         {
             'name': 'clap',
             'repo_id': 'laion/clap-htsat-unfused',
-            'local_path': os.path.join(models_dir, 'clap-htsat-fused'),
+            'local_path': os.path.join(models_dir, 'clap-htsat-unfused'),
             'components': ['model', 'processor']
         },
         {
@@ -105,9 +105,15 @@ def download_models(models_dir):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("[ERROR] 缺少模型目录参数")
-        sys.exit(1)
+        # 如果没有提供参数，使用默认的模型目录
+        default_models_dir = os.path.join(Path(__file__).parent.parent, "data", "models")
+        print(f"[INFO] 未提供模型目录参数，使用默认目录: {default_models_dir}")
+        models_dir = default_models_dir
+    else:
+        models_dir = sys.argv[1]
     
-    models_dir = sys.argv[1]
+    # 确保默认模型目录存在
+    os.makedirs(models_dir, exist_ok=True)
+    
     success = download_models(models_dir)
     sys.exit(0 if success else 1)

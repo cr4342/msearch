@@ -159,7 +159,9 @@ def main():
     print("=" * 50)
     
     # 确保目录存在
-    testdata_dir = Path("/data/project/msearch/testdata")
+    script_dir = Path(__file__).parent
+    project_root = script_dir.parent
+    testdata_dir = project_root / "testdata"
     images_dir = testdata_dir / "images"
     images_dir.mkdir(parents=True, exist_ok=True)
     

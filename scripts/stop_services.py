@@ -28,11 +28,6 @@ PROJECT_ROOT = Path(__file__).parent.parent
 class ServicesManager:
     def __init__(self):
         self.services = {
-            'qdrant': {
-                'name': 'Qdrant向量数据库',
-                'pid_file': PROJECT_ROOT / 'data' / 'qdrant' / 'qdrant.pid',
-                'stop_cmd': [str(PROJECT_ROOT / 'scripts' / 'stop_qdrant.sh')]
-            },
             'api': {
                 'name': 'API服务',
                 'pid_file': PROJECT_ROOT / 'data' / 'api.pid',
@@ -170,8 +165,8 @@ class ServicesManager:
         """停止所有服务"""
         logger.info("=== 开始停止所有服务 ===")
         
-        # 停止顺序：API -> UI -> 处理器 -> Qdrant
-        stop_order = ['api', 'ui', 'processor', 'qdrant']
+        # 停止顺序：API -> UI -> 处理器
+        stop_order = ['api', 'ui', 'processor']
         
         for service_name in stop_order:
             self.stop_service(service_name)
@@ -206,7 +201,6 @@ class ServicesManager:
     def is_process_running(self, service_name: str):
         """检查进程是否正在运行"""
         process_names = {
-            'qdrant': ['qdrant'],
             'api': ['uvicorn', 'api'],
             'ui': ['pyside6', 'ui'],
             'processor': ['processor', 'media']
@@ -240,7 +234,7 @@ class ServicesManager:
 def main():
     parser = argparse.ArgumentParser(description="MSearch服务停止脚本")
     
-    parser.add_argument('--service', type=str, help='指定要停止的服务 (qdrant/api/ui/processor)')
+    parser.add_argument('--service', type=str, help='指定要停止的服务 (api/ui/processor)')
     parser.add_argument('--status', action='store_true', help='查看服务状态')
     parser.add_argument('--all', action='store_true', help='停止所有服务 (默认)')
     

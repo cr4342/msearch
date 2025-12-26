@@ -1,6 +1,5 @@
 #!/bin/bash
-# 整合的离线资源下载脚本
-# 合并了download_model_resources.sh和download_qdrant_fixed.sh的功能
+# 离线资源下载脚本
 
 set -e
 set -u
@@ -132,12 +131,12 @@ detect_architecture() {
         linux)
             OS="linux"
             FILE_EXT="tar.gz"
-            QDRANT_FILENAME="qdrant-${ARCH}-unknown-linux-gnu.${FILE_EXT}"
+            # Qdrant support removed, using FAISS instead
             ;;
         darwin)
             OS="apple-darwin"
             FILE_EXT="tar.gz"
-            QDRANT_FILENAME="qdrant-${ARCH}-${OS}.${FILE_EXT}"
+            # Qdrant support removed, using FAISS instead
             ;;
         *)
             log_error "不支持的操作系统: $OS"
@@ -146,52 +145,6 @@ detect_architecture() {
     esac
     
     log_info "检测到系统架构: ${ARCH}-${OS}"
-}
-
-# 下载Qdrant函数
-download_qdrant() {
-    log_info "1. 下载Qdrant向量数据库..."
-    
-    # 创建目录
-    mkdir -p "$PROJECT_ROOT/temp/bin"
-    
-    QDRANT_VERSION="1.11.3"
-    QDRANT_URL="https://github.com/qdrant/qdrant/releases/download/v${QDRANT_VERSION}/${QDRANT_FILENAME}"
-    
-    # 使用GitHub代理加速下载
-    QDRANT_PROXY_URL="https://gh-proxy.com/${QDRANT_URL}"
-    
-    log_info "正在下载Qdrant ${QDRANT_VERSION} for ${ARCH}-${OS}..."
-    log_info "下载地址: ${QDRANT_PROXY_URL}"
-    
-    # 尝试使用wget下载
-    if command -v wget &> /dev/null; then
-        wget --timeout=60 --tries=3 -O "$PROJECT_ROOT/temp/bin/${QDRANT_FILENAME}" "$QDRANT_PROXY_URL" || \
-        wget --timeout=60 --tries=3 -O "$PROJECT_ROOT/temp/bin/${QDRANT_FILENAME}" "$QDRANT_URL"
-    elif command -v curl &> /dev/null; then
-        curl --connect-timeout 60 --retry 3 -L -o "$PROJECT_ROOT/temp/bin/${QDRANT_FILENAME}" "$QDRANT_PROXY_URL" || \
-        curl --connect-timeout 60 --retry 3 -L -o "$PROJECT_ROOT/temp/bin/${QDRANT_FILENAME}" "$QDRANT_URL"
-    else
-        log_error "未找到wget或curl命令"
-        return 1
-    fi
-    
-    # 解压文件
-    cd "$PROJECT_ROOT/temp/bin"
-    if [ "$FILE_EXT" = "tar.gz" ]; then
-        tar -xzf "${QDRANT_FILENAME}"
-    elif [ "$FILE_EXT" = "zip" ]; then
-        unzip "${QDRANT_FILENAME}"
-    fi
-    
-    # 清理压缩包
-    rm "${QDRANT_FILENAME}"
-    
-    # 添加执行权限
-    chmod +x "$PROJECT_ROOT/temp/bin/qdrant"
-    
-    log_info "Qdrant二进制文件下载并解压成功！"
-    return 0
 }
 
 # 下载依赖包函数
@@ -250,7 +203,7 @@ download_dependencies() {
     log_info "  - 保存位置: $PROJECT_ROOT/temp/packages/"
     
     # 检查关键依赖包是否下载成功
-    key_packages=("torch" "transformers" "fastapi" "qdrant-client" "inaspeechsegmenter" "infinity_emb")
+    key_packages=("torch" "transformers" "fastapi" "inaspeechsegmenter" "infinity_emb")
     missing_packages=()
     
     for package in "${key_packages[@]}"; do
@@ -751,100 +704,7 @@ EOF
 generate_service_scripts() {
     log_info "6. 生成服务启动脚本..."
     
-    # 生成Qdrant服务启动脚本
-    cat > "$PROJECT_ROOT/scripts/start_qdrant.sh" << 'EOF'
-#!/bin/bash
-# Qdrant向量数据库服务启动脚本
-
-set -e
-
-# 颜色定义
-GREEN='\033[0;32m'
-YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
-
-echo -e "${GREEN}[INFO]${NC} 启动Qdrant向量数据库服务..."
-
-# 获取脚本目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# 设置Qdrant数据目录
-    export QDRANT_DATA_DIR="$PROJECT_ROOT/data/qdrant"
-    mkdir -p "$QDRANT_DATA_DIR"
-
-# 使用离线下载的Qdrant二进制文件
-    if [ -f "$PROJECT_ROOT/temp/bin/qdrant" ]; then
-        echo "使用离线Qdrant二进制文件启动服务..."
-        "$PROJECT_ROOT/temp/bin/qdrant" --config-path "$PROJECT_ROOT/config/qdrant.yml" &
-        QDRANT_PID=$!
-    else
-        echo "离线Qdrant二进制文件不存在，尝试使用系统安装的qdrant..."
-        if command -v qdrant &> /dev/null; then
-            qdrant --config-path "$PROJECT_ROOT/config/qdrant.yml" &
-            QDRANT_PID=$!
-        else
-            echo -e "${YELLOW}警告：未找到Qdrant二进制文件，尝试使用Docker...${NC}"
-            if command -v docker &> /dev/null; then
-                docker run -d \
-                    --name qdrant-msearch \
-                    -p 6333:6333 \
-                    -p 6334:6334 \
-                    -v "$QDRANT_DATA_DIR:/qdrant/storage" \
-                    qdrant/qdrant:latest
-                echo "Qdrant Docker容器已启动"
-                return 0
-            else
-                echo "错误：未找到Qdrant二进制文件或Docker"
-                exit 1
-            fi
-        fi
-    fi
-
-# 保存PID文件
-echo $QDRANT_PID > /tmp/qdrant.pid
-
-echo -e "${GREEN}[INFO]${NC} Qdrant服务启动完成！"
-echo "Qdrant服务PID: $QDRANT_PID"
-echo "服务地址: http://localhost:6333"
-echo "Web UI: http://localhost:6333/dashboard"
-echo ""
-echo "服务健康检查:"
-echo "curl http://localhost:6333/health"
-EOF
-
-    chmod +x "$PROJECT_ROOT/scripts/start_qdrant.sh"
-
-    # 生成Qdrant服务停止脚本
-    cat > "$PROJECT_ROOT/scripts/stop_qdrant.sh" << 'EOF'
-#!/bin/bash
-# Qdrant服务停止脚本
-
-echo "停止Qdrant服务..."
-
-# 停止进程
-if [ -f /tmp/qdrant.pid ]; then
-    kill $(cat /tmp/qdrant.pid) 2>/dev/null && rm /tmp/qdrant.pid
-    echo "Qdrant进程已停止"
-fi
-
-# 停止Docker容器
-if command -v docker &> /dev/null; then
-    if docker ps -q -f name=qdrant-msearch | grep -q .; then
-        docker stop qdrant-msearch
-        docker rm qdrant-msearch
-        echo "Qdrant Docker容器已停止"
-    fi
-fi
-
-echo "Qdrant服务已完全停止"
-EOF
-
-    chmod +x "$PROJECT_ROOT/scripts/stop_qdrant.sh"
-
-    log_info "服务启动脚本已生成:"
-    log_info "  - Qdrant启动脚本: $PROJECT_ROOT/scripts/start_qdrant.sh"
-    log_info "  - Qdrant停止脚本: $PROJECT_ROOT/scripts/stop_qdrant.sh"
+    log_info "服务启动脚本已生成"
 }
 
 # 创建infinity-emb修复脚本
@@ -936,7 +796,6 @@ main() {
     detect_architecture
     
     # 执行下载任务
-    download_qdrant
     download_dependencies
     download_pyside6
     download_models
@@ -970,17 +829,14 @@ main() {
         echo "2. 修复infinity-emb问题："
         echo "   ./scripts/fix_infinity_emb.sh"
         echo ""
-        echo "3. 启动Qdrant服务："
-        echo "   ./scripts/start_qdrant.sh"
-        echo ""
-        echo "4. 运行测试验证："
+        echo "3. 运行测试验证："
         echo "   python3 tests/simple_functionality_test.py"
         echo ""
-        echo "5. 启动API服务："
-        echo "   python3 src/api/main.py"
+        echo "4. 启动API服务："
+        echo "   ./scripts/start_all.sh"
         echo ""
-        echo "6. 停止所有服务："
-        echo "   ./scripts/stop_qdrant.sh"
+        echo "5. 停止所有服务："
+        echo "   ./scripts/stop_all.sh"
         echo ""
         log_info "📝 注意事项："
         echo "- 如果遇到网络问题，所有资源都已离线缓存"

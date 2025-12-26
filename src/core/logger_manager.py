@@ -435,6 +435,32 @@ class LoggerManager:
         except Exception as e:
             self.get_logger('msearch.core.logger_manager').error(f"清理日志文件失败: {e}")
             return []
+    
+    def configure_logger(self, logger_name: str, config: Dict[str, Any]) -> None:
+        """配置指定名称的日志器
+        
+        Args:
+            logger_name: 日志器名称
+            config: 日志器配置
+        """
+        try:
+            # 更新日志器配置
+            if 'loggers' not in self.config:
+                self.config['loggers'] = {}
+            
+            # 设置日志级别
+            if 'level' in config:
+                self.config['loggers'][logger_name] = config['level'].upper()
+                # 更新现有日志器的级别
+                if logger_name in self.loggers:
+                    logger = self.loggers[logger_name]
+                    logger.setLevel(getattr(logging, config['level'].upper()))
+            
+            self.get_logger('msearch.core.logger_manager').info(
+                f"日志器配置已更新: {logger_name}"
+            )
+        except Exception as e:
+            self.get_logger('msearch.core.logger_manager').error(f"配置日志器失败: {e}")
 
 
 # 全局日志管理器实例

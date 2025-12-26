@@ -22,6 +22,7 @@ class ConfigManager:
         self.config = {}
         self.watchers: List[tuple] = []  # 配置变更监听器
         self._load_config()
+        self._enable_hot_reload()
         
     def _load_config(self) -> Dict[str, Any]:
         """加载配置文件"""
@@ -265,11 +266,14 @@ class ConfigManager:
         
         return result
     
-    def _validate_config(self, config: Dict) -> None:
+    def validate_config(self, config: Dict = None) -> bool:
         """验证配置完整性"""
+        if config is None:
+            config = self.config
+            
         required_keys = [
             'database.sqlite.path',
-            'database.qdrant.host',
+            'database.faiss.data_dir',
             'infinity.services.clip.port',
             'face_recognition.matching.similarity_threshold'
         ]
@@ -281,6 +285,12 @@ class ConfigManager:
         
         if missing_keys:
             logger.warning(f"缺少必需的配置项: {missing_keys}")
+            return False
+        return True
+        
+    def _validate_config(self, config: Dict) -> None:
+        """内部验证配置完整性"""
+        self.validate_config(config)
     
     def _get_nested_value(self, config: Dict, key: str) -> Any:
         """获取嵌套配置值"""
@@ -294,6 +304,55 @@ class ConfigManager:
                 return None
         
         return value
+        
+    def _enable_hot_reload(self):
+        """启用配置文件热重载"""
+        try:
+            from watchdog.observers import Observer
+            from watchdog.events import FileSystemEventHandler
+            
+            class ConfigChangeHandler(FileSystemEventHandler):
+                def __init__(self, config_manager):
+                    self.config_manager = config_manager
+                    
+                def on_modified(self, event):
+                    if event.src_path == self.config_manager.config_path:
+                        logger.info(f"配置文件已修改: {event.src_path}")
+                        self.config_manager.reload()
+            
+            # 创建观察者并启动
+            self._observer = Observer()
+            self._observer.schedule(
+                ConfigChangeHandler(self),
+                path=os.path.dirname(self.config_path) or '.',
+                recursive=False
+            )
+            self._observer.daemon = True
+            self._observer.start()
+            logger.debug("配置热重载已启用")
+        except ImportError:
+            logger.warning("watchdog库未安装，配置热重载功能不可用")
+        except Exception as e:
+            logger.error(f"启用配置热重载失败: {e}")
+            
+    def reload(self):
+        """重新加载配置文件"""
+        logger.info("重新加载配置文件...")
+        old_config = self.config.copy()
+        new_config = self._load_config()
+        
+        # 比较配置变化并通知监听器
+        self._notify_config_changes(old_config, new_config)
+        
+    def _notify_config_changes(self, old_config: Dict, new_config: Dict):
+        """通知配置变化"""
+        # 简化实现：如果配置发生变化，通知所有监听器
+        if old_config != new_config:
+            for key, callback in self.watchers:
+                try:
+                    callback(key, self.get(key))
+                except Exception as e:
+                    logger.error(f"配置变化通知失败: {e}")
     
     def _generate_default_config(self) -> Dict:
         """生成默认配置"""
@@ -351,14 +410,14 @@ class ConfigManager:
                     "connection_pool_size": 10,
                     "timeout": 30
                 },
-                "qdrant": {
-                    "host": "localhost",
-                    "port": 6333,
-                    "timeout": 30,
+                "faiss": {
+                    "data_dir": "./data/faiss",
                     "collections": {
                         "visual_vectors": "visual_vectors",
                         "audio_music_vectors": "audio_music_vectors",
-                        "audio_speech_vectors": "audio_speech_vectors"
+                        "audio_speech_vectors": "audio_speech_vectors",
+                        "face_vectors": "face_vectors",
+                        "text_vectors": "text_vectors"
                     }
                 }
             },

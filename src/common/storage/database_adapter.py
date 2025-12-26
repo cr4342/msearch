@@ -55,7 +55,9 @@ class DatabaseAdapter:
                         modified_at REAL NOT NULL,
                         processed_at REAL,
                         status TEXT DEFAULT 'pending',
-                        can_delete BOOLEAN DEFAULT 0
+                        can_delete BOOLEAN DEFAULT 0,
+                        file_category TEXT DEFAULT '',
+                        source_file_id TEXT
                     )
                 """)
                 
@@ -152,8 +154,9 @@ class DatabaseAdapter:
                 cursor.execute("""
                     INSERT INTO files (
                         id, file_path, file_name, file_type, file_size, 
-                        file_hash, created_at, modified_at, status, can_delete
-                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        file_hash, created_at, modified_at, status, can_delete,
+                        file_category, source_file_id
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     file_info['id'],
                     file_info['file_path'],
@@ -164,7 +167,9 @@ class DatabaseAdapter:
                     file_info['created_at'],
                     file_info['modified_at'],
                     file_info.get('status', 'pending'),
-                    file_info.get('can_delete', False)
+                    file_info.get('can_delete', False),
+                    file_info.get('file_category', ''),
+                    file_info.get('source_file_id')
                 ))
                 
                 conn.commit()
@@ -211,18 +216,23 @@ class DatabaseAdapter:
             with self.get_connection() as conn:
                 cursor = conn.cursor()
                 
+                # 处理字段名称差异（测试使用'hash'而不是'file_hash'）
+                updates_copy = updates.copy()
+                if 'hash' in updates_copy:
+                    updates_copy['file_hash'] = updates_copy.pop('hash')
+                
                 # 构建更新语句
-                set_clause = ", ".join([f"{key} = ?" for key in updates.keys()])
-                values = list(updates.values()) + [file_path]
+                set_clause = ", ".join([f"{key} = ?" for key in updates_copy.keys()])
+                values = list(updates_copy.values()) + [file_path]
                 
                 cursor.execute(f"UPDATE files SET {set_clause} WHERE file_path = ?", values)
                 
                 if cursor.rowcount == 0:
                     # 文件不存在，插入新记录
-                    updates['file_path'] = file_path
-                    if 'id' not in updates:
-                        updates['id'] = str(uuid.uuid4())
-                    return await self.insert_file(updates)
+                    updates_copy['file_path'] = file_path
+                    if 'id' not in updates_copy:
+                        updates_copy['id'] = str(uuid.uuid4())
+                    return await self.insert_file(updates_copy)
                 
                 # 获取文件ID
                 cursor.execute("SELECT id FROM files WHERE file_path = ?", (file_path,))
@@ -642,3 +652,211 @@ class DatabaseAdapter:
         except Exception as e:
             self.logger.error(f"数据库重置失败: {e}")
             return False
+    
+    async def get_file_by_category(self, category: str) -> List[Dict[str, Any]]:
+        """根据分类获取文件"""
+        try:
+            with self.get_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                
+                cursor.execute("SELECT * FROM files WHERE file_category = ?", (category,))
+                results = cursor.fetchall()
+                
+            return [dict(row) for row in results]
+            
+        except Exception as e:
+            self.logger.error(f"根据分类获取文件失败: {e}")
+            return []
+    
+    async def create_file_relationship(self, source_file_id: str, related_file_id: str, 
+                                      relationship_type: str, confidence_score: float,
+                                      metadata: Dict[str, Any]) -> bool:
+        """创建文件关系"""
+        try:
+            import json
+            
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                # 检查file_relationships表是否存在，不存在则创建
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS file_relationships (
+                        id TEXT PRIMARY KEY,
+                        source_file_id TEXT NOT NULL,
+                        related_file_id TEXT NOT NULL,
+                        relationship_type TEXT NOT NULL,
+                        confidence_score REAL NOT NULL,
+                        metadata TEXT,
+                        created_at REAL NOT NULL,
+                        FOREIGN KEY (source_file_id) REFERENCES files (id),
+                        FOREIGN KEY (related_file_id) REFERENCES files (id)
+                    )
+                """)
+                
+                # 插入关系记录
+                cursor.execute("""
+                    INSERT INTO file_relationships (
+                        id, source_file_id, related_file_id, relationship_type,
+                        confidence_score, metadata, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    str(uuid.uuid4()),
+                    source_file_id,
+                    related_file_id,
+                    relationship_type,
+                    confidence_score,
+                    json.dumps(metadata),
+                    datetime.now().timestamp()
+                ))
+                
+                conn.commit()
+                
+            return True
+            
+        except Exception as e:
+            self.logger.error(f"创建文件关系失败: {e}")
+            return False
+    
+    async def get_file_relationships(self, file_id: str) -> List[Dict[str, Any]]:
+        """获取文件关系"""
+        try:
+            import json
+            
+            with self.get_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                
+                # 检查file_relationships表是否存在
+                cursor.execute("""
+                    SELECT name FROM sqlite_master WHERE type='table' AND name='file_relationships'
+                """)
+                if not cursor.fetchone():
+                    return []
+                
+                cursor.execute("""
+                    SELECT * FROM file_relationships 
+                    WHERE source_file_id = ? OR related_file_id = ?
+                """, (file_id, file_id))
+                results = cursor.fetchall()
+                
+                relationships = []
+                for row in results:
+                    row_dict = dict(row)
+                    if row_dict['metadata']:
+                        row_dict['metadata'] = json.loads(row_dict['metadata'])
+                    relationships.append(row_dict)
+                
+            return relationships
+            
+        except Exception as e:
+            self.logger.error(f"获取文件关系失败: {e}")
+            return []
+    
+    async def insert_video_segment(self, segment_data: Dict[str, Any]) -> str:
+        """插入视频片段"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                segment_id = segment_data.get('segment_id', str(uuid.uuid4()))
+                
+                cursor.execute("""
+                    INSERT INTO video_segments (
+                        segment_id, file_uuid, segment_index, start_time,
+                        end_time, duration, scene_boundary, created_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                """, (
+                    segment_id,
+                    segment_data['file_uuid'],
+                    segment_data['segment_index'],
+                    segment_data['start_time'],
+                    segment_data['end_time'],
+                    segment_data['duration'],
+                    segment_data.get('scene_boundary', False),
+                    datetime.now().timestamp()
+                ))
+                
+                conn.commit()
+                
+            return segment_id
+            
+        except Exception as e:
+            self.logger.error(f"插入视频片段失败: {e}")
+            raise
+    
+    async def get_video_segments_by_file(self, file_id: str) -> List[Dict[str, Any]]:
+        """获取视频片段"""
+        try:
+            with self.get_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                
+                cursor.execute("""
+                    SELECT * FROM video_segments 
+                    WHERE file_uuid = ? 
+                    ORDER BY segment_index ASC
+                """, (file_id,))
+                results = cursor.fetchall()
+                
+            return [dict(row) for row in results]
+            
+        except Exception as e:
+            self.logger.error(f"获取视频片段失败: {e}")
+            return []
+    
+    async def get_deletable_files(self) -> List[Dict[str, Any]]:
+        """获取可删除文件"""
+        try:
+            with self.get_connection() as conn:
+                conn.row_factory = sqlite3.Row
+                cursor = conn.cursor()
+                
+                cursor.execute("SELECT * FROM files WHERE can_delete = 1")
+                results = cursor.fetchall()
+                
+            return [dict(row) for row in results]
+            
+        except Exception as e:
+            self.logger.error(f"获取可删除文件失败: {e}")
+            return []
+    
+    async def get_database_stats(self) -> Dict[str, Any]:
+        """获取数据库统计信息"""
+        try:
+            with self.get_connection() as conn:
+                cursor = conn.cursor()
+                
+                stats = {}
+                
+                # 获取文件统计
+                cursor.execute("SELECT COUNT(*) FROM files")
+                stats['total_files'] = cursor.fetchone()[0]
+                
+                cursor.execute("SELECT COUNT(*) FROM files WHERE status = 'completed'")
+                stats['completed_files'] = cursor.fetchone()[0]
+                
+                # 获取任务统计
+                cursor.execute("SELECT COUNT(*) FROM tasks")
+                stats['total_tasks'] = cursor.fetchone()[0]
+                
+                # 获取向量统计
+                cursor.execute("SELECT COUNT(*) FROM vectors")
+                stats['total_vectors'] = cursor.fetchone()[0]
+                
+                # 获取媒体片段统计
+                cursor.execute("SELECT COUNT(*) FROM media_segments")
+                stats['total_segments'] = cursor.fetchone()[0]
+                
+            return stats
+            
+        except Exception as e:
+            self.logger.error(f"获取数据库统计信息失败: {e}")
+            return {}
+    
+    async def get_schema_version(self) -> Dict[str, Any]:
+        """获取Schema版本"""
+        return {
+            'version': '1.0.0',
+            'last_updated': datetime.now().timestamp()
+        }
