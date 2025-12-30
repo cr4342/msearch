@@ -20,7 +20,7 @@ msearch 是一个多模态检索系统，支持文本、图像、视频、音频
 | 用户界面 | PySide6 | ≥6.5.0 |
 | API框架 | FastAPI | ≥0.104.0 |
 | AI推理引擎 | michaelfeil/infinity | ≥0.0.34 |
-| 向量数据库 | Qdrant | ≥1.7.0 |
+| 向量数据库 | Milvus Lite | ≥2.3.0 |
 | 元数据库 | SQLite | 3.x |
 | 依赖管理 | uv (astral-sh/uv) | ≥0.1.0 |
 | 应用打包 | Nuitka | ≥1.8.0 |
@@ -43,7 +43,7 @@ msearch/
 │   ├── config_prod.yml           # 生产环境配置
 │   ├── models.yml                # 模型配置
 │   ├── alerts.yml                # 告警规则配置
-│   └── qdrant_simple.yaml        # Qdrant配置
+│   └── milvus_config.yaml        # Milvus Lite配置
 ├── data/                          # 数据目录
 │   ├── database/                 # SQLite数据库
 │   │   └── msearch.db           # 主数据库文件
@@ -52,7 +52,7 @@ msearch/
 │   │   ├── clap/                # CLAP模型
 │   │   ├── whisper/             # Whisper模型
 │   │   └── .infinity_cache/     # Infinity缓存
-│   ├── qdrant/                   # Qdrant向量数据库
+│   ├── milvus/                   # Milvus Lite向量数据库
 │   ├── temp/                     # 临时文件
 │   │   ├── audio/               # 临时音频文件
 │   │   ├── video/               # 临时视频文件
@@ -72,19 +72,20 @@ msearch/
 │   ├── msearch.log               # 主日志文件
 │   ├── error.log                 # 错误日志
 │   └── performance.log           # 性能日志
-├── offline/                       # 离线资源（不纳入Git）
-│   └── models/                   # 离线模型缓存
+├── data/temp/                   # 临时目录（不纳入Git）
+│   └── offline/                 # 离线资源缓存
+│       └── models/              # 离线模型缓存
 ├── scripts/                       # 脚本目录
 │   ├── install_auto.sh           # 自动安装脚本
 │   ├── install_offline.sh        # 离线安装脚本
 │   ├── download_all_resources.sh # 下载所有资源
 │   ├── setup_models.py           # 模型设置脚本
-│   ├── start_qdrant_optimized.sh # Qdrant启动脚本
-│   ├── stop_qdrant.sh            # Qdrant停止脚本
+│   └── # Milvus Lite无需单独启动脚本
+
 │   ├── build_with_nuitka.sh      # Nuitka打包脚本
 │   ├── create_distribution.sh    # 创建分发包
 │   ├── maintain_database.py      # 数据库维护
-│   ├── backup_qdrant.py          # Qdrant备份
+│   ├── backup_milvus.py          # Milvus Lite备份
 │   ├── verify_installation.py    # 安装验证
 │   └── generate_test_report.py   # 测试报告生成
 ├── src/                           # 源代码目录
@@ -124,7 +125,7 @@ msearch/
 │   ├── storage/                 # 数据存储层
 │   │   ├── __init__.py
 │   │   ├── database_manager.py # SQLite数据库管理器
-│   │   ├── vector_store.py     # Qdrant向量存储器
+│   │   ├── vector_store.py     # Milvus Lite向量存储器
 │   │   └── timestamp_database.py # 时间戳数据库
 │   ├── core/                     # 核心组件
 │   │   ├── __init__.py
@@ -718,7 +719,7 @@ class DatabaseManager:
 #### 4.4.2 vector_store.py - 向量存储器
 
 **职责**:
-- Qdrant向量数据库操作封装
+- Milvus Lite向量数据库操作封装
 - 向量集合管理
 - 向量插入、检索、删除
 - 批量操作优化
@@ -727,8 +728,8 @@ class DatabaseManager:
 **核心功能**:
 ```python
 class VectorStore:
-    def __init__(qdrant_url: str)
-    def connect() -> QdrantClient
+    def __init__(milvus_config: dict)
+    def connect() -> MilvusClient
     
     # 集合管理
     def create_collection(name: str, vector_size: int, distance: str)

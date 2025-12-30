@@ -24,7 +24,7 @@
 | 测试原则 | 具体要求 | 实现价值 |
 |---------|---------|---------|
 | **架构分层测试** | 严格按照UI层→API层→业务层→AI推理层→存储层进行分层测试 | 确保分层架构的正确性 |
-| **技术栈验证** | 重点测试michaelfeil/infinity、Qdrant、SQLite、FastAPI集成 | 验证核心技术选型 |
+| **技术栈验证** | 重点测试michaelfeil/infinity、Milvus Lite、SQLite、FastAPI集成 | 验证核心技术选型 |
 | **时间戳精度优先** | 所有涉及时间戳的测试必须满足±2秒精度要求 | 保证核心功能指标 |
 | **多模态协同** | 验证CLIP、CLAP、Whisper模型的协同处理能力 | 确保AI推理层正确性 |
 | **配置驱动测试** | 所有配置项必须通过ConfigManager进行测试 | 验证配置驱动架构 |
@@ -1873,10 +1873,10 @@ python3 scripts/install_python312_compatible.py --verify-only
 - transformers>=4.35.0 (最新兼容版本)
 - fastapi>=0.104.0 (异步兼容性修复)
 
-### 10.2 Qdrant启动问题解决
+### 10.2 Milvus Lite使用说明
 
 **问题描述**：
-- Qdrant服务启动失败或端口冲突
+- Milvus Lite无需单独启动服务，直接集成在代码中
 - 配置文件路径问题
 - 权限和依赖问题
 
@@ -1884,31 +1884,28 @@ python3 scripts/install_python312_compatible.py --verify-only
 
 **优化启动脚本**：
 ```bash
-# 使用优化的Qdrant启动脚本
-bash scripts/start_qdrant_optimized.sh
+# Milvus Lite无需单独启动脚本
 
 # 检查服务状态
 curl http://localhost:6333/health
 
 # 停止服务
-bash scripts/stop_qdrant.sh
+# Milvus Lite无需单独停止脚本
 ```
 
 **启动流程优化**：
 1. **端口检查**：自动检测并释放占用的端口
-2. **进程清理**：停止现有的Qdrant进程
+2. **进程清理**：Milvus Lite无需单独清理进程
 3. **配置简化**：使用最小化配置文件
 4. **健康检查**：等待服务完全启动
 5. **错误诊断**：提供详细的启动日志
 
 **配置文件优化**：
 ```yaml
-# config/qdrant_simple.yaml
-storage:
-  storage_path: ./data/database/qdrant
+# config/milvus_config.yaml
 
-service:
-  host: 127.0.0.1
+storage:
+  storage_path: ./data/database/milvus
   http_port: 6333
   grpc_port: 6334
 
@@ -1982,7 +1979,7 @@ python3 tests/run_optimized_tests.py --setup-only
 **测试流程优化**：
 1. **环境检查**：自动检测Python版本和依赖
 2. **依赖安装**：智能安装兼容版本的包
-3. **服务启动**：自动启动和配置Qdrant
+3. **服务启动**：Milvus Lite无需单独启动服务
 4. **测试执行**：分层运行单元和集成测试
 5. **结果报告**：生成详细的测试报告
 6. **环境清理**：自动清理临时文件和服务
@@ -2029,16 +2026,16 @@ python3 -c "import torch; print(torch.__version__)"
 python3 scripts/install_python312_compatible.py --install-packages
 ```
 
-**2. Qdrant连接失败**：
+**2. Milvus Lite连接失败**：
 ```bash
 # 检查服务状态
 curl http://localhost:6333/health
 
 # 查看服务日志
-tail -f logs/qdrant.log
+tail -f logs/milvus.log
 
 # 重启服务
-bash scripts/start_qdrant_optimized.sh
+# Milvus Lite无需单独启动脚本
 ```
 
 **3. 测试超时或失败**：
@@ -2097,25 +2094,3 @@ jobs:
         name: test-results-${{ matrix.python-version }}
         path: tests/output/
 ```
-
-### 10.8 性能优化建议
-
-**资源使用优化**：
-- 使用轻量级模型进行测试
-- 限制批处理大小和内存使用
-- 启用模型量化和压缩
-- 实施智能垃圾回收策略
-
-**测试效率优化**：
-- 并行运行独立测试
-- 缓存模型和数据
-- 跳过耗时的集成测试（在CI中）
-- 使用模拟对象减少外部依赖
-
-**监控和诊断**：
-- 实时监控资源使用情况
-- 记录详细的性能指标
-- 提供清晰的错误诊断信息
-- 自动生成测试报告
-
-通过这些优化解决方案，可以有效解决Python 3.12兼容性、Qdrant启动和OpenCV依赖等问题，确保测试环境的稳定性和可靠性，提高测试执行的成功率和效率。

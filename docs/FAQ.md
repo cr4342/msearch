@@ -132,12 +132,12 @@ grep -i error logs/error.log
 1. **检查端口是否被占用**：
    ```bash
    lsof -i :8000  # 检查API端口
-   lsof -i :6333  # 检查Qdrant端口
+   # Milvus Lite不需要单独的端口，直接集成在代码中
    ```
 
 2. **检查依赖是否安装**：
    ```bash
-   pip list | grep -E "fastapi|uvicorn|qdrant-client|infinity"
+   pip list | grep -E "fastapi|uvicorn|pymilvus|infinity"
    ```
 
 3. **检查配置文件**：
@@ -152,7 +152,7 @@ grep -i error logs/error.log
 
 5. **查看启动日志**：
    ```bash
-   python scripts/start_services.py --debug
+   ./scripts/start_all.sh
    ```
 
 ### 3.3 如何备份和恢复数据？
@@ -165,7 +165,7 @@ grep -i error logs/error.log
 
 2. **向量数据库备份**：
    ```bash
-   python scripts/backup_qdrant.py
+   # Milvus Lite备份由系统自动处理
    ```
 
 3. **完整备份**：
@@ -187,12 +187,12 @@ grep -i error logs/error.log
 
 3. **恢复向量数据库**：
    ```bash
-   python scripts/restore_qdrant.py --backup-file <backup_file>
+   # Milvus Lite恢复由系统自动处理
    ```
 
 4. **启动服务**：
    ```bash
-   python scripts/start_services.py
+   ./scripts/start_all.sh
    ```
 
 ### 3.4 如何更新模型？
@@ -206,7 +206,7 @@ grep -i error logs/error.log
 2. **手动更新**：
    - 删除旧模型文件：`rm -rf data/models/*`
    - 重新下载模型：`./scripts/download_all_resources.sh`
-   - 重启服务：`python scripts/restart_services.py`
+   - 重启服务：`./scripts/stop_all.sh && ./scripts/start_all.sh`
 
 **注意事项**：
 - 更新模型可能需要重新索引文件
@@ -277,7 +277,7 @@ grep -i error logs/error.log
 
 3. **重启服务**：
    ```bash
-   python scripts/restart_services.py
+   ./scripts/stop_all.sh && ./scripts/start_all.sh
    ```
 
 4. **验证模型**：

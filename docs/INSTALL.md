@@ -40,8 +40,8 @@ git clone https://github.com/yourusername/msearch.git
 cd msearch
 
 # 运行自动安装脚本
-chmod +x scripts/install_auto.sh
-./scripts/install_auto.sh
+chmod +x scripts/install.sh
+./scripts/install.sh --online
 ```
 
 **脚本功能**:  
@@ -57,14 +57,14 @@ chmod +x scripts/install_auto.sh
 **步骤1: 准备离线资源包**
 1. 在有网络的环境下下载离线资源包
    ```bash
-   ./scripts/download_all_resources.sh
+   ./scripts/install.sh --download-only
    ```
-2. 将生成的 `offline/` 目录复制到目标机器
+2. 将生成的 `data/temp/offline/` 目录复制到目标机器
 
 **步骤2: 执行离线安装**
 ```bash
-chmod +x scripts/install_offline.sh
-./scripts/install_offline.sh
+chmod +x scripts/install.sh
+./scripts/install.sh --offline
 ```
 
 ### 2.3 手动安装
@@ -109,7 +109,7 @@ pip install -r requirements.txt
 
 **步骤3: 下载模型文件**
 ```bash
-./scripts/download_all_resources.sh
+./scripts/install.sh --download-only
 ```
 
 **步骤4: 初始化数据库**
@@ -123,10 +123,10 @@ python -c "from src.storage.database_manager import DatabaseManager; db = Databa
 
 ```bash
 # 启动服务
-python scripts/start_services.py
+./scripts/start_all.sh
 
 # 检查API是否可用
-curl http://localhost:8000/api/health
+curl http://localhost:8000/health
 ```
 
 预期输出:
@@ -150,19 +150,16 @@ pytest tests/integration/
 
 ```bash
 # 启动所有服务
-python scripts/start_services.py
+./scripts/start_all.sh
 
-# 仅启动API服务
-python scripts/start_api.py
-
-# 仅启动UI服务
-python scripts/start_ui.py
+# 停止所有服务
+./scripts/stop_all.sh
 ```
 
 ### 4.2 系统服务启动 (Linux)
 
 ```bash
-# 安装为系统服务
+# 安装为系统服务 (可选)
 sudo cp scripts/msearch.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable msearch
@@ -178,7 +175,7 @@ sudo systemctl status msearch
 2. 创建基本任务
 3. 设置触发器为"启动时"
 4. 操作选择"启动程序"
-5. 程序路径选择 `scripts/start_services.py`
+5. 程序路径选择 `scripts/start_all.sh`
 6. 完成设置
 
 ## 5. 常见安装问题
@@ -223,7 +220,7 @@ pip install -r requirements.txt --upgrade
 python scripts/migrate_database.py
 
 # 重启服务
-python scripts/restart_services.py
+./scripts/stop_all.sh && ./scripts/start_all.sh
 ```
 
 ### 6.2 离线升级
@@ -236,7 +233,7 @@ python scripts/restart_services.py
 
 ```bash
 # 停止所有服务
-python scripts/stop_services.py
+./scripts/stop_all.sh
 
 # 删除虚拟环境
 rm -rf venv
