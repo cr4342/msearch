@@ -691,20 +691,20 @@ download_all_resources() {
     # 检测系统架构
     detect_architecture
     # 执行下载任务
-    log_info "FAISS不需要单独下载，通过pip安装即可"
+    log_info "Milvus Lite 不需要单独下载，通过pip安装pymilvus即可"
     download_dependencies || log_warning "依赖包下载失败，但继续执行"
     download_models || log_warning "模型下载失败，但继续执行"
     # 验证下载结果
     log_info "验证下载结果..."
-    if [ -d "$PROJECT_ROOT/offline/bin" ] && [ -d "$PROJECT_ROOT/offline/packages" ] && [ -d "$PROJECT_ROOT/data/models" ]; then
-        bin_count=$(find "$PROJECT_ROOT/offline/bin" -type f 2>/dev/null | wc -l)
-        packages_count=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" 2>/dev/null | wc -l)
+    if [ -d "$PROJECT_ROOT/data/temp/bin" ] && [ -d "$PROJECT_ROOT/data/temp/packages" ] && [ -d "$PROJECT_ROOT/data/models" ]; then
+        bin_count=$(find "$PROJECT_ROOT/data/temp/bin" -type f 2>/dev/null | wc -l)
+        packages_count=$(find "$PROJECT_ROOT/data/temp/packages" -type f -name "*.whl" 2>/dev/null | wc -l)
         models_count=$(find "$PROJECT_ROOT/data/models" -type f 2>/dev/null | wc -l)
         log_info "离线资源下载完成:"
         log_info "  - 二进制文件数量: $bin_count"
         log_info "  - 依赖包数量: $packages_count"
         log_info "  - 模型文件数量: $models_count"
-        log_info "  - 二进制文件和依赖包保存位置: $PROJECT_ROOT/offline/"
+        log_info "  - 二进制文件和依赖包保存位置: $PROJECT_ROOT/data/temp/"
         log_info "  - 模型保存位置: $PROJECT_ROOT/data/models/"
         log_success "所有离线资源下载完成！"
         return 0
@@ -767,46 +767,62 @@ check_environment_online() {
     fi
     log_success "环境检查完成！"
 }
+# 2. 创建虚拟环境（在线模式）
+create_venv_online() {
+    log_info "创建虚拟环境..."
+    VENV_DIR="${PROJECT_ROOT}/venv"
+    if [ -d "${VENV_DIR}" ]; then
+        log_warning "虚拟环境已存在，将重新创建"
+        rm -rf "${VENV_DIR}"
+    fi
+    python3 -m venv "${VENV_DIR}"
+    log_success "虚拟环境创建完成"
+}
+
 # 2. 安装系统依赖和Python包（在线模式）
 install_dependencies_online() {
     log_info "==============================================="
     log_info "        安装系统依赖和Python包"
     log_info "==============================================="
+    # 创建虚拟环境
+    create_venv_online
+    # 激活虚拟环境
+    source "${PROJECT_ROOT}/venv/bin/activate"
     # 更新pip
     log_info "[步骤1] 更新pip..."
-    python3 -m pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple || log_warning "pip更新失败"
+    pip install --upgrade pip -i https://pypi.tuna.tsinghua.edu.cn/simple || log_warning "pip更新失败"
     # 安装核心依赖包
     log_info "[步骤2] 安装核心依赖包..."
     if [ -f "${PROJECT_ROOT}/requirements.txt" ]; then
-        python3 -m pip install -r "${PROJECT_ROOT}/requirements.txt" \
+        pip install -r "${PROJECT_ROOT}/requirements.txt" \
             -i https://pypi.tuna.tsinghua.edu.cn/simple \
             --timeout 120 \
             --retries 3 || {
             log_warning "部分依赖安装失败，尝试单独安装关键包..."
-            python3 -m pip install fastapi uvicorn pydantic numpy pandas \
+            pip install fastapi uvicorn pydantic numpy pandas \
                 -i https://pypi.tuna.tsinghua.edu.cn/simple
         }
     else
         log_warning "未找到requirements.txt，安装基本依赖"
-        python3 -m pip install fastapi uvicorn pydantic numpy pandas \
+        pip install fastapi uvicorn pydantic numpy pandas \
             -i https://pypi.tuna.tsinghua.edu.cn/simple
     fi
     # 安装测试专用依赖
     log_info "[步骤3] 安装测试专用依赖..."
-    python3 -m pip install pytest pytest-cov pytest-mock httpx \
+    pip install pytest pytest-cov pytest-mock httpx \
         -i https://pypi.tuna.tsinghua.edu.cn/simple
     # 安装AI模型依赖
     log_info "[步骤4] 安装AI模型依赖..."
-    python3 -m pip install transformers torch torchvision \
+    pip install transformers torch torchvision \
         -i https://pypi.tuna.tsinghua.edu.cn/simple
     # 安装infinity-emb及其依赖
     log_info "[步骤5] 安装infinity-emb向量嵌入引擎..."
-    python3 -m pip install "infinity-emb[all]" \
+    pip install "infinity-emb[all]" \
         -i https://pypi.tuna.tsinghua.edu.cn/simple \
         --timeout 180 \
         --retries 3 || {
         log_warning "infinity-emb完整版安装失败，尝试安装基础版本..."
-        python3 -m pip install infinity-emb \
+        pip install infinity-emb \
             -i https://pypi.tuna.tsinghua.edu.cn/simple
     }
     log_success "系统依赖安装完成！"
@@ -816,6 +832,8 @@ download_models_online() {
     log_info "==============================================="
     log_info "          下载和配置AI模型"
     log_info "==============================================="
+    # 激活虚拟环境
+    source "${PROJECT_ROOT}/venv/bin/activate"
     # 设置环境变量 - 使用镜像加速
     export HF_ENDPOINT="https://hf-mirror.com"
     # 模型目录
@@ -875,7 +893,7 @@ def download_models(models_dir):
         },
         {
             'name': 'clap',
-            'repo_id': 'laion/clap-htsat-unfused',
+            'repo_id': 'laion/clap-htsat-fused',
             'local_path': os.path.join(models_dir, 'clap-htsat-fused'),
             'components': ['model', 'processor']
         },
@@ -925,7 +943,7 @@ if __name__ == "__main__":
 EOF
     # 执行模型下载
     log_info "[步骤1] 执行模型下载..."
-    python3 "${MODEL_SCRIPT}" "${MODELS_DIR}"
+    "${PROJECT_ROOT}/venv/bin/python" "${MODEL_SCRIPT}" "${MODELS_DIR}"
     DOWNLOAD_RESULT=$?
     if [ $DOWNLOAD_RESULT -eq 0 ]; then
         log_success "所有模型下载完成"
@@ -946,8 +964,10 @@ configure_project_online() {
     init_data_dirs
     # 初始化配置
     init_config
-    # 初始化数据库
-    init_database
+    # 初始化数据库（使用虚拟环境）
+    log_info "[步骤1] 初始化数据库..."
+    source "${PROJECT_ROOT}/venv/bin/activate"
+    "${PROJECT_ROOT}/venv/bin/python" -c "from src.common.storage.database_adapter import DatabaseAdapter; db = DatabaseAdapter(); print('数据库初始化完成')"
     log_success "项目配置完成！"
 }
 # 1. 检查离线资源（离线模式）
@@ -1024,7 +1044,7 @@ install_offline_deps() {
     VENV_DIR="${PROJECT_ROOT}/venv"
     source "${VENV_DIR}/bin/activate"
     # 离线资源目录
-    OFFLINE_PACKAGES_DIR="${PROJECT_ROOT}/offline/packages"
+    OFFLINE_PACKAGES_DIR="${PROJECT_ROOT}/data/temp/packages"
     # 安装离线依赖
     if [ -d "${OFFLINE_PACKAGES_DIR}" ]; then
         log_info "从 ${OFFLINE_PACKAGES_DIR} 安装依赖..."
@@ -1039,7 +1059,7 @@ install_offline_deps() {
 copy_models() {
     log_info "复制模型文件..."
     MODELS_DIR="${PROJECT_ROOT}/data/models"
-    OFFLINE_MODELS_DIR="${PROJECT_ROOT}/offline/models"
+    OFFLINE_MODELS_DIR="${PROJECT_ROOT}/data/temp/models"
     mkdir -p "${MODELS_DIR}"
     # 检查data/models目录是否已经有模型
     local models_exist=false
@@ -1055,7 +1075,7 @@ copy_models() {
         log_success "模型文件复制完成"
         return 0
     fi
-    # 如果data/models目录没有模型，检查offline/models目录
+    # 如果data/models目录没有模型，检查data/temp/models目录
     if [ -d "${OFFLINE_MODELS_DIR}" ]; then
         log_info "从 ${OFFLINE_MODELS_DIR} 复制模型到 ${MODELS_DIR}..."
         cp -r "${OFFLINE_MODELS_DIR}/"* "${MODELS_DIR}/"
@@ -1096,10 +1116,10 @@ server:
 database:
   sqlite:
     path: "./data/database/msearch.db"
-# 向量数据库配置（使用FAISS）
+# 向量数据库配置（使用 Milvus Lite）
 vector_db:
-  type: "faiss"
-  path: "./data/database/faiss_index"
+  type: "milvus"
+  path: "./data/database/milvus"
   collection_name: "msearch"
   embedding_dim: 512
 # 模型配置

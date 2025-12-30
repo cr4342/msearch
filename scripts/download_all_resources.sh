@@ -131,12 +131,12 @@ detect_architecture() {
         linux)
             OS="linux"
             FILE_EXT="tar.gz"
-            # Qdrant support removed, using FAISS instead
+            # 使用 Milvus Lite 作为向量数据库
             ;;
         darwin)
             OS="apple-darwin"
             FILE_EXT="tar.gz"
-            # Qdrant support removed, using FAISS instead
+            # 使用 Milvus Lite 作为向量数据库
             ;;
         *)
             log_error "不支持的操作系统: $OS"
@@ -244,10 +244,10 @@ download_pyside6() {
         }
     
     # 验证下载结果
-    pyside6_count=$(find "$PROJECT_ROOT/offline/packages" -type f -name "*.whl" | wc -l)
+    pyside6_count=$(find "$PROJECT_ROOT/data/temp/offline/packages" -type f -name "*.whl" | wc -l)
     log_info "PySide6下载完成:"
     log_info "  - Wheel文件数量: $pyside6_count"
-    log_info "  - 保存位置: $PROJECT_ROOT/offline/packages/"
+    log_info "  - 保存位置: $PROJECT_ROOT/data/temp/offline/packages/"
     
     if [ "$pyside6_count" -gt 0 ]; then
         log_info "PySide6离线包下载成功！"
@@ -566,12 +566,12 @@ echo -e "${GREEN}开始离线安装MSearch项目依赖...${NC}"
 check_offline_resources() {
     echo -e "${BLUE}检查离线资源...${NC}"
     
-    if [ ! -d "$PROJECT_ROOT/offline/packages" ]; then
+    if [ ! -d "$PROJECT_ROOT/data/temp/offline/packages" ]; then
         echo -e "${RED}错误：未找到离线包目录${NC}"
         exit 1
     fi
     
-    local packages_count=$(find "$PROJECT_ROOT/offline/packages" -name "*.whl" | wc -l)
+    local packages_count=$(find "$PROJECT_ROOT/data/temp/offline/packages" -name "*.whl" | wc -l)
     echo -e "${GREEN}发现 $packages_count 个离线包${NC}"
     
     if [ "$packages_count" -lt 50 ]; then
@@ -606,7 +606,7 @@ check_offline_resources() {
             "uvicorn"
             "pydantic"
             "sqlalchemy"
-            "qdrant-client"
+            "pymilvus"
         )
         
         for package in "${core_packages[@]}"; do
@@ -645,10 +645,10 @@ verify_installation() {
     
     local test_packages=(
         "numpy"
-        "torch" 
+        "torch"
         "transformers"
         "fastapi"
-        "qdrant_client"
+        "pymilvus"
     )
     
     local failed_packages=()
@@ -687,7 +687,8 @@ main() {
     echo -e "${GREEN}离线安装完成！${NC}"
     echo ""
     echo "后续步骤："
-    echo "1. 启动Qdrant服务: ./scripts/start_qdrant.sh"
+    echo "1. Milvus Lite 无需单独服务，直接集成在代码中"
+    echo "2. 启动主应用: python src/main.py"
     echo "2. 运行测试: python3 tests/simple_functionality_test.py"
     echo "3. 启动API服务: python3 src/api/main.py"
 }
