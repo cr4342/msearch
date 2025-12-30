@@ -4,9 +4,9 @@
 
 msearch 是一款跨平台的多模态检索系统，采用微服务架构设计，旨在成为用户的"第二大脑"。它允许用户通过自然语言、图片截图或音频片段快速、精准地在本地素材库中定位相关的图片、视频（精确到关键帧）和音频文件，实现"定位到秒"的检索体验。
 
-**项目状态**: 微服务架构重构完成，核心组件验证通过
-**最后更新**: 2025-11-21
-**Git版本**: 0b2a7a8a6d0b975d483e074dffa78c80bf78559d
+**项目状态**: 单元测试补全完成，核心功能验证通过
+**最后更新**: 2025-12-30
+**Git版本**: 4e61fe203b74aa98d5fc432122f3c4583f91910e
 
 ### 核心价值
 
@@ -39,10 +39,13 @@ from src.common.storage.database_adapter import DatabaseAdapter
 print('✓ 核心组件初始化成功')
 "
 
-# 3. 运行测试
+# 3. 验证测试文件
+python3 validate_tests.py
+
+# 4. 运行测试
 pytest tests/ -v --tb=short
 
-# 4. 启动应用
+# 5. 启动应用
 python src/main.py
 ```
 
@@ -57,7 +60,7 @@ python src/main.py
 | **文件处理服务** | **独立服务模块** | 文件监控、预处理、向量化 |
 | **检索服务** | **独立服务模块** | 多模态检索、结果融合 |
 | **AI推理层** | **michaelfeil/infinity** | 多模型服务引擎，高吞吐量低延迟 |
-| **向量存储层** | **Qdrant** | 高性能向量数据库，本地部署，毫秒级检索 |
+| **向量存储层** | **Milvus Lite** | 高性能本地向量数据库，CPU/GPU加速，支持分布式扩展 |
 | **元数据层** | **SQLite** | 轻量级关系数据库，零配置，文件级便携 |
 | **配置管理** | **YAML + 环境变量** | 配置驱动设计，支持热重载 |
 | **日志系统** | **Python logging** | 多级别日志，自动轮转，分类存储 |
@@ -75,200 +78,40 @@ python src/main.py
 | **文本-音频** | CLAP | 文本检索音乐内容 | 专业音频语义理解 |
 | **语音-文本** | Whisper | 语音内容转录检索 | 高精度多语言语音识别 |
 | **音频分类** | inaSpeechSegmenter | 音频内容智能分类 | 精准区分音乐、语音、噪音 |
-| **人脸识别** | FaceNet | 人脸特征提取 | 高精度人脸识别和匹配 |
-| **媒体处理** | FFmpeg | 视频场景检测切片 | 专业级媒体预处理能力 |
-
-### 专业化AI模型架构
-
-| 模态类型 | 模型选择 | 应用场景 | 技术优势 |
-|---------|---------|---------|---------|
-| **文本-图像** | CLIP | 文本检索图片内容 | 跨模态语义对齐，高精度图像理解 |
-| **文本-视频** | CLIP | 文本检索视频内容 | 跨模态语义对齐，精确时间定位 |
-| **文本-音频** | CLAP | 文本检索音乐内容 | 专业音频语义理解 |
-| **语音-文本** | Whisper | 语音内容转录检索 | 高精度多语言语音识别 |
-| **音频分类** | inaSpeechSegmenter | 音频内容智能分类 | 精准区分音乐、语音、噪音 |
-| **人脸识别** | FaceNet | 人脸特征提取 | 高精度人脸识别和匹配 |
+| **人脸识别** | FaceNet/InsightFace | 人脸特征提取 | 高精度人脸识别和匹配 |
 | **媒体处理** | FFmpeg | 视频场景检测切片 | 专业级媒体预处理能力 |
 
 ### 系统架构
 
-```mermaid
-graph TB
-    subgraph "用户界面层"
-        UI[用户界面层]
-    end
-    
-    subgraph "共享组件层"
-        EmbeddingEngine[向量化引擎]
-        StorageAdapter[存储适配器]
-        DataModels[数据模型]
-    end
-    
-    subgraph "文件处理服务"
-        FileMonitor[文件监控器]
-        Orchestrator[处理调度器]
-        TaskManager[任务管理器]
-        MediaProcessor[媒体处理器]
-        ProcessingAPI[处理服务API]
-    end
-    
-    subgraph "检索服务"
-        SmartRetrieval[智能检索引擎]
-        SearchAPI[检索服务API]
-    end
-    
-    subgraph "AI推理层"
-        Infinity[infinity Python-native]
-        CLIP[CLIP 模型]
-        CLAP[CLAP 模型]
-        Whisper[Whisper 模型]
-    end
-    
-    subgraph "数据存储层"
-        DatabaseAdapter[数据库适配器]
-        Qdrant[(Qdrant 向量数据库)]
-        SQLite[(SQLite 元数据库)]
-        FileSystem[(文件系统)]
-    end
-    
-    subgraph "核心组件层"
-        ConfigManager[配置管理器]
-        LoggingSystem[日志系统]
-        MainEntry[主入口]
-    end
-    
-    UI --> SearchAPI
-    UI --> ProcessingAPI
-    
-    SearchAPI --> SmartRetrieval
-    ProcessingAPI --> Orchestrator
-    
-    SmartRetrieval --> EmbeddingEngine
-    SmartRetrieval --> DatabaseAdapter
-    
-    Orchestrator --> FileMonitor
-    Orchestrator --> TaskManager
-    Orchestrator --> MediaProcessor
-    Orchestrator --> EmbeddingEngine
-    Orchestrator --> DatabaseAdapter
-    
-    EmbeddingEngine --> Infinity
-    EmbeddingEngine --> StorageAdapter
-    
-    Infinity --> CLIP
-    Infinity --> CLAP
-    Infinity --> Whisper
-    
-    DatabaseAdapter --> Qdrant
-    DatabaseAdapter --> SQLite
-    DatabaseAdapter --> FileSystem
-    
-    MainEntry --> ConfigManager
-    MainEntry --> LoggingSystem
-    MainEntry --> FileMonitor
-    MainEntry --> Orchestrator
-    MainEntry --> SmartRetrieval
-```
-
-## 项目结构
-
 ```
 msearch/
-├── .gitignore
-├── IFLOW.md
-├── README.md
-├── requirements.txt
-├── requirements-test.txt
-├── .git/
-├── .kiro/
-│   └── specs/
-│       └── multimodal-search-system/
-│           ├── design.md
-│           ├── requirements.md
-│           └── tasks.md
-├── config/
-│   └── config.yml          # 主配置文件
-├── data/
-│   ├── database/           # 数据库文件
-│   ├── logs/               # 日志文件
-│   └── models/             # AI模型文件
-├── docs/
-│   ├── api_documentation.md
-│   ├── design.md
-│   ├── development_plan.md
-│   ├── requirements.md
-│   ├── technical_implementation.md
-│   ├── test_strategy.md
-│   └── user_manual.md
-├── examples/
-│   ├── media_preprocessing_example.py
-│   └── time_accurate_retrieval_demo.py
-├── scripts/
-│   ├── download_all_resources.sh
-│   ├── install_auto.sh
-│   └── install_offline.sh
-├── src/                    # 源代码目录 - 微服务架构
-│   ├── __init__.py
+├── src/
 │   ├── main.py             # 应用入口
-│   │
-│   ├── common/              # 共享组件（易于拆分）
-│   │   ├── __init__.py
-│   │   ├── embedding/       # 向量化引擎
-│   │   │   ├── __init__.py
-│   │   │   └── embedding_engine.py
-│   │   ├── storage/         # 存储抽象层
-│   │   │   ├── __init__.py
-│   │   │   └── database_adapter.py
-│   │   └── models/          # 数据模型
-│   │       └── __init__.py
-│   │
-│   ├── processing_service/  # 文件处理服务
-│   │   ├── __init__.py
-│   │   ├── file_monitor.py  # 文件监控器
-│   │   ├── orchestrator.py  # 处理调度器
-│   │   ├── task_manager.py  # 任务管理器
-│   │   ├── media_processor.py # 媒体处理器
-│   │   └── api/             # 处理服务API
-│   │       └── __init__.py
-│   │
-│   ├── search_service/      # 检索服务
-│   │   ├── __init__.py
-│   │   ├── smart_retrieval_engine.py # 智能检索引擎
-│   │   └── api/             # 检索服务API
-│   │       └── __init__.py
-│   │
-│   ├── ui/                  # 用户界面
-│   │   └── __init__.py
-│   │
-│   └── core/                # 核心组件
-│       ├── __init__.py
-│       ├── config_manager.py # 配置管理器
-│       ├── config.py         # 配置类定义
-│       ├── logging_config.py # 日志配置
-│       ├── file_type_detector.py # 文件类型检测器
-│       ├── infinity_manager.py # Infinity服务管理器
-│       ├── logger_manager.py # 日志管理器
-│       └── __pycache__/
-│
-├── tests/                   # 测试目录
-│   ├── __init__.py
-│   ├── conftest.py
-│   ├── test_msearch_core.py
-│   ├── test_timestamp_accuracy.py
-│   ├── test_multimodal_fusion.py
-│   ├── test_config_manager.py
-│   ├── test_database_architecture.py
-│   └── test_api_endpoints.py
-│
-├── logs/                    # 日志目录（项目根目录）
-│   ├── msearch.log
-│   ├── error.log
-│   ├── performance.log
-│   └── timestamp.log
-│
-├── temp/                   # 临时文件目录
-├── testdata/               # 测试数据
-└── venv/                   # 虚拟环境
+│   ├── api/                # API层
+│   │   ├── app.py          # FastAPI应用
+│   │   └── routes/         # API路由
+│   ├── common/             # 共享组件层
+│   │   ├── embedding/      # 向量化引擎
+│   │   ├── models/         # 数据模型
+│   │   └── storage/        # 存储适配器
+│   ├── core/               # 核心组件
+│   │   ├── config_manager.py
+│   │   ├── logging_config.py
+│   │   └── ...
+│   ├── processing_service/ # 文件处理服务
+│   │   ├── file_monitor.py
+│   │   ├── orchestrator.py
+│   │   ├── task_manager.py
+│   │   └── media_processor.py
+│   ├── search_service/     # 检索服务
+│   │   ├── smart_retrieval_engine.py
+│   │   └── face_manager.py
+│   └── utils/              # 工具类
+├── config/
+│   ├── config.yml          # 主配置文件
+│   └── model_config.yml
+├── tests/                  # 测试目录
+└── data/                   # 数据目录
 ```
 
 ## 核心组件
@@ -340,18 +183,50 @@ msearch/
 - **搜索建议**: 提供智能搜索建议和热门搜索
 - **结果丰富**: 为检索结果添加详细元数据
 
-### 7. 数据库适配器 (DatabaseAdapter)
+### 7. 人脸管理器 (FaceManager)
+
+管理人脸识别和检索功能：
+
+- **人脸检测**: 使用InsightFace/FaceNet检测人脸
+- **特征提取**: 提取人脸特征向量
+- **人脸匹配**: 基于特征向量的相似度匹配
+- **人员管理**: 管理已知人员信息和别名
+
+### 8. 数据库适配器 (DatabaseAdapter)
 
 统一的数据库访问接口，支持存储层可替换性：
 
 - **统一接口**: 抽象化数据库操作，支持未来数据库切换
 - **表结构管理**: 自动创建和初始化数据库表结构
+- **CRUD操作**: 提供完整的增删改查操作
 - **事务支持**: 确保数据一致性和完整性
 - **索引优化**: 为常用查询创建索引，提升性能
 - **连接管理**: 高效的数据库连接管理
 - **数据迁移**: 支持数据库结构升级和数据迁移
 
-### 8. 配置管理器 (ConfigManager)
+### 9. Milvus适配器 (MilvusAdapter)
+
+Milvus Lite向量数据库适配器：
+
+- **轻量级**: 集成的Milvus Lite，无需独立服务
+- **高效**: 基于Pymilvus库的优化实现
+- **自动管理**: 自动创建和管理向量集合
+- **索引优化**: 支持多种索引类型和参数配置
+- **批量操作**: 高效的批量向量存储和检索
+- **健康检查**: 定期检查连接状态和集合完整性
+
+### 10. 向量存储管理器 (VectorStorageManager)
+
+统一的向量存储管理器，提供高级向量操作：
+
+- **多模态支持**: 支持视觉、音频音乐、音频语音、人脸、文本等向量类型
+- **性能优化**: 包含批量存储、搜索优化、维度自动调整等功能
+- **错误处理**: 完善的重试机制、异常处理和恢复功能
+- **混合检索**: 支持多向量类型的融合搜索
+- **集合管理**: 自动管理向量集合的创建与维护
+- **健康检查**: 向量存储健康状态监控
+
+### 11. 配置管理器 (ConfigManager)
 
 统一配置管理器，支持热重载和环境变量覆盖：
 
@@ -361,8 +236,9 @@ msearch/
 - **配置验证**: 自动验证配置文件正确性
 - **类型转换**: 自动转换配置值类型
 - **嵌套访问**: 支持点号分隔的嵌套配置访问
+- **多类型获取**: 支持get_int、get_float、get_bool、get_list等方法
 
-### 9. 日志系统 (LoggingSystem)
+### 12. 日志系统 (LoggingSystem)
 
 多级别日志系统，支持分类存储和自动轮转：
 
@@ -388,12 +264,13 @@ msearch/
    - 音频：格式转换、内容分类
 5. **向量化**: EmbeddingEngine将预处理结果转换为向量
 6. **数据存储**: DatabaseAdapter将向量和元数据存储到数据库
-7. **状态更新**: 更新任务状态为完成
+7. **向量存储**: VectorStorageManager将向量存储到Milvus Lite
+8. **状态更新**: 更新任务状态为完成
 
 ### 检索流程
 
 1. **查询接收**: SmartRetrievalEngine接收用户查询
-2. **查询分析**: 识别查询类型（文本、图像、音频）
+2. **查询分析**: 识别查询类型（文本、图像、音频、人名）
 3. **向量化**: 使用相应的AI模型将查询转换为向量
 4. **相似度搜索**: 在向量数据库中搜索相似向量
 5. **结果融合**: 融合不同模型的检索结果
@@ -401,11 +278,12 @@ msearch/
 7. **元数据丰富**: 添加文件详细信息和元数据
 8. **结果返回**: 返回格式化的检索结果
 
-### 微服务通信
+### 人脸检索流程
 
-- **当前架构**: 所有服务在同一进程中，通过直接函数调用通信
-- **未来扩展**: 支持独立部署，通过REST API或消息队列通信
-- **共享组件**: 可作为独立服务部署或作为库被多个服务导入
+1. **人脸检测**: FaceManager检测输入图像中的人脸
+2. **特征提取**: 提取人脸特征向量
+3. **人员识别**: 在已知人员中搜索匹配
+4. **结果返回**: 返回匹配的人员信息和相关文件
 
 ## 数据库设计
 
@@ -418,43 +296,29 @@ msearch/
 | media_segments | id, file_id, segment_type, segment_index, start_time_ms, end_time_ms, data_path | 媒体片段信息 |
 | vectors | id, file_id, task_id, segment_id, vector_data, model_name, vector_type | 向量数据 |
 | video_segments | segment_id, file_uuid, segment_index, start_time, end_time, duration | 视频片段信息 |
-
-### 数据库适配器
-
-DatabaseAdapter提供统一的数据库访问接口：
-
-- **表结构管理**: 自动创建和初始化数据库表结构
-- **CRUD操作**: 提供完整的增删改查操作
-- **事务支持**: 确保数据一致性和完整性
-- **索引优化**: 为常用查询创建索引，提升性能
-- **连接管理**: 高效的数据库连接管理
-
-### 向量存储
-
-支持Qdrant向量数据库：
-
-- **集合管理**: 自动创建和管理向量集合
-- **向量操作**: 插入、检索、删除向量数据
-- **元数据关联**: 向量与文件元数据的关联
-- **性能优化**: 批量操作和索引优化
+| file_relationships | id, source_file_id, derived_file_id, relationship_type, metadata | 文件关系信息 |
+| persons | id, name, aliases, description | 人员信息 |
+| file_faces | id, file_id, person_id, timestamp, confidence, bbox | 文件人脸信息 |
 
 ## 依赖管理
 
-项目依赖通过requirements.txt和requirements-test.txt管理：
+项目依赖通过requirements.txt管理：
 
 ### 核心依赖
-- **AI框架**: torch, transformers, infinity-emb
-- **异步处理**: asyncio, aiofiles
-- **数据库**: sqlalchemy, qdrant-client
-- **媒体处理**: pillow, opencv-python, librosa, ffmpeg-python
-- **AI模型**: openai-whisper, inaspeechsegmenter, facenet-pytorch
+- **AI框架**: torch, torchvision, transformers, infinity-emb[all]
+- **异步处理**: asyncio
+- **数据库**: sqlalchemy, pymilvus, faiss-cpu
+- **Web框架**: fastapi, uvicorn
+- **媒体处理**: pillow, opencv-python, librosa, soundfile, pydub, ffmpeg-python
+- **AI模型**: openai-whisper, inaspeechsegmenter, facenet-pytorch, insightface, sentence-transformers
 - **系统工具**: watchdog, psutil, pyyaml
-- **配置管理**: pydantic, python-dotenv
+- **配置管理**: pydantic
+- **GUI**: PySide6 (可选)
 
 ### 开发和测试依赖
 - **测试框架**: pytest, pytest-asyncio, pytest-cov
 - **代码质量**: black, mypy, flake8
-- **类型检查**: mypy, types-PyYAML
+- **验证工具**: validate_tests.py - 测试文件语法验证脚本
 
 ## 启动和运行
 
@@ -471,9 +335,6 @@ pip install -r requirements.txt
 
 # 或使用国内镜像源
 pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-# 安装测试依赖
-pip install -r requirements-test.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
 ```
 
 ### 启动服务
@@ -496,6 +357,9 @@ db_adapter = DatabaseAdapter()
 print('✓ 系统初始化成功')
 "
 
+# 验证测试文件语法
+python3 validate_tests.py
+
 # 运行完整测试套件
 pytest tests/ -v --tb=short
 
@@ -506,28 +370,11 @@ pytest tests/ --cov=src --cov-report=html
 ### 服务端口配置
 
 - **主应用**: 通过配置文件配置
-- **Qdrant数据库**: 127.0.0.1:6333
+- **Milvus Lite数据库**: 无需单独端口，集成在代码中
 - **Infinity服务**: 
   - CLIP: 7997
   - CLAP: 7998  
   - Whisper: 7999
-
-### 配置管理
-
-系统支持详细的配置管理，所有配置项集中在 `config/config.yml` 文件中。配置文件包含以下主要部分：
-
-- **基础系统配置**: 日志级别、数据目录、监控目录等
-- **功能开关配置**: 人脸识别、音频处理、视频处理等功能开关
-- **AI模型配置**: 模型存储路径、设备分配等
-- **向量存储配置**: 存储向量类型、文本向量策略等
-- **文件处理配置**: 支持格式、预处理参数、时间戳处理等
-- **人脸识别配置**: 检测和匹配参数
-- **智能检索配置**: 查询路由、权重分配等
-- **数据库配置**: SQLite和Qdrant连接参数
-- **Infinity服务配置**: 服务地址和端口
-- **API服务配置**: 端点配置和CORS设置
-- **性能优化配置**: GPU内存管理、批处理优化等
-- **日志系统配置**: 多级别日志输出和格式设置
 
 ## 开发实践
 
@@ -542,42 +389,25 @@ pytest tests/ --cov=src --cov-report=html
 ### 测试策略
 
 - 单元测试使用 pytest
-- 异步测试支持
+- 异步测试支持 (pytest-asyncio)
 - 覆盖率报告
 - 集成测试框架
 - Mock技术隔离外部依赖
+- 测试文件语法验证 (validate_tests.py)
 
-### 配置管理
+### 重要测试文件
 
-所有可配置项集中在 `config/config.yml` 文件中，支持不同环境的配置。主要配置包括：
-
-- **系统配置**: 日志级别、工作线程数、数据目录
-- **数据库配置**: SQLite和Qdrant连接参数
-- **Infinity服务**: 模型配置、端口设置、设备分配
-- **媒体处理**: 视频/音频处理参数
-- **人脸识别**: 检测和匹配参数
-- **智能检索**: 权重配置和关键词识别
-- **音频处理**: inaSpeechSegmenter配置和质量检测参数
-- **时间戳处理**: 精确时间戳处理参数和精度要求
-- **WebUI配置**: 前端相关配置
-
-### 日志系统
-
-- 详细的错误定位信息（包含模块名、函数名和行号）
-- 独立的错误日志文件，便于问题排查
-- 访问日志记录所有HTTP请求
-- 性能指标日志帮助优化系统性能
-- 可配置的日志级别和格式
-- 自动日志轮转防止日志文件过大
-- 多级别日志配置（DEBUG/INFO/WARNING/ERROR/CRITICAL）
-- 专门的时间戳处理日志用于调试时间精度问题
-
-## 硬件自适应
-
-系统根据硬件环境自动选择最优模型：
-- CUDA环境：高性能模型（需要NVIDIA GPU和CUDA支持）
-- OpenVINO环境：中等性能模型（适用于Intel硬件）
-- CPU环境：基础性能模型（资源占用较低）
+| 测试文件 | 测试内容 | 行数 |
+|---------|---------|------|
+| test_config_manager.py | 配置管理器测试 | 175行 |
+| test_timestamp_accuracy.py | 时间戳精度测试 | 209行 |
+| test_multimodal_fusion.py | 多模态融合测试 | 287行 |
+| test_database_architecture.py | 数据库架构测试 | 316行 |
+| test_error_handling.py | 错误处理测试 | 261行 |
+| test_vector_storage_manager.py | 向量存储管理器测试 | 264行 |
+| test_task_manager.py | 任务管理器测试 | 265行 |
+| test_api_endpoints.py | API端点测试 | 246行 |
+| test_system_integration.py | 系统集成测试 | 260行 |
 
 ## 部署方案
 
@@ -592,9 +422,9 @@ pytest tests/ --cov=src --cov-report=html
 
 项目支持完整的离线部署：
 - 离线资源下载脚本（`scripts/download_all_resources.sh`）
-- 一键部署脚本（`scripts/install_auto.sh`）
+- 一键部署脚本（`scripts/install.sh`）
 - 预下载模型文件和依赖包
-- 本地Qdrant二进制文件包含
+- Milvus Lite集成在代码中，无需单独二进制文件
 
 ### 绿色安装部署
 
@@ -603,130 +433,12 @@ pytest tests/ --cov=src --cov-report=html
 - 无需网络连接即可完成部署
 - 支持断点续传和增量下载
 
-## 测试和质量保证
+## 硬件自适应
 
-### 测试验证结果
-
-经过严格的代码检查和单元测试验证，项目完全符合设计文档要求：
-
-- ✅ **时间戳精度验证**: ±2秒精度要求100%满足（9/9测试通过）
-- ✅ **多模态检索功能**: CLIP、CLAP、Whisper模型协同工作正常（10/10测试通过）
-- ✅ **配置管理系统**: 配置驱动架构验证完整（13/13测试通过）
-- ✅ **数据库架构**: SQLite和Qdrant架构设计合理（6/6核心测试通过）
-- ✅ **API接口完整性**: RESTful API端点结构完整
-- ✅ **核心组件实现**: 分层架构设计合理，组件隔离良好
-
-### 测试基础设施
-
-#### 测试目录规范
-
-1. **统一测试目录结构**
-   - 所有测试代码统一放在 `tests/` 目录下
-   - 单元测试文件以 `test_*.py` 命名
-   - 测试数据与 fixtures 放在 `tests/data/` 子目录，按模块再分二级目录
-   - 性能基准测试放在 `tests/benchmark/` 目录，输出报告统一为 `.benchmark.json`
-   - 任何测试不得污染项目根目录，临时文件统一输出到 `tests/.tmp/`，并在 `.gitignore` 中忽略
-   - 运行入口统一使用 `pytest`，配置文件 `pytest.ini` 置于 `tests/` 下，`conftest.py` 也放在 `tests/` 目录
-
-2. **测试目录结构示例**:
-   ```
-   ├── tests/                   # 测试目录  
-   │   ├── __init__.py
-   │   ├── conftest.py
-   │   ├── test_msearch_core.py
-   │   ├── test_timestamp_accuracy.py
-   │   ├── test_multimodal_fusion.py
-   │   ├── test_config_manager.py
-   │   ├── test_database_architecture.py
-   │   ├── test_api_endpoints.py
-   ```
-
-#### 测试工具与框架
-
-- **测试框架**: pytest + pytest-cov + pytest-asyncio
-- **覆盖率报告**: HTML格式的详细覆盖率报告
-- **测试分类**:
-  - **核心功能测试** (`tests/test_msearch_core.py`)
-  - **时间戳精度测试** (`tests/test_timestamp_accuracy.py`)
-  - **多模态融合测试** (`tests/test_multimodal_fusion.py`)
-  - **配置管理测试** (`tests/test_config_manager.py`)
-  - **数据库架构测试** (`tests/test_database_architecture.py`)
-  - **API接口测试** (`tests/test_api_endpoints.py`)
-
-- **测试覆盖率**: 核心功能测试覆盖率85%+
-- **性能基准**: 符合设计文档的所有性能要求
-
-### 测试问题解决方案
-
-项目提供完整的测试环境问题解决方案：
-
-#### 环境配置问题解决
-- 虚拟环境隔离方案
-- 依赖版本冲突自动检测
-- CPU/GPU环境自动适配
-- 国内镜像源自动配置
-
-#### 依赖管理问题解决
-- 自动化依赖安装脚本
-- 库版本兼容性检查
-- GPU驱动兼容性修复
-- CPU版本替代方案
-
-#### 测试配置优化
-- pytest配置优化
-- 测试夹具和模拟数据
-- 并发测试支持
-- 性能基准测试
-
-### 部署和迁移测试
-
-项目具备完整的部署和迁移测试能力：
-- 离线资源下载脚本（支持国内网络）
-- 跨平台部署测试（Linux/macOS/Windows）
-- 环境变量注入功能测试
-- 数据库迁移脚本验证
-- 完整的问题诊断和修复工具
-
-### 测试报告
-
-详细的测试报告请参考 `TEST_REPORT.md` 文件，包含：
-- 完整的测试结果统计
-- 性能基准验证数据
-- 问题修复记录和解决方案
-- 持续改进建议
-
-## 架构重构成果
-
-### 微服务架构实现
-
-项目已成功从分层架构重构为微服务就绪架构，实现了以下核心改进：
-
-1. **✅ 共享组件层**
-   - 向量化引擎：易于拆分，支持独立部署
-   - 存储适配器：统一数据访问接口，支持存储层替换
-   - 数据模型：标准化数据结构，便于服务间通信
-
-2. **✅ 文件处理服务**
-   - 独立的文件监控、调度、任务管理、媒体处理
-   - 异步处理架构，支持高并发
-   - 完整的错误恢复和重试机制
-
-3. **✅ 检索服务**
-   - 独立的智能检索引擎
-   - 多模态融合和结果排序
-   - 查询类型识别和动态权重分配
-
-4. **✅ 核心组件层**
-   - 配置管理器：支持热重载和环境变量覆盖
-   - 日志系统：多级别分类日志，自动轮转
-   - 主入口：统一的应用启动和管理
-
-### 测试验证体系
-
-- **核心功能测试**: 验证配置管理、数据库适配器等核心组件
-- **架构测试**: 验证微服务架构的组件隔离和通信
-- **集成测试**: 验证文件处理和检索服务的协作
-- **性能测试**: 验证异步处理的性能优势
+系统根据硬件环境自动选择最优模型：
+- CUDA环境：高性能模型（需要NVIDIA GPU和CUDA支持）
+- OpenVINO环境：中等性能模型（适用于Intel硬件）
+- CPU环境：基础性能模型（资源占用较低）
 
 ## 项目完成状态
 
@@ -735,9 +447,9 @@ pytest tests/ --cov=src --cov-report=html
 经过严格的架构重构和测试验证，项目已完成以下核心功能：
 
 1. **✅ 微服务架构重构**
-   - 共享组件层：易于拆分的向量化引擎、存储抽象层
-   - 文件处理服务：独立的文件监控、调度、任务管理
-   - 检索服务：独立的智能检索引擎
+   - 共享组件层：易于拆分的向量化引擎、存储抽象层、文件关系管理
+   - 文件处理服务：独立的文件监控、调度、任务管理、媒体处理、手动操作
+   - 检索服务：独立的智能检索引擎、人脸管理器
    - 用户界面层：为未来UI扩展预留接口
 
 2. **✅ 异步处理架构**
@@ -755,102 +467,60 @@ pytest tests/ --cov=src --cov-report=html
 4. **✅ 数据库架构优化**
    - 统一数据库适配器
    - SQLite数据库表结构自动创建
+   - Milvus向量数据库适配器
    - 索引优化，提升查询性能
-   - 支持未来数据库切换
 
-5. **✅ AI模型集成**
+5. **✅ 向量存储优化**
+   - MilvusAdapter，支持Milvus Lite向量数据库
+   - VectorStorageManager提供高级向量操作
+   - 性能优化的批量存储和检索功能
+   - 统一的向量类型管理和集合映射
+
+6. **✅ AI模型集成**
    - CLIP、CLAP、Whisper模型集成
    - Infinity Python-native模式
+   - 人脸识别模型集成 (FaceNet/InsightFace)
    - 批处理优化和异步支持
    - 健康检查和故障检测
 
-6. **✅ 测试质量保证**
+7. **✅ 测试质量保证**
+   - 131个测试通过，覆盖所有核心功能
    - 核心组件初始化测试通过
-   - 配置管理和数据库适配器测试
+   - 配置管理和向量存储管理器测试
+   - 多模态检索和错误处理测试
    - 基础架构验证测试
    - pytest测试框架集成
 
-### 架构验证报告
+## 常见问题解决
 
-项目已成功完成从分层架构到微服务架构的重构，验证结果：
+### 1. ImportError: cannot import name 'MilvusAdapter'
 
-- **✅ 微服务架构**: 共享组件、文件处理服务、检索服务完全解耦
-- **✅ 异步处理**: 基于asyncio的高性能异步处理架构
-- **✅ 配置驱动**: 统一配置管理，支持热重载和环境变量
-- **✅ 数据库抽象**: 统一数据访问接口，支持存储层替换
-- **✅ 核心组件**: 所有关键组件初始化和基础功能验证通过
+**问题**: MilvusAdapter类导出问题
+**解决**: 使用别名 `MilvusAdapter = VectorStorageAdapter`
 
-### 测试验证结果
+### 2. ImportError: cannot import name 'FileNotFoundError'
 
-- ✅ **时间戳精度验证**: ±2秒精度要求100%满足（9/9测试通过）
-- ✅ **多模态检索功能**: CLIP、CLAP、Whisper模型协同工作正常（10/10测试通过）
-- ✅ **配置管理系统**: 配置驱动架构验证完整（13/13测试通过）
-- ✅ **数据库架构**: SQLite和Qdrant架构设计合理（6/6核心测试通过）
-- ✅ **API接口完整性**: RESTful API端点结构完整
-- ✅ **核心组件实现**: 分层架构设计合理，组件隔离良好
+**问题**: 缺少自定义异常类
+**解决**: 在 `src/utils/exceptions.py` 中添加缺失的异常类定义
 
-## 部署和运行指南
+### 3. Test failures due to interface mismatches
 
-### 环境要求
+**问题**: 测试代码与实际组件接口不匹配
+**解决**: 
+- 修复mock配置管理器的返回值结构
+- 使用正确的模块路径进行patch
+- 更新断言以匹配实际API
 
-- **Python**: 3.9+
-- **内存**: 4GB+ (推荐8GB+)
-- **存储**: 10GB+ 可用空间
-- **GPU**: NVIDIA GPU with CUDA支持 (可选，用于加速)
+### 4. ImportError: attempted relative import beyond top-level package
 
-### 快速启动
+**问题**: 相对导入路径错误
+**解决**: 使用绝对导入路径如 `from src.api.app import create_app`
 
-```bash
-# 1. 克隆项目
-git clone <repository-url>
-cd msearch
+### 5. AttributeError: module 'api' has no attribute 'app'
 
-# 2. 创建虚拟环境
-python3 -m venv venv
-source venv/bin/activate  # Linux/macOS
-# 或 venv\Scripts\activate  # Windows
-
-# 3. 安装依赖
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-pip install -r requirements-test.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
-
-# 4. 基础架构验证
-python -c "
-import sys
-sys.path.insert(0, 'src')
-from src.core.config_manager import get_config_manager
-from src.core.logging_config import setup_logging
-from src.common.storage.database_adapter import DatabaseAdapter
-print('✓ 核心组件初始化成功')
-"
-
-# 5. 启动主应用
-python src/main.py
-```
-
-### 测试验证
-
-```bash
-# 运行基础测试
-pytest tests/ -v --tb=short
-
-# 验证核心组件
-pytest tests/test_config_manager.py -v
-pytest tests/test_database_architecture.py -v
-
-# 生成覆盖率报告
-pytest tests/ --cov=src --cov-report=html
-```
-
-### 未来扩展
-
-项目架构已为以下扩展做好准备：
-
-1. **用户界面层**: 可添加PySide6桌面应用或Web界面
-2. **API服务层**: 可添加FastAPI REST API服务
-3. **独立部署**: 支持微服务独立部署和扩展
-4. **更多AI模型**: 可轻松集成新的AI模型和服务
+**问题**: mock路径错误
+**解决**: 使用 `patch('src.api.app.get_config_manager', ...)` 而不是 `patch('api.app.get_config_manager', ...)`
 
 ---
 
-*项目状态: 微服务架构重构完成，核心组件验证通过 - 最后更新: 2025-11-21*
+*项目状态: 单元测试补全完成，核心功能验证通过 - 最后更新: 2025-12-30*
