@@ -72,8 +72,8 @@ msearch/
 │   │   │   └── embedding_engine.py
 │   │   └── storage/             # 存储抽象层
 │   │       ├── __init__.py
-│   │       ├── database_adapter.py # 数据库适配器
-│   │       └── qdrant_adapter.py   # Qdrant向量数据库适配器
+│   │       ├── database_adapter.py # 数据库适配器（SQLite）
+│   │       └── vector_storage_adapter.py   # 向量存储适配器（基于 Milvus Lite 实现）
 │   │
 │   ├── core/                    # 核心组件
 │   │   ├── __init__.py
@@ -97,7 +97,7 @@ msearch/
 │   ├── config_prod.yml         # 生产环境配置
 │   ├── models.yml              # 模型配置
 │   ├── alerts.yml              # 告警配置
-│   └── qdrant_simple.yaml      # Qdrant配置
+│   └── milvus_config.yaml      # Milvus Lite 配置
 │
 ├── data/                        # 数据目录
 │   ├── models/                 # AI模型文件
@@ -107,7 +107,7 @@ msearch/
 │   │   └── facenet/
 │   ├── database/               # SQLite数据库
 │   │   └── msearch.db
-│   ├── qdrant/                 # Qdrant向量数据库
+│   ├── milvus/                 # Milvus Lite 向量数据库
 │   ├── temp/                   # 临时文件
 │   │   ├── images/
 │   │   ├── videos/
@@ -158,11 +158,9 @@ msearch/
 │   ├── install_auto.py         # 跨平台自动安装脚本
 │   ├── install_offline.py      # 跨平台离线安装脚本
 │   ├── download_all_resources.py  # 资源下载脚本（使用temp目录）
-│   ├── start_qdrant_optimized.sh  # 启动Qdrant
-│   ├── stop_qdrant.sh          # 停止Qdrant
+│   ├── backup_milvus.py        # Milvus Lite 备份
 │   ├── build_with_nuitka.sh    # Nuitka打包脚本
 │   ├── maintain_database.py    # 数据库维护
-│   ├── backup_qdrant.py        # Qdrant备份
 │   └── stop_services.py        # 停止服务
 │
 ├── migrations/                  # 数据库迁移脚本
@@ -233,7 +231,7 @@ msearch/
 3. **data/** - 数据文件分类存储
    - models/: AI模型文件（按模型类型组织）
    - database/: SQLite数据库
-   - qdrant/: 向量数据库
+   - milvus/: 向量数据库（Milvus Lite）
    - temp/: 临时文件（可自动清理）
    - backups/: 备份文件
    - checkpoints/: 任务断点
@@ -432,14 +430,15 @@ msearch/
 **状态**: [x] 已完成
 
 **任务内容**:
-- 实现 QdrantAdapter 类，封装Qdrant操作
-- 配置Qdrant二进制单文件部署
+- 实现 VectorStorageAdapter 类，封装向量存储操作（当前实现基于 Milvus Lite）
+- 实现 VectorStorageManager 类，提供统一的向量存储管理接口
+- 使用本地文件模式配置 Milvus Lite（嵌入式部署，无需独立服务）
 - 创建多种模态的向量集合（visual, audio_music, audio_speech）
 - 实现向量插入、检索、删除方法
 - 实现批量向量处理
 
 **验收标准**:
-- [x] Qdrant服务能成功启动（单文件模式）
+- [x] Milvus Lite 能在本地文件模式下成功初始化
 - [x] 所有向量集合配置正确（维度、距离度量）
 - [x] 能成功插入向量并关联文件UUID和片段ID
 - [x] 向量检索能返回top-k结果及相似度分数
