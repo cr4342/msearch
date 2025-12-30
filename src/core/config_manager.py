@@ -12,42 +12,43 @@ import logging
 from functools import lru_cache
 
 logger = logging.getLogger(__name__)
+_MISSING = object()
 
 
 class ConfigManager:
     """统一配置管理器 - 配置驱动设计"""
-    
-    def __init__(self, config_path: str = "config/config.yml"):
+
+    def __init__(self, config_path: str = "config/msearch.yml"):
         self.config_path = config_path
         self.config = {}
         self.watchers: List[tuple] = []  # 配置变更监听器
         self._load_config()
         self._enable_hot_reload()
-        
+
     def _load_config(self) -> Dict[str, Any]:
         """加载配置文件"""
         try:
             with open(self.config_path, 'r', encoding='utf-8') as f:
                 config = yaml.safe_load(f)
-            
+
             # 如果配置为空（空文件），使用默认配置
             if config is None:
                 config = {}
-            
+
             # 合并默认配置
             default_config = self._generate_default_config()
             config = self._merge_configs(default_config, config)
-            
+
             # 环境变量覆盖
             config = self._apply_env_overrides(config)
-            
+
             # 配置验证
             self._validate_config(config)
-            
+
             self.config = config
             logger.info("配置文件加载成功")
             return config
-            
+
         except FileNotFoundError:
             logger.warning(f"配置文件不存在: {self.config_path}")
             config = self._generate_default_config()
@@ -69,39 +70,123 @@ class ConfigManager:
             config = self._apply_env_overrides(config)
             self.config = config
             return config
-    
-    def get(self, key: str, default=None) -> Any:
-        """获取配置值，支持点号分隔的嵌套键"""
+
+    def get(self, key: str, default=_MISSING) -> Any:
+        """获取配置值，支持点号分隔的嵌套键
+
+        当未提供 default 且配置项不存在时，抛出 KeyError。
+        当提供了 default 且配置项不存在时，返回 default。
+        """
         keys = key.split('.')
-        value = self.config
-        
+        value: Any = self.config
+
         for k in keys:
             if isinstance(value, dict) and k in value:
                 value = value[k]
             else:
+                if default is _MISSING:
+                    raise KeyError(f"配置项不存在: {key}")
                 return default
-        
+
         return value
-    
+
+    def get_int(self, key: str) -> int:
+        """获取整数配置值
+
+        当配置不存在时抛出 KeyError，当无法转换为整数时抛出 ValueError。
+        """
+        value = self.get(key)
+        try:
+            if isinstance(value, bool):
+                # 避免布尔值被误用为整数
+                raise TypeError("布尔值不能用作整数配置")
+            return int(value)
+        except (ValueError, TypeError) as e:
+            logger.error(f"配置值转换为整数失败: {key} = {value}, 错误: {e}")
+            raise
+
+    def get_float(self, key: str) -> float:
+        """获取浮点数配置值
+
+        当配置不存在时抛出 KeyError，当无法转换为浮点数时抛出 ValueError。
+        """
+        value = self.get(key)
+        try:
+            if isinstance(value, bool):
+                raise TypeError("布尔值不能用作浮点数配置")
+            return float(value)
+        except (ValueError, TypeError) as e:
+            logger.error(f"配置值转换为浮点数失败: {key} = {value}, 错误: {e}")
+            raise
+
+    def get_bool(self, key: str) -> bool:
+        """获取布尔配置值
+
+        当配置不存在时抛出 KeyError，当无法转换为布尔值时抛出 ValueError。
+        """
+        value = self.get(key)
+
+        if isinstance(value, bool):
+            return value
+
+        if isinstance(value, str):
+            value_lower = value.strip().lower()
+            if value_lower in ('true', '1', 'yes', 'on', 'y', 't'):
+                return True
+            if value_lower in ('false', '0', 'no', 'off', 'n', 'f'):
+                return False
+
+        if isinstance(value, (int, float)):
+            return bool(value)
+
+        logger.error(f"配置值转换为布尔类型失败: {key} = {value} (类型: {type(value)})")
+        raise ValueError(f"配置项 {key} 不是布尔类型")
+
+    def get_list(self, key: str) -> List[Any]:
+        """获取列表配置值
+
+        当配置不存在时抛出 KeyError，当无法转换为列表时抛出 ValueError。
+        """
+        value = self.get(key)
+
+        if isinstance(value, list):
+            return value
+
+        if isinstance(value, str):
+            # 如果是字符串，尝试解析为JSON列表
+            try:
+                parsed = json.loads(value)
+                if isinstance(parsed, list):
+                    return parsed
+            except json.JSONDecodeError:
+                # 如果不是JSON格式，按逗号分割字符串
+                return [item.strip() for item in value.split(',') if item.strip()]
+
+        if isinstance(value, tuple):
+            return list(value)
+
+        logger.error(f"无法将配置值转换为列表类型: {key} = {value} (类型: {type(value)})")
+        raise ValueError(f"配置项 {key} 不是列表类型")
+
     def set(self, key: str, value: Any) -> None:
         """设置配置值"""
         keys = key.split('.')
         config = self.config
-        
+
         for k in keys[:-1]:
             if k not in config:
                 config[k] = {}
             config = config[k]
-        
+
         config[keys[-1]] = value
-        
+
         # 通知监听器
         self._notify_watchers(key, value)
-    
+
     def watch(self, key: str, callback: Callable[[str, Any], None]) -> None:
         """监听配置变更"""
         self.watchers.append((key, callback))
-    
+
     def _notify_watchers(self, key: str, value: Any) -> None:
         """通知监听器配置变更"""
         for watch_key, callback in self.watchers:
@@ -110,7 +195,7 @@ class ConfigManager:
                     callback(key, value)
                 except Exception as e:
                     logger.error(f"配置监听器回调失败: {e}")
-    
+
     def _apply_env_overrides(self, config: Dict) -> Dict:
         """应用环境变量覆盖"""
         # 支持 MSEARCH_DATABASE_SQLITE_PATH 格式的环境变量
@@ -119,9 +204,9 @@ class ConfigManager:
                 # 将环境变量名转换为配置键
                 # 环境变量使用 MSEARCH_前缀_KEY_NAME 格式
                 # 配置文件中的键使用 key.name 或 key_name 格式
-                
+
                 env_key = key[8:]  # 移除 MSEARCH_ 前缀
-                
+
                 # 特殊处理：custom_section.boolean_value
                 if env_key == 'CUSTOM_SECTION_BOOLEAN_VALUE':
                     config_key = 'custom_section.boolean_value'
@@ -130,19 +215,19 @@ class ConfigManager:
                 else:
                     # 对于其他情况，将下划线替换为点号
                     config_key = env_key.lower().replace('_', '.')
-                
+
                 logger.debug(f"应用环境变量覆盖: {key} -> {config_key} = {value}")
-                
+
                 self._set_nested_value(config, config_key, value)
-        
+
         return config
-    
+
     def _set_nested_value(self, config: Dict, key: str, value: Any) -> None:
         """设置嵌套配置值"""
         # 处理点号分隔的嵌套键
         keys = key.split('.')
         current = config
-        
+
         # 特殊情况处理：对于常见的环境变量映射
         # 如果要设置 general.log.level，但实际配置中是 general.log_level
         # 我们需要检查是否存在替代的键名
@@ -158,7 +243,7 @@ class ConfigManager:
             except:
                 config['general']['log_level'] = value
             return
-        
+
         # 特殊处理：system.log.level -> system.log_level
         if len(keys) == 3 and keys[0] == 'system' and keys[1] == 'log' and keys[2] == 'level':
             try:
@@ -171,7 +256,7 @@ class ConfigManager:
             except:
                 config['system']['log_level'] = value
             return
-        
+
         # 特殊处理：system.max.workers -> system.max_workers
         if len(keys) == 3 and keys[0] == 'system' and keys[1] == 'max' and keys[2] == 'workers':
             try:
@@ -182,7 +267,7 @@ class ConfigManager:
             except:
                 config['system']['max_workers'] = value
             return
-        
+
         # 特殊处理：对于数据库路径的环境变量映射
         if len(keys) == 3 and keys[0] == 'database' and keys[1] == 'sqlite' and keys[2] == 'path':
             # 直接设置 database.sqlite.path
@@ -195,14 +280,14 @@ class ConfigManager:
                     config['database']['sqlite'] = {}
                 config['database']['sqlite']['path'] = value
             return
-        
+
         # 特殊处理：custom.section.boolean_value -> custom_section.boolean_value
         if len(keys) == 3 and keys[0] == 'custom' and keys[1] == 'section' and keys[2] == 'boolean_value':
             try:
                 # 确保 custom_section 存在
                 if 'custom_section' not in config:
                     config['custom_section'] = {}
-                
+
                 # 转换布尔值
                 if isinstance(value, str):
                     value_lower = value.lower()
@@ -218,13 +303,13 @@ class ConfigManager:
                     config['custom_section'] = {}
                 config['custom_section']['boolean_value'] = value
             return
-        
+
         # 特殊处理：custom_section.boolean_value（直接使用下划线版本）
         if len(keys) == 2 and keys[0] == 'custom_section' and keys[1] == 'boolean_value':
             # 确保 custom_section 存在
             if 'custom_section' not in config:
                 config['custom_section'] = {}
-            
+
             # 转换布尔值
             if isinstance(value, str):
                 value_lower = value.lower()
@@ -235,13 +320,13 @@ class ConfigManager:
             else:
                 config['custom_section']['boolean_value'] = value
             return
-        
+
         # 对于其他情况，按正常嵌套结构处理
         for k in keys[:-1]:
             if k not in current:
                 current[k] = {}
             current = current[k]
-        
+
         # 尝试转换值类型
         try:
             # 如果是数字
@@ -253,73 +338,73 @@ class ConfigManager:
                 current[keys[-1]] = value
         except:
             current[keys[-1]] = value
-    
+
     def _merge_configs(self, default: Dict, custom: Dict) -> Dict:
         """合并配置，自定义配置覆盖默认配置"""
         result = default.copy()
-        
+
         for key, value in custom.items():
             if key in result and isinstance(result[key], dict) and isinstance(value, dict):
                 result[key] = self._merge_configs(result[key], value)
             else:
                 result[key] = value
-        
+
         return result
-    
+
     def validate_config(self, config: Dict = None) -> bool:
         """验证配置完整性"""
         if config is None:
             config = self.config
-            
+
         required_keys = [
             'database.sqlite.path',
-            'database.faiss.data_dir',
+            'database.milvus.data_dir',
             'infinity.services.clip.port',
             'face_recognition.matching.similarity_threshold'
         ]
-        
+
         missing_keys = []
         for key in required_keys:
             if self._get_nested_value(config, key) is None:
                 missing_keys.append(key)
-        
+
         if missing_keys:
             logger.warning(f"缺少必需的配置项: {missing_keys}")
             return False
         return True
-        
+
     def _validate_config(self, config: Dict) -> None:
         """内部验证配置完整性"""
         self.validate_config(config)
-    
+
     def _get_nested_value(self, config: Dict, key: str) -> Any:
         """获取嵌套配置值"""
         keys = key.split('.')
         value = config
-        
+
         for k in keys:
             if isinstance(value, dict) and k in value:
                 value = value[k]
             else:
                 return None
-        
+
         return value
-        
+
     def _enable_hot_reload(self):
         """启用配置文件热重载"""
         try:
             from watchdog.observers import Observer
             from watchdog.events import FileSystemEventHandler
-            
+
             class ConfigChangeHandler(FileSystemEventHandler):
                 def __init__(self, config_manager):
                     self.config_manager = config_manager
-                    
+
                 def on_modified(self, event):
                     if event.src_path == self.config_manager.config_path:
                         logger.info(f"配置文件已修改: {event.src_path}")
                         self.config_manager.reload()
-            
+
             # 创建观察者并启动
             self._observer = Observer()
             self._observer.schedule(
@@ -334,20 +419,20 @@ class ConfigManager:
             logger.warning("watchdog库未安装，配置热重载功能不可用")
         except Exception as e:
             logger.error(f"启用配置热重载失败: {e}")
-            
+
     def reload(self):
         """重新加载配置文件"""
         logger.info("重新加载配置文件...")
         old_config = self.config.copy()
         new_config = self._load_config()
-        
+
         # 比较配置变化并通知监听器
         self._notify_config_changes(old_config, new_config)
-    
+
     async def reload_config(self):
         """异步重新加载配置文件"""
         self.reload()
-        
+
     def _notify_config_changes(self, old_config: Dict, new_config: Dict):
         """通知配置变化"""
         # 简化实现：如果配置发生变化，通知所有监听器
@@ -357,12 +442,15 @@ class ConfigManager:
                     callback(key, self.get(key))
                 except Exception as e:
                     logger.error(f"配置变化通知失败: {e}")
-    
+
     def _generate_default_config(self) -> Dict:
         """生成默认配置"""
         return {
             "system": {
+                "name": "msearch",
+                "version": "1.0.0",
                 "log_level": "INFO",
+                "log_path": "logs",
                 "data_dir": "./data",
                 "temp_dir": "./temp",
                 "max_workers": 4
@@ -377,25 +465,25 @@ class ConfigManager:
                 },
                 "handlers": {
                     "console": {
-                        "enabled": True, 
-                        "level": "INFO", 
+                        "enabled": True,
+                        "level": "INFO",
                         "format": "standard"
                     },
                     "file": {
-                        "enabled": True, 
-                        "level": "DEBUG", 
+                        "enabled": True,
+                        "level": "DEBUG",
                         "format": "detailed",
-                        "path": "./data/logs/msearch.log", 
-                        "max_size": "100MB", 
+                        "path": "./data/logs/msearch.log",
+                        "max_size": "100MB",
                         "backup_count": 5,
                         "encoding": "utf-8"
                     },
                     "error_file": {
-                        "enabled": True, 
-                        "level": "ERROR", 
+                        "enabled": True,
+                        "level": "ERROR",
                         "format": "detailed",
-                        "path": "./data/logs/error.log", 
-                        "max_size": "50MB", 
+                        "path": "./data/logs/error.log",
+                        "max_size": "50MB",
                         "backup_count": 10,
                         "encoding": "utf-8"
                     }
@@ -414,14 +502,70 @@ class ConfigManager:
                     "connection_pool_size": 10,
                     "timeout": 30
                 },
-                "faiss": {
-                    "data_dir": "./data/faiss",
+                "vector_db": {
+                    "type": "milvus_lite"
+                },
+                "milvus": {
+                    "uri": "./data/milvus/milvus.db",
+                    "data_dir": "./data/milvus",
+                    "host": "127.0.0.1",
+                    "port": 19530,
                     "collections": {
-                        "visual_vectors": "visual_vectors",
-                        "audio_music_vectors": "audio_music_vectors",
-                        "audio_speech_vectors": "audio_speech_vectors",
-                        "face_vectors": "face_vectors",
-                        "text_vectors": "text_vectors"
+                        "image_vectors": {
+                            "dimension": 512,
+                            "metric_type": "COSINE",
+                            "index_type": "IVF_FLAT",
+                            "index_params": {
+                                "nlist": 1024
+                            },
+                            "search_params": {
+                                "nprobe": 10
+                            }
+                        },
+                        "video_vectors": {
+                            "dimension": 512,
+                            "metric_type": "COSINE",
+                            "index_type": "IVF_FLAT",
+                            "index_params": {
+                                "nlist": 1024
+                            },
+                            "search_params": {
+                                "nprobe": 10
+                            }
+                        },
+                        "audio_vectors": {
+                            "dimension": 512,
+                            "metric_type": "COSINE",
+                            "index_type": "IVF_FLAT",
+                            "index_params": {
+                                "nlist": 1024
+                            },
+                            "search_params": {
+                                "nprobe": 10
+                            }
+                        },
+                        "face_vectors": {
+                            "dimension": 512,
+                            "metric_type": "COSINE",
+                            "index_type": "IVF_FLAT",
+                            "index_params": {
+                                "nlist": 1024
+                            },
+                            "search_params": {
+                                "nprobe": 10
+                            }
+                        },
+                        "text_vectors": {
+                            "dimension": 512,
+                            "metric_type": "COSINE",
+                            "index_type": "IVF_FLAT",
+                            "index_params": {
+                                "nlist": 1024
+                            },
+                            "search_params": {
+                                "nprobe": 10
+                            }
+                        }
                     }
                 }
             },
@@ -463,8 +607,11 @@ class ConfigManager:
             },
             "media_processing": {
                 "video": {
-                    "max_resolution": 960,
+                    "target_resolution": [1280, 720],
                     "target_fps": 8,
+                    "keyframe_interval": 2.0,
+                    "max_segment_duration": 120,
+                    "scene_detection_threshold": 0.3,
                     "codec": "h264",
                     "scene_detection": {
                         "enabled": True,
@@ -483,6 +630,11 @@ class ConfigManager:
                         "min_snr_ratio": 5.0,
                         "enable_silence_detection": True
                     }
+                },
+                "image": {
+                    "max_resolution": 1920,
+                    "quality": 85,
+                    "format": "jpeg"
                 }
             },
             "face_recognition": {
@@ -508,6 +660,21 @@ class ConfigManager:
                     "video_sample_interval": 5,
                     "batch_size": 16,
                     "enable_clustering": False
+                }
+            },
+            "search": {
+                "default_limit": 10,
+                "weights": {
+                    "person_search": {
+                        "face": 2.0,
+                        "visual": 1.0,
+                        "audio": 0.5
+                    },
+                    "music_search": {
+                        "clap": 2.0,
+                        "visual": 1.0,
+                        "whisper": 0.5
+                    }
                 }
             },
             "smart_retrieval": {
@@ -543,6 +710,31 @@ class ConfigManager:
                     "speech": ["讲话", "演讲", "会议", "访谈", "对话", "发言", "语音"],
                     "visual": ["画面", "场景", "图像", "图片", "视频画面", "截图"]
                 }
+            },
+            "orchestrator": {
+                "check_interval": 5.0,
+                "max_concurrent_tasks": 3
+            },
+            "api": {
+                "host": "0.0.0.0",
+                "port": 8000,
+                "log_level": "info",
+                "reload": False,
+                "workers": 1,
+                "cors_origins": [
+                    "http://localhost:3000",
+                    "http://127.0.0.1:3000"
+                ]
+            },
+            "ui": {
+                "theme": "dark",
+                "language": "zh-CN",
+                "thumbnail_size": 256
+            },
+            "task_management": {
+                "max_retries": 5,
+                "retry_delay": 1.0,
+                "retry_multiplier": 2.0
             }
         }
 

@@ -163,8 +163,22 @@ class ProcessingOrchestrator:
         """根据文件类型确定处理策略"""
         file_type = file_info['file_type']
         
+        # 从配置文件获取文件类型列表
+        text_extensions = set(self.config_manager.get('file_types.text_extensions', [
+            '.txt', '.md', '.json', '.csv', '.xml', '.html', '.log'
+        ]))
+        image_extensions = set(self.config_manager.get('file_types.image_extensions', [
+            '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.svg', '.heic', '.heif', '.ico'
+        ]))
+        video_extensions = set(self.config_manager.get('file_types.video_extensions', [
+            '.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv'
+        ]))
+        audio_extensions = set(self.config_manager.get('file_types.audio_extensions', [
+            '.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.opus', '.wma'
+        ]))
+        
         # 文本处理策略
-        if file_type in ['.txt', '.md', '.json', '.csv', '.xml', '.html', '.log']:
+        if file_type in text_extensions:
             return {
                 'modality': 'text',
                 'preprocessing': None,  # 文本文件不需要预处理
@@ -175,7 +189,7 @@ class ProcessingOrchestrator:
             }
         
         # 图像处理策略
-        elif file_type in ['.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.svg', '.heic', '.heif', '.ico']:
+        elif file_type in image_extensions:
             return {
                 'modality': 'image',
                 'preprocessing': {
@@ -189,7 +203,7 @@ class ProcessingOrchestrator:
             }
         
         # 视频处理策略
-        elif file_type in ['.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.webm', '.m4v', '.mpg', '.mpeg', '.3gp', '.ogv']:
+        elif file_type in video_extensions:
             return {
                 'modality': 'video',
                 'preprocessing': {
@@ -205,7 +219,7 @@ class ProcessingOrchestrator:
             }
         
         # 音频处理策略
-        elif file_type in ['.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.opus', '.wma']:
+        elif file_type in audio_extensions:
             return {
                 'modality': 'audio',
                 'preprocessing': {
@@ -325,7 +339,7 @@ class ProcessingOrchestrator:
             metadata=strategy['vectorization']
         )
         
-        # 存储向量到Qdrant向量数据库
+        # 存储向量到Milvus Lite向量数据库
         if vectors and collection_type:
             # 准备向量数据
             vectors_data = []
@@ -344,13 +358,13 @@ class ProcessingOrchestrator:
                     }
                 ))
             
-            # 批量存储向量到Qdrant
+            # 批量存储向量到Milvus Lite
             vector_ids = await self.embedding_engine.batch_store_vectors(
                 collection_type=collection_type,
                 vectors_data=vectors_data
             )
             
-            self.logger.debug(f"向量存储到Qdrant成功: {len(vector_ids)}个向量")
+            self.logger.debug(f"向量存储到Milvus Lite成功: {len(vector_ids)}个向量")
         
         self.logger.debug(f"文件向量化完成: {file_info['file_path']}")
     

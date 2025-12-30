@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import Dict, Any, List, Optional, Union
 import subprocess
 
+from src.core.retry import async_retry
+
 from src.core.config_manager import get_config_manager
 
 
@@ -26,10 +28,20 @@ class MediaProcessor:
         self.video_config = self.config_manager.get("media_processing.video", {})
         self.audio_config = self.config_manager.get("media_processing.audio", {})
         
-        # 支持的文件类型
-        self.image_extensions = {'.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.svg', '.heic', '.heif'}
-        self.video_extensions = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.mpeg', '.mpg', '.3gp', '.webm', '.m4v', '.mts', '.m2ts'}
-        self.audio_extensions = {'.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.amr', '.aiff', '.au'}
+        # 从配置文件读取支持的文件类型
+        self.image_extensions = set(self.config_manager.get('file_types.image_extensions', [
+            '.jpg', '.jpeg', '.png', '.bmp', '.webp', '.tiff', '.tif', '.svg', '.heic', '.heif'
+        ]))
+        self.video_extensions = set(self.config_manager.get('file_types.video_extensions', [
+            '.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv', '.mpeg', '.mpg', '.3gp', '.webm', '.m4v', '.mts', '.m2ts'
+        ]))
+        self.audio_extensions = set(self.config_manager.get('file_types.audio_extensions', [
+            '.mp3', '.wav', '.flac', '.aac', '.ogg', '.wma', '.m4a', '.opus', '.amr', '.aiff', '.au'
+        ]))
+        
+        # 获取FFmpeg超时配置
+        self.ffmpeg_timeout = self.config_manager.get('media_processing.ffmpeg.timeout', 60)
+        
         self.logger.info("媒体处理器初始化完成")
     
     async def process(self, file_path: str, strategy: Dict[str, Any]) -> Dict[str, Any]:
@@ -203,8 +215,6 @@ class MediaProcessor:
                         'format': 'wav'
                     }
                 }
-                
-                result['segments'].append(segment)
             else:
                 # 使用原始文件
                 segment = {
@@ -213,18 +223,23 @@ class MediaProcessor:
                     'data_path': file_path,
                     'metadata': audio_metadata
                 }
-                
-                result['segments'].append(segment)
             
+            # 音频分类
+            audio_type = await self._classify_audio(file_path)
+            segment['metadata']['audio_type'] = audio_type
+            
+            result['segments'].append(segment)
             result['metadata']['total_segments'] = 1
+            result['metadata']['audio_type'] = audio_type
             
-            self.logger.debug(f"音频处理完成: {file_path}")
+            self.logger.debug(f"音频处理完成: {file_path}, 类型: {audio_type}")
             return result
             
         except Exception as e:
             self.logger.error(f"音频处理失败: {file_path}, 错误: {e}")
             raise
     
+    @async_retry(max_attempts=3, delay=0.5, backoff=2.0)
     async def _resize_image(self, image_data: bytes, target_resolution: int) -> bytes:
         """使用ffmpeg调整图像分辨率"""
         try:
@@ -268,10 +283,23 @@ class MediaProcessor:
             
             return resized_data
             
+        except FileNotFoundError as e:
+            self.logger.error(f"文件未找到: {e}")
+            return image_data
+        except PermissionError as e:
+            self.logger.error(f"权限错误: {e}")
+            return image_data
+        except asyncio.TimeoutError as e:
+            self.logger.error(f"处理超时: {e}")
+            return image_data
+        except subprocess.SubprocessError as e:
+            self.logger.error(f"子进程错误: {e}")
+            return image_data
         except Exception as e:
             self.logger.error(f"图像分辨率调整失败: {e}")
             return image_data
     
+    @async_retry(max_attempts=3, delay=0.5, backoff=2.0)
     async def _extract_video_metadata(self, file_path: str) -> Dict[str, Any]:
         """提取视频元数据"""
         try:
@@ -321,9 +349,25 @@ class MediaProcessor:
             
             return metadata
             
+        except FileNotFoundError as e:
+            self.logger.error(f"文件未找到: {file_path}, 错误: {e}")
+            return {}
+        except PermissionError as e:
+            self.logger.error(f"权限错误: {file_path}, 错误: {e}")
+            return {}
+        except asyncio.TimeoutError as e:
+            self.logger.error(f"处理超时: {file_path}, 错误: {e}")
+            return {}
+        except subprocess.SubprocessError as e:
+            self.logger.error(f"子进程错误: {file_path}, 错误: {e}")
+            return {}
+        except json.JSONDecodeError as e:
+            self.logger.error(f"JSON解析错误: {file_path}, 错误: {e}")
+            return {}
         except Exception as e:
             self.logger.error(f"提取视频元数据失败: {e}")
             return {}
+
     
     def _parse_fps(self, fps_str: str) -> float:
         """解析帧率字符串"""
@@ -335,6 +379,7 @@ class MediaProcessor:
         except:
             return 0.0
     
+    @async_retry(max_attempts=3, delay=0.5, backoff=2.0)
     async def _detect_video_scenes(self, file_path: str, max_duration: float, target_fps: int) -> List[Dict[str, Any]]:
         """检测视频场景并切片"""
         try:
@@ -488,10 +533,23 @@ class MediaProcessor:
             
             return segment
             
+        except FileNotFoundError as e:
+            self.logger.error(f"文件未找到: {file_path}, 错误: {e}")
+            return None
+        except PermissionError as e:
+            self.logger.error(f"权限错误: {file_path}, 错误: {e}")
+            return None
+        except asyncio.TimeoutError as e:
+            self.logger.error(f"处理超时: {file_path}, 错误: {e}")
+            return None
+        except subprocess.SubprocessError as e:
+            self.logger.error(f"子进程错误: {file_path}, 错误: {e}")
+            return None
         except Exception as e:
             self.logger.error(f"提取视频帧失败: {e}")
             return None
     
+    @async_retry(max_attempts=3, delay=0.5, backoff=2.0)
     async def _extract_audio_from_video(self, file_path: str) -> str:
         """从视频中提取音频"""
         try:
@@ -529,6 +587,7 @@ class MediaProcessor:
             self.logger.error(f"音频提取失败: {e}")
             return ""
     
+    @async_retry(max_attempts=3, delay=0.5, backoff=2.0)
     async def _extract_audio_metadata(self, file_path: str) -> Dict[str, Any]:
         """提取音频元数据"""
         try:
@@ -582,6 +641,47 @@ class MediaProcessor:
             self.logger.error(f"提取音频元数据失败: {e}")
             return {}
     
+    async def _classify_audio(self, file_path: str) -> str:
+        """使用inaspeechsegmenter对音频进行分类"""
+        try:
+            from inaSpeechSegmenter import Segmenter
+            from inaSpeechSegmenter.export_funcs import seg2csv
+            
+            # 初始化音频分类器
+            seg = Segmenter(vad_engine='smn', detect_gender=False)
+            
+            # 执行分类
+            segmentation = seg(file_path)
+            
+            # 分析分类结果
+            speech_count = 0
+            music_count = 0
+            noise_count = 0
+            
+            for label, _, _ in segmentation:
+                if label == 'speech':
+                    speech_count += 1
+                elif label == 'music':
+                    music_count += 1
+                elif label == 'noEnergy':
+                    noise_count += 1
+            
+            # 确定主要类型
+            if speech_count > music_count:
+                return 'speech'
+            elif music_count > speech_count:
+                return 'music'
+            else:
+                return 'mixed'
+                
+        except ImportError:
+            self.logger.warning("inaspeechsegmenter不可用，使用基础音频分类")
+            return 'unknown'
+        except Exception as e:
+            self.logger.error(f"音频分类失败: {e}")
+            return 'unknown'
+    
+    @async_retry(max_attempts=3, delay=0.5, backoff=2.0)
     async def _convert_audio_format(self, file_path: str, sample_rate: int, channels: int) -> str:
         """转换音频格式"""
         try:

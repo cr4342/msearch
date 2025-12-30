@@ -181,7 +181,8 @@ class InfinityServiceManager:
         while time.time() - start_time < timeout:
             try:
                 async with aiohttp.ClientSession() as session:
-                    async with session.get(f"http://localhost:{service.port}/health", timeout=5) as resp:
+                    health_timeout = self.health_check_config.get("timeout", 5)
+            async with session.get(f"http://localhost:{service.port}/health", timeout=health_timeout) as resp:
                         if resp.status == 200:
                             return True
             except Exception as e:
@@ -213,7 +214,9 @@ class InfinityServiceManager:
             # 优雅停止
             service.process.terminate()
             try:
-                service.process.wait(timeout=10)
+                # 获取优雅停止超时配置
+            shutdown_timeout = self.config_manager.get('infinity.shutdown_timeout', 10)
+            service.process.wait(timeout=shutdown_timeout)
             except subprocess.TimeoutExpired:
                 # 强制杀死
                 service.process.kill()

@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional, Tuple, Union
 from dataclasses import dataclass
 from enum import Enum
 
-from src.common.storage.faiss_adapter import FaissAdapter
+from src.common.storage.milvus_adapter import MilvusAdapter
 from src.core.config_manager import get_config_manager
 
 
@@ -58,12 +58,12 @@ class VectorStorageManager:
     向量存储管理器
 
     负责管理向量的存储、检索和删除操作，支持多种向量类型（视觉、音频、文本等）。
-    使用Qdrant作为向量数据库后端，提供统一的接口进行向量操作。
+    使用Milvus Lite作为向量数据库后端，提供统一的接口进行向量操作。
 
     Attributes:
         config_manager: 配置管理器实例
         logger: 日志记录器
-        qdrant_adapter: Qdrant数据库适配器
+        milvus_adapter: Milvus Lite数据库适配器
         vector_dimensions: 不同向量类型的维度配置字典
         collection_mapping: 向量类型到集合名称的映射字典
         max_retries: 操作失败时的最大重试次数
@@ -86,8 +86,8 @@ class VectorStorageManager:
             self.config_manager = config_manager or get_config_manager()
             self.logger = logging.getLogger(__name__)
 
-            # 初始化FAISS适配器 - 用于连接和操作向量数据库
-            self.faiss_adapter = FaissAdapter(config_manager)
+            # 初始化Milvus Lite适配器 - 用于连接和操作向量数据库
+            self.milvus_adapter = MilvusAdapter(config_manager)
 
             # 向量维度配置 - 定义不同类型向量的维度
             self.vector_dimensions = {
@@ -124,14 +124,11 @@ class VectorStorageManager:
     async def initialize(self) -> bool:
         """初始化向量存储"""
         try:
-            # 连接FAISS
-            success = await self.faiss_adapter.connect()
+            # 连接Milvus Lite
+            success = await self.milvus_adapter.connect()
             if not success:
-                self.logger.error("FAISS连接失败")
+                self.logger.error("Milvus连接失败")
                 return False
-
-            # 创建必要的集合
-            await self._ensure_collections()
 
             self.logger.info("向量存储管理器初始化成功")
             return True
@@ -142,46 +139,8 @@ class VectorStorageManager:
 
     async def _ensure_collections(self):
         """确保所有必要的集合存在"""
-        try:
-            for vector_type, collection_name in \
-                    self.collection_mapping.items():
-                try:
-                    # 验证维度配置
-                    if vector_type not in self.vector_dimensions:
-                        error_msg = f"向量类型 {vector_type} 的维度配置不存在"
-                        self.logger.error(f"确保集合存在: {error_msg}")
-                        raise ValueError(
-                            error_msg
-                        )
-
-                    dimension = self.vector_dimensions[vector_type]
-
-                    # 验证维度有效性
-                    if dimension <= 0:
-                        error_msg = f"无效的向量维度: {dimension}"
-                        self.logger.error(f"确保集合存在: {error_msg}")
-                        raise ValueError(error_msg)
-
-                    success = await self.faiss_adapter.create_collection(
-                        collection_name=collection_name,
-                        vector_size=dimension,
-                        distance_metric="cosine",
-                    )
-
-                    if success:
-                        self.logger.debug(f"集合准备就绪: {collection_name}")
-                    else:
-                        self.logger.warning(f"集合准备失败: {collection_name}")
-                        raise ValueError(f"集合创建失败: {collection_name}")
-
-                except Exception as e:
-                    self.logger.error(f"创建集合 {collection_name} 失败: {e}")
-                    # 继续尝试创建其他集合，但记录错误
-                    continue
-
-        except Exception as e:
-            self.logger.error(f"确保集合存在失败: {e}")
-            raise
+        # Milvus Lite会自动处理集合创建，无需显式调用
+        return
 
     async def store_vector(
         self,
@@ -242,7 +201,7 @@ class VectorStorageManager:
                 payload.update(metadata.additional_data)
 
             # 存储向量
-            vector_id = await self.faiss_adapter.store_vector(
+            vector_id = await self.milvus_adapter.store_vector(
                 collection_type=vector_type.value,
                 vector_data=vector_data,
                 file_id=metadata.file_id,
@@ -263,7 +222,7 @@ class VectorStorageManager:
         vector_type: VectorType,
         query_vector: Union[np.ndarray, List[float]],
         limit: int = 10,
-        score_threshold: float = 0.7,
+        score_threshold: float = None,
         filters: Optional[Dict[str, Any]] = None,
     ) -> List[SearchResult]:
         """
@@ -284,7 +243,7 @@ class VectorStorageManager:
             vector_type: 向量类型，必须是VectorType枚举值
             query_vector: 查询向量，可以是NumPy数组或浮点数列表
             limit: 返回结果最大数量，默认10，最大100
-            score_threshold: 相似度阈值，低于此值的结果将被过滤
+            score_threshold: 相似度阈值，低于此值的结果将被过滤，从配置读取默认
             filters: 可选的过滤条件字典，用于进一步过滤结果
 
         返回:
@@ -299,6 +258,12 @@ class VectorStorageManager:
             if vector_type not in self.collection_mapping:
                 self.logger.error(f"搜索向量: 未知的向量类型 {vector_type}")
                 return []
+
+            # 从配置获取默认阈值
+            if score_threshold is None:
+                score_threshold = self.config_manager.get(
+                    'smart_retrieval.score_thresholds.default', 0.5
+                )
 
             # 性能优化2: 向量预处理和缓存友好的转换
             if isinstance(query_vector, list):
@@ -338,7 +303,7 @@ class VectorStorageManager:
                 filters = self._optimize_filter_conditions(filters)
 
             # 搜索向量
-            raw_results = await self.faiss_adapter.search_vectors(
+            raw_results = await self.milvus_adapter.search_vectors(
                 collection_type=vector_type.value,
                 query_vector=query_vector,
                 limit=limit,
@@ -615,7 +580,7 @@ class VectorStorageManager:
                             'payloads': batch_payloads
                         }
                         # 执行向量存储
-                        store_method = self.faiss_adapter.store_vectors
+                        store_method = self.milvus_adapter.store_vectors
                         batch_stored_ids = await store_method(**store_params)
                         stored_ids.extend(batch_stored_ids)
                     except Exception as e:
@@ -672,7 +637,7 @@ class VectorStorageManager:
 
             for vector_type in VectorType:
                 try:
-                    count = await self.faiss_adapter.delete_vectors_by_file(
+                    count = await self.milvus_adapter.delete_vectors_by_file(
                         collection_type=vector_type.value, file_id=file_id
                     )
                     deleted_counts[vector_type.value] = count
@@ -730,17 +695,17 @@ class VectorStorageManager:
         """
         try:
             if vector_type:
-                count = await self.faiss_adapter.get_vector_count(
-                    vector_type.value
-                )
+                count = await self.milvus_adapter.get_vector_count(
+                vector_type.value
+            )
                 return count
             else:
                 counts = {}
                 for vt in VectorType:
                     try:
-                        count = await self.faiss_adapter.get_vector_count(
-                            vt.value
-                        )
+                        count = await self.milvus_adapter.get_vector_count(
+                        vt.value
+                    )
                         counts[vt.value] = count
                     except Exception as e:
                         self.logger.warning(
@@ -871,7 +836,7 @@ class VectorStorageManager:
             # 遍历所有集合类型
             for vt, cn in self.collection_mapping.items():
                 try:
-                    info = await self.faiss_adapter.get_collection_info(cn)
+                    info = await self.milvus_adapter.get_collection_info(cn)
                     # 统计
                     s = stats[vt.value] = {}
                     s["col"] = cn
@@ -893,8 +858,8 @@ class VectorStorageManager:
     async def health_check(self) -> Dict[str, Any]:
         """健康检查"""
         try:
-            # FAISS健康检查
-            faiss_health = await self.faiss_adapter.health_check()
+            # Milvus健康检查
+            milvus_health = await self.milvus_adapter.health_check()
 
             # 获取统计信息
             stats = await self.get_collection_stats()
@@ -909,10 +874,10 @@ class VectorStorageManager:
             return {
                 "status": (
                     "healthy"
-                    if faiss_health.get("status") == "healthy"
+                    if milvus_health.get("status") == "healthy"
                     else "unhealthy"
                 ),
-                "faiss": faiss_health,
+                "milvus": milvus_health,
                 "collections": stats,
                 "total_vectors": total_vectors,
                 "supported_types": [vt.value for vt in VectorType],
@@ -925,7 +890,7 @@ class VectorStorageManager:
     async def cleanup(self) -> bool:
         """清理资源"""
         try:
-            await self.faiss_adapter.disconnect()
+            await self.milvus_adapter.disconnect()
             self.logger.info("向量存储管理器清理完成")
             return True
         except Exception as e:
