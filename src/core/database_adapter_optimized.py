@@ -222,7 +222,7 @@ class OptimizedDatabaseAdapter:
                 vector_data BLOB NOT NULL,
                 model_name TEXT NOT NULL,
                 vector_type TEXT NOT NULL,
-                -- qdrant_point_id TEXT, -- FAISS doesn't use point ids
+                -- milvus_lite_id TEXT, -- Milvus Lite doesn't use point ids
                 created_at REAL NOT NULL,
                 vector_hash TEXT,
                 quality_score REAL,
