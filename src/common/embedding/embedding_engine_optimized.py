@@ -279,6 +279,26 @@ class OptimizedEmbeddingEngine:
             # 使用CLAP模型进行音频向量化
             engine = self.engines['clap']
             
+            # 处理音频采样率，确保为48000Hz，且转换为单声道
+            import io
+            import librosa
+            import soundfile as sf
+            
+            # 加载音频数据
+            audio, sr = sf.read(io.BytesIO(audio_data))
+            
+            # 将多声道转换为单声道（取平均值）
+            if len(audio.shape) > 1:
+                audio = audio.mean(axis=1)
+            
+            # 重采样到48000Hz
+            if sr != 48000:
+                audio = librosa.resample(audio, orig_sr=sr, target_sr=48000)
+                # 将重采样后的音频转换回字节格式
+                buffer = io.BytesIO()
+                sf.write(buffer, audio, 48000, format='wav')
+                audio_data = buffer.getvalue()
+            
             # 在异步上下文中调用同步方法
             loop = asyncio.get_event_loop()
             vector = await loop.run_in_executor(
