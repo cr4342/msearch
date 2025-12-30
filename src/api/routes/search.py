@@ -1,381 +1,376 @@
 """
-检索API路由
+搜索API路由实现
+提供多模态检索功能的REST API接口
 """
 
-import logging
-from typing import List, Dict, Any, Optional
-from fastapi import APIRouter, HTTPException, Query, UploadFile, File, Form, Request
+from fastapi import APIRouter, UploadFile, File, HTTPException, Depends
 from pydantic import BaseModel
+from typing import List, Optional, Dict, Any
+import asyncio
+import logging
+from pathlib import Path
+import tempfile
+import os
 
-from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
+from ...search_service.smart_retrieval_engine import SmartRetrievalEngine
+from ...common.embedding.embedding_engine import EmbeddingEngine
+from ...core.config_manager import ConfigManager
 
-router = APIRouter()
 logger = logging.getLogger(__name__)
+router = APIRouter(prefix="/api/search", tags=["search"])
 
+# 数据模型
+class TextSearchRequest(BaseModel):
+    query: str
+    limit: int = 20
+    modalities: List[str] = ["visual", "audio", "text"]
+    weights: Optional[Dict[str, float]] = None
 
-class SearchRequest(BaseModel):
-    """搜索请求模型"""
-    text: Optional[str] = None
-    # 注意：image和audio需要通过File上传，不能通过JSON
-    top_k: int = 10
-    filters: Optional[Dict[str, Any]] = None
-
+class SearchResult(BaseModel):
+    file_path: str
+    similarity_score: float
+    timestamp: Optional[float] = None
+    thumbnail_path: Optional[str] = None
+    file_type: str
+    metadata: Dict[str, Any] = {}
 
 class SearchResponse(BaseModel):
-    """搜索响应模型"""
-    status: str
-    text_query: Optional[str] = None
-    has_image: bool = False
-    has_audio: bool = False
-    total_results: int
-    results: List[Dict[str, Any]]
-    execution_time: float
+    results: List[SearchResult]
+    total_count: int
+    query_time: float
+    query_type: str
 
+# 依赖注入
+async def get_retrieval_engine():
+    """获取检索引擎实例"""
+    config_manager = ConfigManager()
+    return SmartRetrievalEngine(config_manager)
 
-@router.post("/search", response_model=SearchResponse)
-async def search(
-    request: Request,
-    text: Optional[str] = Form(None),
-    image: Optional[UploadFile] = File(None),
-    audio: Optional[UploadFile] = File(None),
-    top_k: int = Form(10),
-    filters: Optional[str] = Form(None)
+async def get_embedding_engine():
+    """获取向量化引擎实例"""
+    config_manager = ConfigManager()
+    return EmbeddingEngine(config_manager)
+
+@router.post("/text", response_model=SearchResponse)
+async def text_search(
+    request: TextSearchRequest,
+    retrieval_engine: SmartRetrievalEngine = Depends(get_retrieval_engine)
 ):
     """
-    执行多模态混合检索
+    基于文本的多模态检索
     
     Args:
-        request: FastAPI请求对象
-        text: 文本查询内容
-        image: 图像查询数据
-        audio: 音频查询数据
-        top_k: 返回结果数量
-        filters: 过滤条件（JSON字符串）
-        
-    Returns:
-        搜索结果
-    """
-    import time
-    import json
-    start_time = time.time()
+        request: 文本搜索请求
+        retrieval_engine: 检索引擎实例
     
+    Returns:
+        SearchResponse: 搜索结果
+    """
     try:
-        # 解析过滤条件
-        filter_dict = None
-        if filters:
-            try:
-                filter_dict = json.loads(filters)
-            except json.JSONDecodeError:
-                logger.warning(f"无效的过滤条件JSON: {filters}")
-        
-        # 读取图像和音频数据
-        image_data = None
-        if image:
-            image_data = await image.read()
-        
-        audio_data = None
-        if audio:
-            audio_data = await audio.read()
-        
-        # 获取检索引擎
-        try:
-            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
-        except AttributeError:
-            # 测试环境回退方案
-            from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
-            from src.core.config_manager import get_config_manager
-            config_manager = get_config_manager()
-            retrieval_engine = SmartRetrievalEngine(config_manager)
-            await retrieval_engine.start()
+        logger.info(f"执行文本搜索: {request.query}")
         
         # 执行检索
         results = await retrieval_engine.search(
-            text=text,
-            image=image_data,
-            audio=audio_data,
-            top_k=top_k,
-            filters=filter_dict
+            query=request.query,
+            query_type="text",
+            modalities=request.modalities,
+            limit=request.limit,
+            weights=request.weights
         )
         
-        execution_time = time.time() - start_time
+        # 转换结果格式
+        search_results = []
+        for result in results:
+            search_results.append(SearchResult(
+                file_path=result.get("file_path", ""),
+                similarity_score=result.get("similarity_score", 0.0),
+                timestamp=result.get("timestamp"),
+                thumbnail_path=result.get("thumbnail_path"),
+                file_type=result.get("file_type", "unknown"),
+                metadata=result.get("metadata", {})
+            ))
         
         return SearchResponse(
-            status="success",
-            text_query=text,
-            has_image=bool(image_data),
-            has_audio=bool(audio_data),
-            total_results=len(results),
-            results=results,
-            execution_time=execution_time
+            results=search_results,
+            total_count=len(search_results),
+            query_time=results[0].get("query_time", 0.0) if results else 0.0,
+            query_type="text"
         )
         
     except Exception as e:
-        logger.error(f"检索失败: {e}")
-        raise HTTPException(status_code=500, detail=f"检索失败: {str(e)}")
+        logger.error(f"文本搜索失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
 
-
-@router.post("/search/image", response_model=SearchResponse)
-async def search_by_image(
-    request: Request,
-    image: UploadFile = File(...),
-    top_k: int = Form(10),
-    filters: Optional[str] = Form(None)
+@router.post("/image", response_model=SearchResponse)
+async def image_search(
+    file: UploadFile = File(...),
+    limit: int = 20,
+    modalities: List[str] = ["visual"],
+    retrieval_engine: SmartRetrievalEngine = Depends(get_retrieval_engine),
+    embedding_engine: EmbeddingEngine = Depends(get_embedding_engine)
 ):
     """
-    以图搜图
+    基于图像的多模态检索
     
     Args:
-        request: FastAPI请求对象
-        image: 图像文件
-        top_k: 返回结果数量
-        filters: 过滤条件（JSON字符串）
-        
-    Returns:
-        搜索结果
-    """
-    import time
-    import json
-    start_time = time.time()
+        file: 上传的图像文件
+        limit: 返回结果数量限制
+        modalities: 检索的模态类型
+        retrieval_engine: 检索引擎实例
+        embedding_engine: 向量化引擎实例
     
+    Returns:
+        SearchResponse: 搜索结果
+    """
     try:
-        # 读取图像数据
-        image_data = await image.read()
+        logger.info(f"执行图像搜索: {file.filename}")
         
-        # 解析过滤条件
-        filter_dict = None
-        if filters:
-            try:
-                filter_dict = json.loads(filters)
-            except json.JSONDecodeError:
-                logger.warning(f"无效的过滤条件JSON: {filters}")
+        # 验证文件类型
+        if not file.content_type.startswith('image/'):
+            raise HTTPException(status_code=400, detail="只支持图像文件")
         
-        # 获取检索引擎
+        # 保存临时文件
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
         try:
-            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
-        except AttributeError:
-            # 测试环境回退方案
-            from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
-            from src.core.config_manager import get_config_manager
-            config_manager = get_config_manager()
-            retrieval_engine = SmartRetrievalEngine(config_manager)
-            await retrieval_engine.start()
+            # 生成图像向量
+            image_vector = await embedding_engine.encode_image(temp_file_path)
+            
+            # 执行检索
+            results = await retrieval_engine.search_by_vector(
+                vector=image_vector,
+                query_type="image",
+                modalities=modalities,
+                limit=limit
+            )
+            
+            # 转换结果格式
+            search_results = []
+            for result in results:
+                search_results.append(SearchResult(
+                    file_path=result.get("file_path", ""),
+                    similarity_score=result.get("similarity_score", 0.0),
+                    timestamp=result.get("timestamp"),
+                    thumbnail_path=result.get("thumbnail_path"),
+                    file_type=result.get("file_type", "unknown"),
+                    metadata=result.get("metadata", {})
+                ))
+            
+            return SearchResponse(
+                results=search_results,
+                total_count=len(search_results),
+                query_time=results[0].get("query_time", 0.0) if results else 0.0,
+                query_type="image"
+            )
+            
+        finally:
+            # 清理临时文件
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
         
-        # 执行检索
-        results = await retrieval_engine.search(
-            image=image_data,
-            top_k=top_k,
-            filters=filter_dict
+    except Exception as e:
+        logger.error(f"图像搜索失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
+
+@router.post("/audio", response_model=SearchResponse)
+async def audio_search(
+    file: UploadFile = File(...),
+    limit: int = 20,
+    modalities: List[str] = ["audio"],
+    retrieval_engine: SmartRetrievalEngine = Depends(get_retrieval_engine),
+    embedding_engine: EmbeddingEngine = Depends(get_embedding_engine)
+):
+    """
+    基于音频的多模态检索
+    
+    Args:
+        file: 上传的音频文件
+        limit: 返回结果数量限制
+        modalities: 检索的模态类型
+        retrieval_engine: 检索引擎实例
+        embedding_engine: 向量化引擎实例
+    
+    Returns:
+        SearchResponse: 搜索结果
+    """
+    try:
+        logger.info(f"执行音频搜索: {file.filename}")
+        
+        # 验证文件类型
+        if not file.content_type.startswith('audio/'):
+            raise HTTPException(status_code=400, detail="只支持音频文件")
+        
+        # 保存临时文件
+        with tempfile.NamedTemporaryFile(delete=False, suffix=Path(file.filename).suffix) as temp_file:
+            content = await file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        try:
+            # 音频分类和处理
+            audio_type = await embedding_engine.classify_audio(temp_file_path)
+            
+            if audio_type == "music":
+                # 使用CLAP模型处理音乐
+                audio_vector = await embedding_engine.encode_audio_music(temp_file_path)
+                search_modalities = ["audio_music"]
+            elif audio_type == "speech":
+                # 使用Whisper模型转录语音
+                transcription = await embedding_engine.transcribe_audio(temp_file_path)
+                # 按文本检索
+                results = await retrieval_engine.search(
+                    query=transcription,
+                    query_type="speech",
+                    modalities=["text", "audio_speech"],
+                    limit=limit
+                )
+                
+                # 转换结果格式
+                search_results = []
+                for result in results:
+                    search_results.append(SearchResult(
+                        file_path=result.get("file_path", ""),
+                        similarity_score=result.get("similarity_score", 0.0),
+                        timestamp=result.get("timestamp"),
+                        thumbnail_path=result.get("thumbnail_path"),
+                        file_type=result.get("file_type", "unknown"),
+                        metadata={**result.get("metadata", {}), "transcription": transcription}
+                    ))
+                
+                return SearchResponse(
+                    results=search_results,
+                    total_count=len(search_results),
+                    query_time=results[0].get("query_time", 0.0) if results else 0.0,
+                    query_type="speech"
+                )
+            else:
+                raise HTTPException(status_code=400, detail="无法识别的音频类型")
+            
+            # 对于音乐类型，执行向量检索
+            results = await retrieval_engine.search_by_vector(
+                vector=audio_vector,
+                query_type="audio",
+                modalities=search_modalities,
+                limit=limit
+            )
+            
+            # 转换结果格式
+            search_results = []
+            for result in results:
+                search_results.append(SearchResult(
+                    file_path=result.get("file_path", ""),
+                    similarity_score=result.get("similarity_score", 0.0),
+                    timestamp=result.get("timestamp"),
+                    thumbnail_path=result.get("thumbnail_path"),
+                    file_type=result.get("file_type", "unknown"),
+                    metadata=result.get("metadata", {})
+                ))
+            
+            return SearchResponse(
+                results=search_results,
+                total_count=len(search_results),
+                query_time=results[0].get("query_time", 0.0) if results else 0.0,
+                query_type="audio"
+            )
+            
+        finally:
+            # 清理临时文件
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+        
+    except Exception as e:
+        logger.error(f"音频搜索失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
+
+@router.post("/multimodal", response_model=SearchResponse)
+async def multimodal_search(
+    query: Optional[str] = None,
+    image_file: Optional[UploadFile] = File(None),
+    audio_file: Optional[UploadFile] = File(None),
+    limit: int = 20,
+    modalities: List[str] = ["visual", "audio", "text"],
+    weights: Optional[Dict[str, float]] = None,
+    retrieval_engine: SmartRetrievalEngine = Depends(get_retrieval_engine)
+):
+    """
+    多模态混合检索
+    
+    Args:
+        query: 文本查询
+        image_file: 图像文件
+        audio_file: 音频文件
+        limit: 返回结果数量限制
+        modalities: 检索的模态类型
+        weights: 各模态权重
+        retrieval_engine: 检索引擎实例
+    
+    Returns:
+        SearchResponse: 搜索结果
+    """
+    try:
+        logger.info("执行多模态混合搜索")
+        
+        # 验证至少有一种输入
+        if not any([query, image_file, audio_file]):
+            raise HTTPException(status_code=400, detail="至少需要提供一种查询输入")
+        
+        # 执行混合检索
+        results = await retrieval_engine.multimodal_search(
+            text_query=query,
+            image_file=image_file,
+            audio_file=audio_file,
+            modalities=modalities,
+            limit=limit,
+            weights=weights
         )
         
-        execution_time = time.time() - start_time
+        # 转换结果格式
+        search_results = []
+        for result in results:
+            search_results.append(SearchResult(
+                file_path=result.get("file_path", ""),
+                similarity_score=result.get("similarity_score", 0.0),
+                timestamp=result.get("timestamp"),
+                thumbnail_path=result.get("thumbnail_path"),
+                file_type=result.get("file_type", "unknown"),
+                metadata=result.get("metadata", {})
+            ))
         
         return SearchResponse(
-            status="success",
-            text_query=None,
-            has_image=True,
-            has_audio=False,
-            total_results=len(results),
-            results=results,
-            execution_time=execution_time
+            results=search_results,
+            total_count=len(search_results),
+            query_time=results[0].get("query_time", 0.0) if results else 0.0,
+            query_type="multimodal"
         )
         
     except Exception as e:
-        logger.error(f"以图搜图失败: {e}")
-        raise HTTPException(status_code=500, detail=f"以图搜图失败: {str(e)}")
-
-
-@router.post("/search/audio", response_model=SearchResponse)
-async def search_by_audio(
-    request: Request,
-    audio: UploadFile = File(...),
-    top_k: int = Form(10),
-    filters: Optional[str] = Form(None)
-):
-    """
-    以音频搜音频
-    
-    Args:
-        request: FastAPI请求对象
-        audio: 音频文件
-        top_k: 返回结果数量
-        filters: 过滤条件（JSON字符串）
-        
-    Returns:
-        搜索结果
-    """
-    import time
-    import json
-    start_time = time.time()
-    
-    try:
-        # 读取音频数据
-        audio_data = await audio.read()
-        
-        # 解析过滤条件
-        filter_dict = None
-        if filters:
-            try:
-                filter_dict = json.loads(filters)
-            except json.JSONDecodeError:
-                logger.warning(f"无效的过滤条件JSON: {filters}")
-        
-        # 获取检索引擎
-        try:
-            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
-        except AttributeError:
-            # 测试环境回退方案
-            from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
-            from src.core.config_manager import get_config_manager
-            config_manager = get_config_manager()
-            retrieval_engine = SmartRetrievalEngine(config_manager)
-            await retrieval_engine.start()
-        
-        # 执行检索
-        results = await retrieval_engine.search(
-            audio=audio_data,
-            top_k=top_k,
-            filters=filter_dict
-        )
-        
-        execution_time = time.time() - start_time
-        
-        return SearchResponse(
-            status="success",
-            text_query=None,
-            has_image=False,
-            has_audio=True,
-            total_results=len(results),
-            results=results,
-            execution_time=execution_time
-        )
-        
-    except Exception as e:
-        logger.error(f"以音频搜音频失败: {e}")
-        raise HTTPException(status_code=500, detail=f"以音频搜音频失败: {str(e)}")
-
-
-@router.get("/similar/{file_id}")
-async def get_similar_files(
-    request: Request,
-    file_id: str,
-    top_k: int = Query(10, ge=1, le=100)
-):
-    """
-    获取相似文件
-    
-    Args:
-        request: FastAPI请求对象
-        file_id: 文件ID
-        top_k: 返回结果数量
-        
-    Returns:
-        相似文件列表
-    """
-    try:
-        # 获取检索引擎
-        try:
-            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
-        except AttributeError:
-            # 测试环境回退方案
-            from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
-            from src.core.config_manager import get_config_manager
-            config_manager = get_config_manager()
-            retrieval_engine = SmartRetrievalEngine(config_manager)
-            await retrieval_engine.start()
-        
-        # 获取相似文件
-        results = await retrieval_engine.get_similar_files(file_id, top_k)
-        
-        return {
-            "status": "success",
-            "file_id": file_id,
-            "total_results": len(results),
-            "results": results
-        }
-        
-    except Exception as e:
-        logger.error(f"获取相似文件失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取相似文件失败: {str(e)}")
-
+        logger.error(f"多模态搜索失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"搜索失败: {str(e)}")
 
 @router.get("/suggestions")
 async def get_search_suggestions(
-    request: Request,
-    query: str = Query(..., min_length=1),
-    limit: int = Query(10, ge=1, le=50)
+    query: str,
+    limit: int = 10,
+    retrieval_engine: SmartRetrievalEngine = Depends(get_retrieval_engine)
 ):
     """
     获取搜索建议
     
     Args:
-        request: FastAPI请求对象
-        query: 部分查询
-        limit: 返回建议数量
-        
-    Returns:
-        搜索建议列表
-    """
-    try:
-        # 获取检索引擎
-        try:
-            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
-        except AttributeError:
-            # 测试环境回退方案
-            from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
-            from src.core.config_manager import get_config_manager
-            config_manager = get_config_manager()
-            retrieval_engine = SmartRetrievalEngine(config_manager)
-            await retrieval_engine.start()
-        
-        # 获取搜索建议
-        suggestions = await retrieval_engine.get_search_suggestions(query, limit)
-        
-        return {
-            "status": "success",
-            "query": query,
-            "suggestions": suggestions
-        }
-        
-    except Exception as e:
-        logger.error(f"获取搜索建议失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取搜索建议失败: {str(e)}")
-
-
-@router.get("/popular")
-async def get_popular_searches(
-    request: Request,
-    limit: int = Query(10, ge=1, le=50)
-):
-    """
-    获取热门搜索
+        query: 查询文本
+        limit: 建议数量限制
+        retrieval_engine: 检索引擎实例
     
-    Args:
-        request: FastAPI请求对象
-        limit: 返回热门搜索数量
-        
     Returns:
-        热门搜索列表
+        List[str]: 搜索建议列表
     """
     try:
-        # 获取检索引擎
-        try:
-            retrieval_engine: SmartRetrievalEngine = request.app.state.retrieval_engine
-        except AttributeError:
-            # 测试环境回退方案
-            from src.search_service.smart_retrieval_engine import SmartRetrievalEngine
-            from src.core.config_manager import get_config_manager
-            config_manager = get_config_manager()
-            retrieval_engine = SmartRetrievalEngine(config_manager)
-            await retrieval_engine.start()
-        
-        # 获取热门搜索
-        popular_searches = await retrieval_engine.get_popular_searches(limit)
-        
-        return {
-            "status": "success",
-            "popular_searches": popular_searches
-        }
+        suggestions = await retrieval_engine.get_search_suggestions(query, limit)
+        return {"suggestions": suggestions}
         
     except Exception as e:
-        logger.error(f"获取热门搜索失败: {e}")
-        raise HTTPException(status_code=500, detail=f"获取热门搜索失败: {str(e)}")
+        logger.error(f"获取搜索建议失败: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"获取建议失败: {str(e)}")

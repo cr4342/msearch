@@ -257,14 +257,14 @@ async def health_check(request: Request):
 
 
 @router.get("/health")
-async def health():
+async def health(request: Request):
     """
     系统整体健康检查
     
     Returns:
         系统健康状态
     """
-    return await health_check()
+    return await health_check(request)
 
 
 @router.get("/health/orchestrator")
