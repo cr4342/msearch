@@ -161,7 +161,7 @@ class ProcessingOrchestrator:
     
     def _determine_processing_strategy(self, file_info: Dict[str, Any]) -> Dict[str, Any]:
         """根据文件类型确定处理策略"""
-        file_type = file_info['file_type']
+        file_type = file_info['file_type'].lower()  # 转换为小写
         
         # 从配置文件获取文件类型列表
         text_extensions = set(self.config_manager.get('file_types.text_extensions', [
@@ -214,7 +214,7 @@ class ProcessingOrchestrator:
                 },
                 'vectorization': {
                     'model': 'clip',
-                    'method': 'embed_video_frames'
+                    'method': 'embed_image'  # 视频帧作为图像处理
                 }
             }
         
@@ -319,15 +319,30 @@ class ProcessingOrchestrator:
                     segment_metadata.append(segment)
         
         elif strategy['modality'] == 'audio':
-            # 音频向量化
-            collection_type = 'audio_music'
+            # 音频向量化 - 根据音频类型选择模型
+            # 预处理阶段已识别音频类型: music, speech, mixed, unknown
+            audio_type = processed_data.get('metadata', {}).get('audio_type', 'unknown')
+            
             for segment in processed_data.get('segments', []):
                 if segment['segment_type'] == 'audio':
                     # 读取音频文件数据
                     with open(segment['data_path'], 'rb') as f:
                         audio_data = f.read()
-                    # 向量化
-                    vector = await self.embedding_engine.embed_audio_music(audio_data)
+                    
+                    # 根据音频类型选择向量化方法
+                    if audio_type == 'music':
+                        # 音乐内容：使用CLAP模型
+                        collection_type = 'audio_music'
+                        vector = await self.embedding_engine.embed_audio_music(audio_data)
+                    elif audio_type == 'speech':
+                        # 语音内容：使用Whisper转录并向量化
+                        collection_type = 'audio_speech'
+                        vector = await self.embedding_engine.transcribe_and_embed(audio_data)
+                    else:
+                        # 混合或未知类型：默认使用CLAP模型
+                        collection_type = 'audio_music'
+                        vector = await self.embedding_engine.embed_audio_music(audio_data)
+                    
                     vectors.append(vector)
                     segment_metadata.append(segment)
         

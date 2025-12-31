@@ -5,10 +5,35 @@
 import logging
 import logging.handlers
 import os
+import traceback
 from pathlib import Path
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+from datetime import datetime
 
 from src.core.config_manager import get_config_manager
+
+
+class ErrorCodeFormatter(logging.Formatter):
+    """错误码格式化器，添加错误码和上下文信息"""
+    
+    def format(self, record):
+        # 添加错误码（如果存在）
+        if hasattr(record, 'error_code'):
+            record.msg = f"[{record.error_code}] {record.msg}"
+        
+        # 添加请求ID（如果存在）
+        if hasattr(record, 'request_id'):
+            record.msg = f"[REQ:{record.request_id}] {record.msg}"
+        
+        # 添加组件名称（如果存在）
+        if hasattr(record, 'component'):
+            record.msg = f"[{record.component}] {record.msg}"
+        
+        # 添加上下文信息（如果存在）
+        if hasattr(record, 'context'):
+            record.msg = f"{record.msg} | Context: {record.context}"
+        
+        return super().format(record)
 
 
 def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
@@ -20,7 +45,8 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
         log_dir: 日志目录
     """
     # 确保日志目录存在
-    Path(log_dir).mkdir(parents=True, exist_ok=True)
+    log_path = Path(log_dir)
+    log_path.mkdir(parents=True, exist_ok=True)
     
     # 创建根日志记录器
     root_logger = logging.getLogger()
@@ -30,19 +56,25 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
     root_logger.handlers.clear()
     
     # 创建格式化器
-    formatter = logging.Formatter(
+    base_formatter = logging.Formatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
         datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    
+    # 创建错误码格式化器（用于错误日志）
+    error_formatter = ErrorCodeFormatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S.%f'  # 更高精度的时间戳
     )
     
     # 控制台处理器
     console_handler = logging.StreamHandler()
     console_handler.setLevel(getattr(logging, log_level.upper()))
-    console_handler.setFormatter(formatter)
+    console_handler.setFormatter(error_formatter)  # 控制台使用带错误码的格式化器
     root_logger.addHandler(console_handler)
     
     # 主日志文件处理器
-    main_log_file = os.path.join(log_dir, "msearch.log")
+    main_log_file = log_path / "msearch.log"
     main_handler = logging.handlers.RotatingFileHandler(
         main_log_file,
         maxBytes=10*1024*1024,  # 10MB
@@ -50,11 +82,11 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
         encoding='utf-8'
     )
     main_handler.setLevel(getattr(logging, log_level.upper()))
-    main_handler.setFormatter(formatter)
+    main_handler.setFormatter(error_formatter)  # 主日志使用带错误码的格式化器
     root_logger.addHandler(main_handler)
     
-    # 错误日志文件处理器
-    error_log_file = os.path.join(log_dir, "error.log")
+    # 错误日志文件处理器（更详细的错误信息）
+    error_log_file = log_path / "error.log"
     error_handler = logging.handlers.RotatingFileHandler(
         error_log_file,
         maxBytes=5*1024*1024,  # 5MB
@@ -62,11 +94,28 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
         encoding='utf-8'
     )
     error_handler.setLevel(logging.ERROR)
-    error_handler.setFormatter(formatter)
+    error_handler.setFormatter(error_formatter)
     root_logger.addHandler(error_handler)
     
+    # 详细错误日志（包含完整堆栈跟踪）
+    detailed_error_log_file = log_path / "detailed_error.log"
+    detailed_error_handler = logging.handlers.RotatingFileHandler(
+        detailed_error_log_file,
+        maxBytes=10*1024*1024,  # 10MB
+        backupCount=3,
+        encoding='utf-8'
+    )
+    detailed_error_handler.setLevel(logging.ERROR)
+    # 详细错误日志使用特殊格式化器，包含完整堆栈
+    detailed_formatter = ErrorCodeFormatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s\n%(exc_info)s',
+        datefmt='%Y-%m-%d %H:%M:%S.%f'
+    )
+    detailed_error_handler.setFormatter(detailed_formatter)
+    root_logger.addHandler(detailed_error_handler)
+    
     # 性能日志文件处理器
-    performance_log_file = os.path.join(log_dir, "performance.log")
+    performance_log_file = log_path / "performance.log"
     performance_handler = logging.handlers.RotatingFileHandler(
         performance_log_file,
         maxBytes=5*1024*1024,  # 5MB
@@ -74,7 +123,7 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
         encoding='utf-8'
     )
     performance_handler.setLevel(logging.INFO)
-    performance_handler.setFormatter(formatter)
+    performance_handler.setFormatter(base_formatter)
     
     # 创建性能日志记录器
     performance_logger = logging.getLogger("performance")
@@ -83,7 +132,7 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
     performance_logger.propagate = False  # 防止传播到根日志记录器
     
     # 时间戳日志文件处理器（用于调试时间精度问题）
-    timestamp_log_file = os.path.join(log_dir, "timestamp.log")
+    timestamp_log_file = log_path / "timestamp.log"
     timestamp_handler = logging.handlers.RotatingFileHandler(
         timestamp_log_file,
         maxBytes=5*1024*1024,  # 5MB
@@ -91,7 +140,7 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
         encoding='utf-8'
     )
     timestamp_handler.setLevel(logging.DEBUG)
-    timestamp_handler.setFormatter(formatter)
+    timestamp_handler.setFormatter(base_formatter)
     
     # 创建时间戳日志记录器
     timestamp_logger = logging.getLogger("timestamp")
@@ -99,10 +148,35 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
     timestamp_logger.setLevel(logging.DEBUG)
     timestamp_logger.propagate = False  # 防止传播到根日志记录器
     
+    # 操作日志（记录用户操作）
+    operation_log_file = log_path / "operation.log"
+    operation_handler = logging.handlers.RotatingFileHandler(
+        operation_log_file,
+        maxBytes=5*1024*1024,  # 5MB
+        backupCount=3,
+        encoding='utf-8'
+    )
+    operation_handler.setLevel(logging.INFO)
+    operation_formatter = ErrorCodeFormatter(
+        '%(asctime)s - %(levelname)s - [%(operation)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    operation_handler.setFormatter(operation_formatter)
+    
+    # 创建操作日志记录器
+    operation_logger = logging.getLogger("operation")
+    operation_logger.addHandler(operation_handler)
+    operation_logger.setLevel(logging.INFO)
+    operation_logger.propagate = False  # 防止传播到根日志记录器
+    
     # 设置第三方库日志级别
     logging.getLogger("urllib3").setLevel(logging.WARNING)
     logging.getLogger("requests").setLevel(logging.WARNING)
     logging.getLogger("asyncio").setLevel(logging.WARNING)
+    logging.getLogger("transformers").setLevel(logging.WARNING)
+    logging.getLogger("huggingface_hub").setLevel(logging.WARNING)
+    logging.getLogger("milvus").setLevel(logging.WARNING)
+    logging.getLogger("torch").setLevel(logging.WARNING)
 
 
 def get_logger(name: str) -> logging.Logger:
@@ -116,6 +190,151 @@ def get_logger(name: str) -> logging.Logger:
         日志记录器实例
     """
     return logging.getLogger(name)
+
+
+def log_error(
+    logger: logging.Logger,
+    message: str,
+    error_code: str = None,
+    request_id: str = None,
+    component: str = None,
+    context: Dict[str, Any] = None,
+    exc_info: Optional[Exception] = None
+):
+    """
+    统一的错误日志记录函数
+    
+    Args:
+        logger: 日志记录器实例
+        message: 错误消息
+        error_code: 错误码
+        request_id: 请求ID
+        component: 组件名称
+        context: 上下文信息
+        exc_info: 异常对象
+    """
+    # 创建日志记录
+    extra = {}
+    if error_code:
+        extra['error_code'] = error_code
+    if request_id:
+        extra['request_id'] = request_id
+    if component:
+        extra['component'] = component
+    if context:
+        extra['context'] = context
+    
+    # 记录错误日志
+    if exc_info:
+        logger.error(message, extra=extra, exc_info=exc_info)
+    else:
+        logger.error(message, extra=extra)
+
+
+def log_operation(
+    logger: logging.Logger,
+    operation: str,
+    message: str,
+    user_id: Optional[str] = None,
+    request_id: Optional[str] = None,
+    context: Optional[Dict[str, Any]] = None
+):
+    """
+    统一的操作日志记录函数
+    
+    Args:
+        logger: 日志记录器实例
+        operation: 操作名称
+        message: 操作消息
+        user_id: 用户ID
+        request_id: 请求ID
+        context: 上下文信息
+    """
+    extra = {
+        'operation': operation
+    }
+    if user_id:
+        extra['user_id'] = user_id
+    if request_id:
+        extra['request_id'] = request_id
+    if context:
+        extra['context'] = context
+    
+    logger.info(message, extra=extra)
+
+
+class EnhancedLogger:
+    """增强型日志记录器，提供更丰富的日志记录功能"""
+    
+    def __init__(self, logger: logging.Logger):
+        self.logger = logger
+    
+    def error(
+        self,
+        message: str,
+        error_code: str = None,
+        request_id: str = None,
+        component: str = None,
+        context: Dict[str, Any] = None,
+        exc_info: Optional[Exception] = None
+    ):
+        """记录错误日志"""
+        log_error(
+            self.logger,
+            message,
+            error_code=error_code,
+            request_id=request_id,
+            component=component,
+            context=context,
+            exc_info=exc_info
+        )
+    
+    def operation(
+        self,
+        operation: str,
+        message: str,
+        user_id: Optional[str] = None,
+        request_id: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None
+    ):
+        """记录操作日志"""
+        log_operation(
+            self.logger,
+            operation,
+            message,
+            user_id=user_id,
+            request_id=request_id,
+            context=context
+        )
+    
+    def info(self, msg, *args, **kwargs):
+        """包装info方法"""
+        self.logger.info(msg, *args, **kwargs)
+    
+    def warning(self, msg, *args, **kwargs):
+        """包装warning方法"""
+        self.logger.warning(msg, *args, **kwargs)
+    
+    def debug(self, msg, *args, **kwargs):
+        """包装debug方法"""
+        self.logger.debug(msg, *args, **kwargs)
+    
+    def critical(self, msg, *args, **kwargs):
+        """包装critical方法"""
+        self.logger.critical(msg, *args, **kwargs)
+
+
+def get_enhanced_logger(name: str) -> EnhancedLogger:
+    """
+    获取增强型日志记录器
+    
+    Args:
+        name: 日志记录器名称
+        
+    Returns:
+        增强型日志记录器实例
+    """
+    return EnhancedLogger(logging.getLogger(name))
 
 
 class PerformanceLogger:

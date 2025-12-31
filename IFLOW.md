@@ -5,8 +5,8 @@
 msearch 是一款跨平台的多模态检索系统，采用微服务架构设计，旨在成为用户的"第二大脑"。它允许用户通过自然语言、图片截图或音频片段快速、精准地在本地素材库中定位相关的图片、视频（精确到关键帧）和音频文件，实现"定位到秒"的检索体验。
 
 **项目状态**: 单元测试补全完成，核心功能验证通过
-**最后更新**: 2025-12-30
-**Git版本**: 4e61fe203b74aa98d5fc432122f3c4583f91910e
+**最后更新**: 2025-12-31
+**Git版本**: 914a48b42b323dda5d6953c374d25ff44b2f3959
 
 ### 核心价值
 
@@ -102,7 +102,8 @@ msearch/
 │   │   ├── file_monitor.py
 │   │   ├── orchestrator.py
 │   │   ├── task_manager.py
-│   │   └── media_processor.py
+│   │   ├── media_processor.py
+│   │   └── manual_operation_manager.py
 │   ├── search_service/     # 检索服务
 │   │   ├── smart_retrieval_engine.py
 │   │   └── face_manager.py
@@ -137,6 +138,8 @@ msearch/
 - **资源协调**: 协调CPU/GPU资源分配
 - **异步处理**: 基于asyncio的高性能异步处理
 - **错误恢复**: 处理异常和错误恢复机制
+- **文件类型大小写处理**: 支持大小写不敏感的文件扩展名识别
+- **动态模型选择**: 根据音频类型（音乐/语音）动态选择向量化模型
 
 ### 3. 任务管理器 (TaskManager)
 
@@ -159,6 +162,7 @@ msearch/
 - **音频分类**: 使用inaSpeechSegmenter区分音乐、语音、噪音
 - **质量过滤**: 过滤低质量、过短或纯噪音的片段
 - **音频分离**: 从视频中分离音频轨道进行独立处理
+- **文件类型识别**: 自动识别并分类音频内容类型
 
 ### 5. 向量化引擎 (EmbeddingEngine)
 
@@ -171,6 +175,7 @@ msearch/
 - **批处理优化**: 提升GPU利用率
 - **异步支持**: 支持异步向量化处理
 - **健康检查**: 模型状态监控和故障检测
+- **动态模型路由**: 根据内容类型选择最合适的模型
 
 ### 6. 智能检索引擎 (SmartRetrievalEngine)
 
@@ -214,6 +219,7 @@ Milvus Lite向量数据库适配器：
 - **索引优化**: 支持多种索引类型和参数配置
 - **批量操作**: 高效的批量向量存储和检索
 - **健康检查**: 定期检查连接状态和集合完整性
+- **多集合支持**: 支持不同模态的向量集合（visual, audio_music, audio_speech等）
 
 ### 10. 向量存储管理器 (VectorStorageManager)
 
@@ -284,6 +290,21 @@ Milvus Lite向量数据库适配器：
 2. **特征提取**: 提取人脸特征向量
 3. **人员识别**: 在已知人员中搜索匹配
 4. **结果返回**: 返回匹配的人员信息和相关文件
+
+### 音频处理流程（新增）
+
+1. **音频分类**: MediaProcessor使用inaSpeechSegmenter识别音频类型（music/speech/mixed/unknown）
+2. **动态模型选择**: Orchestrator根据音频类型选择向量化模型
+   - 音乐类型：使用CLAP模型（audio_music集合）
+   - 语音类型：使用Whisper模型进行转录和向量化（audio_speech集合）
+   - 其他类型：默认使用CLAP模型（audio_music集合）
+3. **向量化存储**: EmbeddingEngine将向量存储到对应Milvus集合
+
+### 视频处理流程（优化）
+
+1. **视频帧处理**: MediaProcessor将视频切片为≤5秒的片段，提取关键帧
+2. **帧向量化**: Orchestrator调用EmbeddingEngine的embed_image方法处理视频帧
+3. **音频分离**: 从视频中分离音频并按照音频处理流程处理
 
 ## 数据库设计
 
@@ -408,6 +429,7 @@ pytest tests/ --cov=src --cov-report=html
 | test_task_manager.py | 任务管理器测试 | 265行 |
 | test_api_endpoints.py | API端点测试 | 246行 |
 | test_system_integration.py | 系统集成测试 | 260行 |
+| test_orchestrator.py | 处理调度器测试 | 16个测试用例 |
 
 ## 部署方案
 
@@ -521,6 +543,21 @@ pytest tests/ --cov=src --cov-report=html
 **问题**: mock路径错误
 **解决**: 使用 `patch('src.api.app.get_config_manager', ...)` 而不是 `patch('api.app.get_config_manager', ...)`
 
+### 6. 视频向量化错误
+
+**问题**: 调度器中使用了不存在的 `embed_video_frames` 方法
+**解决**: 使用 `embed_image` 方法处理视频帧，因为视频帧本质上是图像
+
+### 7. 音频处理优化
+
+**问题**: 音频处理未根据类型动态选择模型
+**解决**: 媒体处理器识别音频类型（music/speech），调度器根据类型选择CLAP或Whisper模型
+
+### 8. 文件类型大小写敏感问题
+
+**问题**: 大写扩展名（如.MP4）无法正确识别
+**解决**: 在调度器中将文件类型转换为小写再进行比较
+
 ---
 
-*项目状态: 单元测试补全完成，核心功能验证通过 - 最后更新: 2025-12-30*
+*项目状态: 单元测试补全完成，核心功能验证通过 - 最后更新: 2025-12-31*

@@ -561,90 +561,272 @@ create_model_download_script() {
 import os
 import sys
 import time
+import hashlib
+import shutil
 from pathlib import Path
-def download_model_safe(repo_id, local_path, max_retries=3):
-    """安全下载模型"""
-    print(f"下载模型: {repo_id} -> {local_path}")
+from huggingface_hub import snapshot_download, hf_hub_url, hf_hub_download
+from huggingface_hub.utils._errors import RepositoryNotFoundError, RevisionNotFoundError, HTTPError
+
+def calculate_file_hash(file_path, block_size=65536):
+    """计算文件哈希值用于验证完整性"""
+    hash_algo = hashlib.sha256()
+    with open(file_path, 'rb') as f:
+        for block in iter(lambda: f.read(block_size), b''):
+            hash_algo.update(block)
+    return hash_algo.hexdigest()
+
+def verify_model_integrity(model_path):
+    """验证模型完整性"""
+    print(f"  验证模型完整性: {model_path}")
+    required_files = [
+        "config.json",
+        "pytorch_model.bin"  # CLIP和CLAP模型
+    ]
+    
+    # 检查Whisper模型的特殊情况
+    if "whisper" in str(model_path).lower():
+        required_files = [
+            "config.json",
+            "model.bin"  # Whisper模型使用不同的文件名
+        ]
+    
+    # 检查必要文件是否存在
+    for file_name in required_files:
+        file_path = os.path.join(model_path, file_name)
+        if not os.path.exists(file_path):
+            print(f"  ❌ 缺少必要文件: {file_name}")
+            return False
+        
+        # 检查文件大小
+        file_size = os.path.getsize(file_path)
+        if file_size < 1024 * 1024:  # 至少1MB
+            print(f"  ❌ 文件过小: {file_name} ({file_size} bytes)")
+            return False
+    
+    print(f"  ✅ 模型完整性验证通过")
+    return True
+
+def download_model_safe(repo_id, local_path, max_retries=5):
+    """安全下载模型，支持断点续传和完整性验证"""
+    print(f"\n📥 开始下载模型: {repo_id}")
+    print(f"   目标路径: {local_path}")
+    
     # 确保目录存在
     os.makedirs(local_path, exist_ok=True)
-    for attempt in range(max_retries):
-        try:
-            # 强制使用hf-mirror.com镜像
-            os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
-            os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
-            if "clip" in repo_id.lower():
-                from transformers import CLIPModel, CLIPProcessor
-                print(f"  尝试 {attempt + 1}/{max_retries}: 下载CLIP模型...")
-                # 直接下载到本地目录，不使用cache_dir
-                model = CLIPModel.from_pretrained(repo_id)
-                processor = CLIPProcessor.from_pretrained(repo_id)
-                model.save_pretrained(local_path)
-                processor.save_pretrained(local_path)
-                print(f"  ✅ {repo_id} 下载并保存到本地成功")
-                return True
-            elif "clap" in repo_id.lower():
-                from transformers import ClapModel, ClapProcessor
-                print(f"  尝试 {attempt + 1}/{max_retries}: 下载CLAP模型...")
-                # 直接下载到本地目录，不使用cache_dir
-                model = ClapModel.from_pretrained(repo_id)
-                processor = ClapProcessor.from_pretrained(repo_id)
-                model.save_pretrained(local_path)
-                processor.save_pretrained(local_path)
-                print(f"  ✅ {repo_id} 下载并保存到本地成功")
-                return True
-            elif "whisper" in repo_id.lower():
-                from transformers import WhisperForConditionalGeneration, WhisperProcessor
-                print(f"  尝试 {attempt + 1}/{max_retries}: 下载Whisper模型...")
-                # 直接下载到本地目录，不使用cache_dir
-                model = WhisperForConditionalGeneration.from_pretrained(repo_id)
-                processor = WhisperProcessor.from_pretrained(repo_id)
-                model.save_pretrained(local_path)
-                processor.save_pretrained(local_path)
-                print(f"  ✅ {repo_id} 下载并保存到本地成功")
-                return True
-        except Exception as e:
-            print(f"  ❌ 尝试 {attempt + 1} 失败: {e}")
-            if attempt < max_retries - 1:
-                wait_time = (attempt + 1) * 5
-                print(f"  等待 {wait_time} 秒后重试...")
-                time.sleep(wait_time)
-            else:
-                print(f"  ❌ {repo_id} 下载失败，已达最大重试次数")
-                return False
-    return False
-def main():
-    """主函数"""
+    
     # 设置环境变量
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
+    os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+    
+    # 检查是否已经下载了部分模型文件
+    existing_files = [f for f in os.listdir(local_path) if os.path.isfile(os.path.join(local_path, f))]
+    has_partial_files = len(existing_files) > 0
+    
+    if has_partial_files:
+        print(f"   检测到部分下载文件，尝试断点续传...")
+    
+    for attempt in range(max_retries):
+        try:
+            print(f"   🚀 尝试 {attempt + 1}/{max_retries}")
+            
+            # 使用snapshot_download，它支持断点续传
+            snapshot_download(
+                repo_id=repo_id,
+                local_dir=local_path,
+                local_dir_use_symlinks=False,
+                resume_download=True,
+                ignore_patterns=[".gitattributes", ".gitignore", "README.md", "LICENSE"],
+                max_workers=4
+            )
+            
+            # 验证模型完整性
+            if verify_model_integrity(local_path):
+                print(f"   ✅ 模型下载成功: {repo_id}")
+                return True
+            else:
+                print(f"   ❌ 模型完整性验证失败，重新下载...")
+                # 删除损坏的模型文件
+                shutil.rmtree(local_path)
+                os.makedirs(local_path, exist_ok=True)
+        except RepositoryNotFoundError:
+            print(f"   ❌ 仓库不存在: {repo_id}")
+            return False
+        except RevisionNotFoundError:
+            print(f"   ❌ 模型版本不存在: {repo_id}")
+            return False
+        except HTTPError as e:
+            if e.response.status_code == 404:
+                print(f"   ❌ 模型文件不存在: {repo_id}")
+                return False
+            else:
+                print(f"   ❌ HTTP错误: {e}")
+        except Exception as e:
+            print(f"   ❌ 下载失败: {e}")
+            
+            # 更智能的重试策略
+            if attempt < max_retries - 1:
+                # 指数退避重试
+                wait_time = min(2 ** attempt * 2, 60)  # 最多等待60秒
+                print(f"   ⏳ 等待 {wait_time} 秒后重试...")
+                time.sleep(wait_time)
+            else:
+                print(f"   ❌ 达到最大重试次数，下载失败")
+                return False
+    
+    return False
+
+def download_model_with_transformers(repo_id, local_path, model_type, max_retries=3):
+    """使用transformers库下载模型（备用方法）"""
+    print(f"   📦 使用transformers库下载...")
+    
+    for attempt in range(max_retries):
+        try:
+            if model_type == "clip":
+                from transformers import CLIPModel, CLIPProcessor
+                print(f"   尝试 {attempt + 1}/{max_retries}: 下载CLIP模型...")
+                model = CLIPModel.from_pretrained(repo_id, resume_download=True)
+                processor = CLIPProcessor.from_pretrained(repo_id, resume_download=True)
+                model.save_pretrained(local_path)
+                processor.save_pretrained(local_path)
+            elif model_type == "clap":
+                from transformers import ClapModel, ClapProcessor
+                print(f"   尝试 {attempt + 1}/{max_retries}: 下载CLAP模型...")
+                model = ClapModel.from_pretrained(repo_id, resume_download=True)
+                processor = ClapProcessor.from_pretrained(repo_id, resume_download=True)
+                model.save_pretrained(local_path)
+                processor.save_pretrained(local_path)
+            elif model_type == "whisper":
+                from transformers import WhisperForConditionalGeneration, WhisperProcessor
+                print(f"   尝试 {attempt + 1}/{max_retries}: 下载Whisper模型...")
+                model = WhisperForConditionalGeneration.from_pretrained(repo_id, resume_download=True)
+                processor = WhisperProcessor.from_pretrained(repo_id, resume_download=True)
+                model.save_pretrained(local_path)
+                processor.save_pretrained(local_path)
+            else:
+                print(f"   ❌ 不支持的模型类型: {model_type}")
+                return False
+            
+            if verify_model_integrity(local_path):
+                print(f"   ✅ 模型下载成功")
+                return True
+            else:
+                print(f"   ❌ 模型完整性验证失败")
+                return False
+                
+        except Exception as e:
+            print(f"   ❌ 下载失败: {e}")
+            if attempt < max_retries - 1:
+                wait_time = (attempt + 1) * 5
+                print(f"   ⏳ 等待 {wait_time} 秒后重试...")
+                time.sleep(wait_time)
+            else:
+                print(f"   ❌ 达到最大重试次数")
+                return False
+    
+    return False
+
+def main():
+    """主函数"""
     # 获取项目根目录
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    # 模型列表
+    models_dir = os.path.join(project_root, "data", "models")
+    
+    print("===============================================")
+    print("        MSearch 模型下载工具")
+    print("===============================================")
+    print(f"项目根目录: {project_root}")
+    print(f"模型存储目录: {models_dir}")
+    print("使用镜像源: https://hf-mirror.com")
+    print("===============================================")
+    
+    # 模型列表，包含备用URL
     models = [
         {
+            "name": "clip",
             "repo_id": "openai/clip-vit-base-patch32",
-            "local_path": os.path.join(project_root, "data", "models", "clip-vit-base-patch32")
+            "local_path": os.path.join(models_dir, "clip-vit-base-patch32"),
+            "model_type": "clip"
         },
         {
-            "repo_id": "laion/clap-htsat-fused", 
-            "local_path": os.path.join(project_root, "data", "models", "clap-htsat-fused")
+            "name": "clap",
+            "repo_id": "laion/clap-htsat-fused",
+            "local_path": os.path.join(models_dir, "clap-htsat-fused"),
+            "model_type": "clap"
         },
         {
+            "name": "whisper",
             "repo_id": "openai/whisper-base",
-            "local_path": os.path.join(project_root, "data", "models", "whisper-base")
+            "local_path": os.path.join(models_dir, "whisper-base"),
+            "model_type": "whisper"
         }
     ]
+    
+    # 检查huggingface_hub是否已安装
+    try:
+        import huggingface_hub
+        print("✅ huggingface_hub已安装，版本:", huggingface_hub.__version__)
+    except ImportError:
+        print("📦 安装huggingface_hub...")
+        import subprocess
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "huggingface_hub", "--upgrade"])
+    
+    # 下载每个模型
     success_count = 0
-    for model_info in models:
-        if download_model_safe(model_info["repo_id"], model_info["local_path"]):
+    total_count = len(models)
+    
+    for i, model_info in enumerate(models, 1):
+        print(f"\n[{i}/{total_count}] 🎯 处理模型: {model_info['name']}")
+        
+        # 检查模型是否已存在且完整
+        if os.path.exists(model_info['local_path']):
+            if verify_model_integrity(model_info['local_path']):
+                print(f"   ✅ 模型已存在且完整，跳过下载")
+                success_count += 1
+                continue
+            else:
+                print(f"   ⚠️  模型存在但不完整，重新下载")
+                # 删除不完整的模型
+                shutil.rmtree(model_info['local_path'])
+                os.makedirs(model_info['local_path'], exist_ok=True)
+        
+        # 方法1: 使用huggingface_hub的snapshot_download
+        if download_model_safe(
+            model_info['repo_id'],
+            model_info['local_path']
+        ):
             success_count += 1
-    print(f"\n模型下载完成: {success_count}/{len(models)} 成功")
+            continue
+        
+        # 方法2: 使用transformers库（备用）
+        print(f"   ⚠️  尝试备用下载方法...")
+        if download_model_with_transformers(
+            model_info['repo_id'],
+            model_info['local_path'],
+            model_info['model_type']
+        ):
+            success_count += 1
+            continue
+        
+        print(f"   ❌ 所有下载方法都失败了")
+    
+    # 下载完成
+    print("\n===============================================")
+    print(f"模型下载完成: {success_count}/{total_count} 成功")
+    print("===============================================")
+    
     if success_count > 0:
-        print("✅ 至少有部分模型下载成功")
+        print("✅ 至少有部分模型下载成功，可以继续安装")
         return 0
     else:
         print("❌ 所有模型下载失败")
+        print("💡 建议:")
+        print("   1. 检查网络连接")
+        print("   2. 确保有足够的磁盘空间")
+        print("   3. 手动下载模型并放到指定目录")
+        print(f"   4. 模型目录: {models_dir}")
         return 1
+
 if __name__ == "__main__":
     sys.exit(main())
 EOF
