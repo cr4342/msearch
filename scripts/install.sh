@@ -2,6 +2,7 @@
 # MSearch 统一安装脚本
 # 整合了 install_auto.sh、install_offline.sh 和 download_all_resources.sh 的功能
 # 支持自动检测离线资源，优先使用离线包，否则自动下载
+# 注意：Windows 用户请使用 install_windows.py 脚本
 set -e
 # 颜色定义
 RED='\033[0;31m'
@@ -512,28 +513,60 @@ download_models() {
     # 设置HuggingFace镜像（国内优化）
     export HF_ENDPOINT=https://hf-mirror.com
     export HF_HUB_ENABLE_HF_TRANSFER=1
+    # 确保模型目录存在
+    mkdir -p "$PROJECT_ROOT/data/models"
     # 使用Python脚本下载模型（更稳定）
     create_model_download_script
     # 执行模型下载
     log_info "开始下载AI模型..."
     python3 "$PROJECT_ROOT/data/download_models.py" || {
-        log_warning "Python脚本下载失败，尝试使用huggingface-cli..."
-        download_models_with_cli
+        log_error "Python脚本下载失败，尝试使用huggingface-cli..."
+        download_models_with_cli || {
+            log_critical "所有模型下载方法都失败了！"
+            log_critical "请手动下载模型文件并放到以下目录："
+            log_critical "  CLIP模型: $PROJECT_ROOT/data/models/clip-vit-base-patch32"
+            log_critical "  CLAP模型: $PROJECT_ROOT/data/models/clap-htsat-fused"
+            log_critical "  Whisper模型: $PROJECT_ROOT/data/models/whisper-base"
+        }
     }
     # 验证本地模型目录结构
     log_info "验证本地模型目录结构..."
     mkdir -p "$PROJECT_ROOT/data/models"
+    
+    # 模型目录映射（简化名称 -> 完整名称）
+    declare -A model_dir_mapping=( 
+        [clip]="clip-vit-base-patch32" 
+        [clap]="clap-htsat-fused" 
+        [whisper]="whisper-base" 
+        [facenet]="facenet-pytorch" 
+    )
+    
     # 确保模型目录结构正确
-    for model_dir in clip-vit-base-patch32 clap-htsat-fused whisper-base;
-    do
-        if [ -d "$PROJECT_ROOT/data/models/$model_dir" ]; then
-            local file_count=$(find "$PROJECT_ROOT/data/models/$model_dir" -type f | wc -l)
-            log_info "模型目录 $model_dir 包含 $file_count 个文件"
+    for simple_name in "${!model_dir_mapping[@]}"; do
+        full_name=${model_dir_mapping[$simple_name]}
+        source_dir="$PROJECT_ROOT/data/models/$full_name"
+        target_dir="$PROJECT_ROOT/data/models/$simple_name"
+        
+        if [ -d "$source_dir" ]; then
+            local file_count=$(find "$source_dir" -type f | wc -l)
+            log_info "模型目录 $source_dir 包含 $file_count 个文件"
+            
+            # 如果目标目录不存在，创建符号链接或复制
+            if [ ! -d "$target_dir" ]; then
+                log_info "创建从 $source_dir 到 $target_dir 的符号链接..."
+                ln -s "$source_dir" "$target_dir" 2>/dev/null || {
+                    log_warning "创建符号链接失败，尝试复制目录..."
+                    cp -r "$source_dir" "$target_dir" 2>/dev/null || {
+                        log_error "复制目录失败！"
+                    }
+                }
+            fi
+            
             if [ "$file_count" -eq 0 ]; then
-                log_warning "模型目录 $model_dir 为空，可能下载不完整"
+                log_warning "模型目录 $source_dir 为空，可能下载不完整"
             fi
         else
-            log_warning "模型目录 $model_dir 不存在，可能下载失败"
+            log_warning "模型目录 $source_dir 不存在，可能下载失败"
         fi
     done
     # 验证下载结果
@@ -618,6 +651,36 @@ def download_model_safe(repo_id, local_path, max_retries=5):
     os.environ["HF_ENDPOINT"] = "https://hf-mirror.com"
     os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "1"
     os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+    
+    # 跳过SSL证书验证（解决企业环境或网络配置问题）
+    import ssl
+    ssl._create_default_https_context = ssl._create_unverified_context
+    
+    # 禁用requests库的SSL验证
+    try:
+        import requests
+        from requests.adapters import HTTPAdapter
+        from urllib3.util.retry import Retry
+        
+        # 创建一个不验证SSL的Session
+        session = requests.Session()
+        retry = Retry(
+            total=5,
+            backoff_factor=0.5,
+            status_forcelist=[429, 500, 502, 503, 504],
+            allowed_methods=["HEAD", "GET", "OPTIONS"]
+        )
+        adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=10)
+        session.mount("http://", adapter)
+        session.mount("https://", adapter)
+        session.verify = False
+        
+        # 设置全局会话
+        from huggingface_hub import configure_http_backend
+        configure_http_backend(backend="requests", session=session)
+        print("   ✅ SSL证书验证已禁用，用于解决网络连接问题")
+    except Exception as e:
+        print(f"   ⚠️  无法配置SSL验证，可能会遇到证书问题: {e}")
     
     # 检查是否已经下载了部分模型文件
     existing_files = [f for f in os.listdir(local_path) if os.path.isfile(os.path.join(local_path, f))]
@@ -1029,6 +1092,40 @@ import os
 import sys
 import time
 from pathlib import Path
+
+# 跳过SSL证书验证（解决企业环境或网络配置问题）
+import ssl
+ssl._create_default_https_context = ssl._create_unverified_context
+
+# 禁用requests库的SSL验证
+try:
+    import requests
+    from requests.adapters import HTTPAdapter
+    from urllib3.util.retry import Retry
+    
+    # 创建一个不验证SSL的Session
+    session = requests.Session()
+    retry = Retry(
+        total=5,
+        backoff_factor=0.5,
+        status_forcelist=[429, 500, 502, 503, 504],
+        allowed_methods=["HEAD", "GET", "OPTIONS"]
+    )
+    adapter = HTTPAdapter(max_retries=retry, pool_connections=10, pool_maxsize=10)
+    session.mount("http://", adapter)
+    session.mount("https://", adapter)
+    session.verify = False
+    
+    # 设置全局会话
+    try:
+        from huggingface_hub import configure_http_backend
+        configure_http_backend(backend="requests", session=session)
+        print("[INFO] SSL证书验证已禁用，用于解决网络连接问题")
+    except ImportError:
+        print("[WARNING] huggingface_hub未安装，无法配置SSL验证")
+except Exception as e:
+    print(f"[WARNING] 无法配置SSL验证，可能会遇到证书问题: {e}")
+
 from transformers import (
     CLIPModel, CLIPProcessor, 
     ClapModel, ClapProcessor, 
@@ -1130,8 +1227,10 @@ EOF
     if [ $DOWNLOAD_RESULT -eq 0 ]; then
         log_success "所有模型下载完成"
     else
-        log_warning "部分模型下载失败，请检查网络连接"
-        log_warning "继续安装，但API服务可能无法正常工作"
+        log_error "模型下载失败，请检查网络连接"
+        log_error "如果网络环境受限，建议使用离线安装模式"
+        log_error "或手动下载模型文件放到指定目录: ${MODELS_DIR}"
+        log_info "继续安装，但服务可能无法运行真实模型"
     fi
     # 清理临时脚本
     rm -f "${MODEL_SCRIPT}"
@@ -1271,6 +1370,7 @@ copy_models() {
 init_data_dirs() {
     log_info "初始化数据目录..."
     mkdir -p "${PROJECT_ROOT}/data/database"
+    mkdir -p "${PROJECT_ROOT}/data/models"
     mkdir -p "${PROJECT_ROOT}/data/temp/images"
     mkdir -p "${PROJECT_ROOT}/data/temp/videos"
     mkdir -p "${PROJECT_ROOT}/data/temp/audio"
