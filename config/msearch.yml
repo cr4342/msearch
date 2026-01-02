@@ -123,9 +123,7 @@ database:
 # 向量数据库配置 (使用 Milvus Lite)
 # ============================================
 vector_db:
-  type: milvus
-  host: 127.0.0.1
-  port: 19530
+  type: milvus_lite
   data_dir: ./data/milvus
   metric_type: COSINE
   index_type: IVF_FLAT
