@@ -85,40 +85,86 @@ def get_gpu_info():
     is_mps_available = False
     is_openvino_available = False
     
-    # 检查CUDA可用性
+    # 1. 先尝试使用nvidia-smi命令检测NVIDIA GPU（不依赖PyTorch）
+    try:
+        import subprocess
+        result = subprocess.run(["nvidia-smi"], capture_output=True, text=True)
+        has_nvidia_gpu = result.returncode == 0 and "NVIDIA" in result.stdout
+        if has_nvidia_gpu:
+            has_gpu = True
+            # 从nvidia-smi输出中提取GPU名称
+            lines = result.stdout.split('\n')
+            for line in lines:
+                if "NVIDIA-SMI" in line:
+                    continue
+                if "Driver Version" in line:
+                    continue
+                if "CUDA Version" in line:
+                    continue
+                if "GPU Name" in line:
+                    continue
+                if "|" in line:
+                    parts = line.strip().split('|')
+                    if len(parts) > 2:
+                        gpu_name = parts[1].strip()
+                        gpu_info.append({
+                            "name": gpu_name,
+                            "memory_total": "",
+                            "memory_used": "",
+                            "memory_free": "",
+                            "temperature": "",
+                            "utilization": "",
+                            "driver": ""
+                        })
+                        break
+    except Exception as e:
+        pass
+    
+    # 2. 检查CUDA可用性（依赖PyTorch）
     if torch:
         is_cuda_available = torch.cuda.is_available()
         is_mps_available = torch.backends.mps.is_available()
+        
+        if is_cuda_available and not gpu_info:
+            # 如果nvidia-smi检测失败，但CUDA可用，使用torch获取GPU信息
+            has_gpu = True
+            for i in range(torch.cuda.device_count()):
+                gpu_name = torch.cuda.get_device_name(i)
+                total_memory = torch.cuda.get_device_properties(i).total_memory
+                gpu_info.append({
+                    "name": gpu_name,
+                    "memory_total": f"{total_memory / (1024 ** 3):.2f} GB",
+                    "memory_used": "",
+                    "memory_free": "",
+                    "temperature": "",
+                    "utilization": "",
+                    "driver": ""
+                })
     
-    # 尝试检查OpenVINO可用性
+    # 3. 尝试使用GPUtil获取更详细的GPU信息
+    if GPUtil and not gpu_info:
+        try:
+            gpus = GPUtil.getGPUs()
+            for gpu in gpus:
+                has_gpu = True
+                gpu_info.append({
+                    "name": gpu.name,
+                    "memory_total": f"{gpu.memoryTotal / 1024:.2f} GB",
+                    "memory_used": f"{gpu.memoryUsed / 1024:.2f} GB",
+                    "memory_free": f"{gpu.memoryFree / 1024:.2f} GB",
+                    "temperature": f"{gpu.temperature}°C",
+                    "utilization": f"{gpu.load * 100:.2f}%",
+                    "driver": gpu.driver
+                })
+        except Exception as e:
+            pass
+    
+    # 4. 尝试检查OpenVINO可用性
     try:
         from openvino.runtime import Core
         is_openvino_available = True
     except ImportError:
         pass
-    
-    # 使用GPUtil获取GPU详细信息
-    if GPUtil:
-        gpus = GPUtil.getGPUs()
-        for gpu in gpus:
-            has_gpu = True
-            gpu_info.append({
-                "name": gpu.name,
-                "memory_total": f"{gpu.memoryTotal / 1024:.2f} GB",
-                "memory_used": f"{gpu.memoryUsed / 1024:.2f} GB",
-                "memory_free": f"{gpu.memoryFree / 1024:.2f} GB",
-                "temperature": f"{gpu.temperature}°C",
-                "utilization": f"{gpu.load * 100:.2f}%",
-                "driver": gpu.driver
-            })
-    elif torch and is_cuda_available:
-        # 如果没有GPUtil，但有CUDA，使用torch获取基本信息
-        has_gpu = True
-        for i in range(torch.cuda.device_count()):
-            gpu_info.append({
-                "name": torch.cuda.get_device_name(i),
-                "memory_total": f"{torch.cuda.get_device_properties(i).total_memory / (1024 ** 3):.2f} GB"
-            })
     
     return {
         "has_gpu": has_gpu,
