@@ -40,6 +40,29 @@ class EmbeddingEngine:
         # 记录可用模型
         available_models = self.get_available_models()
         self.logger.info(f"向量化引擎初始化完成，可用模型: {available_models}")
+        
+        # Milvus连接状态
+        self._milvus_connected = False
+        self._milvus_connecting = False
+        
+    async def connect_milvus(self):
+        """连接Milvus"""
+        if self._milvus_connected or self._milvus_connecting:
+            return self._milvus_connected
+        
+        self._milvus_connecting = True
+        try:
+            if await self.milvus_adapter.connect():
+                self.logger.info("Milvus连接成功")
+                self._milvus_connected = True
+            else:
+                self.logger.error("Milvus连接失败")
+        except Exception as e:
+            self.logger.error(f"Milvus连接异常: {e}")
+        finally:
+            self._milvus_connecting = False
+        
+        return self._milvus_connected
     
     def _initialize_engine_module(self):
         """延迟初始化infinity_emb模块"""
@@ -609,16 +632,19 @@ class EmbeddingEngine:
                                 batch_size: int = 100) -> List[str]:
         """
         批量存储向量
-        
+
         Args:
             collection_type: 集合类型
             vectors_data: 向量数据列表 [(向量, 文件ID, 片段ID, 元数据), ...]
             batch_size: 批处理大小
-            
+
         Returns:
             向量ID列表
         """
         try:
+            # 确保Milvus已连接
+            await self.connect_milvus()
+            
             return await self.milvus_adapter.batch_store_vectors(
                 collection_type=collection_type,
                 vectors_data=vectors_data,
