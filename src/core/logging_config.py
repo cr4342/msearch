@@ -64,7 +64,7 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
     # 创建错误码格式化器（用于错误日志）
     error_formatter = ErrorCodeFormatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-        datefmt='%Y-%m-%d %H:%M:%S.%f'  # 更高精度的时间戳
+        datefmt='%Y-%m-%d %H:%M:%S'  # Python 3.10兼容的时间戳格式
     )
     
     # 控制台处理器
@@ -109,7 +109,7 @@ def setup_logging(log_level: str = "INFO", log_dir: str = "./logs"):
     # 详细错误日志使用特殊格式化器，包含完整堆栈
     detailed_formatter = ErrorCodeFormatter(
         '%(asctime)s - %(name)s - %(levelname)s - %(message)s\n%(exc_info)s',
-        datefmt='%Y-%m-%d %H:%M:%S.%f'
+        datefmt='%Y-%m-%d %H:%M:%S'  # Python 3.10兼容的时间戳格式
     )
     detailed_error_handler.setFormatter(detailed_formatter)
     root_logger.addHandler(detailed_error_handler)
