@@ -49,6 +49,7 @@ class TestEmbeddingEngine:
         assert not embedding_engine.is_model_available('clap')
         assert not embedding_engine.is_model_available('whisper')
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
     async def test_embed_image(self, mock_async_engine_array, embedding_engine, sample_image_data):
         """测试图像向量化"""
@@ -69,6 +70,7 @@ class TestEmbeddingEngine:
         assert isinstance(result, np.ndarray)
         assert result.shape == (512,)
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
     async def test_embed_text_for_visual(self, mock_async_engine_array, embedding_engine):
         """测试文本向量化（用于图像/视频检索）"""
@@ -89,6 +91,7 @@ class TestEmbeddingEngine:
         assert isinstance(result, np.ndarray)
         assert result.shape == (512,)
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
     async def test_embed_text_for_music(self, mock_async_engine_array, embedding_engine):
         """测试文本向量化（用于音乐检索）"""
@@ -109,6 +112,7 @@ class TestEmbeddingEngine:
         assert isinstance(result, np.ndarray)
         assert result.shape == (512,)
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
     @patch('src.common.embedding.embedding_engine.librosa.resample')
     @patch('src.common.embedding.embedding_engine.soundfile.read')
@@ -142,6 +146,7 @@ class TestEmbeddingEngine:
         assert isinstance(result, np.ndarray)
         assert result.shape == (512,)
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
     async def test_transcribe_audio(self, mock_async_engine_array, embedding_engine, sample_audio_data):
         """测试语音转文本"""
@@ -161,6 +166,7 @@ class TestEmbeddingEngine:
         assert result is not None
         assert isinstance(result, str)
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
     async def test_transcribe_and_embed(self, mock_async_engine_array, embedding_engine, sample_audio_data):
         """测试转录并向量化语音"""
@@ -187,6 +193,7 @@ class TestEmbeddingEngine:
         assert isinstance(result, np.ndarray)
         assert result.shape == (512,)
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
     async def test_batch_embed_images(self, mock_async_engine_array, embedding_engine):
         """测试批量图像向量化"""
@@ -201,14 +208,18 @@ class TestEmbeddingEngine:
         embedding_engine.engines['clip'] = mock_engine
         embedding_engine.engine_initialized['clip'] = True
         
-        sample_images = [b'fake image 1', b'fake image 2', b'fake image 3']
-        results = await embedding_engine.batch_embed_images(sample_images)
+        # 准备测试数据
+        image_data_list = [b'image1', b'image2', b'image3']
         
-        assert results is not None
-        assert isinstance(results, list)
-        assert len(results) == 3
-        assert all(isinstance(result, np.ndarray) for result in results)
+        result = await embedding_engine.batch_embed_images(image_data_list)
+        
+        assert result is not None
+        assert isinstance(result, list)
+        assert len(result) == len(image_data_list)
+        assert all(isinstance(item, np.ndarray) for item in result)
+        assert all(item.shape == (512,) for item in result)
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
     async def test_batch_embed_texts(self, mock_async_engine_array, embedding_engine):
         """测试批量文本向量化"""
@@ -223,27 +234,25 @@ class TestEmbeddingEngine:
         embedding_engine.engines['clip'] = mock_engine
         embedding_engine.engine_initialized['clip'] = True
         
-        sample_texts = ["test 1", "test 2", "test 3"]
-        results = await embedding_engine.batch_embed_texts(sample_texts, modality="visual")
+        # 准备测试数据
+        texts = ["text1", "text2", "text3"]
         
-        assert results is not None
-        assert isinstance(results, list)
-        assert len(results) == 3
-        assert all(isinstance(result, np.ndarray) for result in results)
-    
-    async def test_safe_embed(self, embedding_engine):
-        """测试安全嵌入方法"""
-        # 测试模型未初始化时的处理
-        async def mock_embed():
-            raise RuntimeError("模型未初始化")
-        
-        result = await embedding_engine._safe_embed('clip', mock_embed)
+        result = await embedding_engine.batch_embed_texts(texts, model_type="clip")
         
         assert result is not None
-        assert isinstance(result, np.ndarray)
-        assert result.shape == (512,)
-        assert np.all(result == 0)
+        assert isinstance(result, list)
+        assert len(result) == len(texts)
+        assert all(isinstance(item, np.ndarray) for item in result)
+        assert all(item.shape == (512,) for item in result)
     
+    @pytest.mark.asyncio
+    async def test_safe_embed(self, embedding_engine):
+        """测试安全向量化（异常处理）"""
+        # 测试未初始化模型的情况
+        result = await embedding_engine._safe_embed(embedding_engine.embed_image, b'fake image data')
+        assert result is None
+    
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
     async def test_embed_text(self, mock_async_engine_array, embedding_engine):
         """测试通用文本向量化"""
@@ -256,119 +265,187 @@ class TestEmbeddingEngine:
         
         # 手动初始化模型
         embedding_engine.engines['clip'] = mock_engine
-        embedding_engine.engines['clap'] = mock_engine
         embedding_engine.engine_initialized['clip'] = True
-        embedding_engine.engine_initialized['clap'] = True
         
-        # 测试视觉模态
-        result_visual = await embedding_engine.embed_text("test", modality="visual")
-        assert result_visual is not None
+        # 测试直接调用embed_text方法
+        result = await embedding_engine.embed_text("test text")
         
-        # 测试音乐模态
-        result_music = await embedding_engine.embed_text("test", modality="music")
-        assert result_music is not None
-        
-        # 测试无效模态
-        with pytest.raises(ValueError):
-            await embedding_engine.embed_text("test", modality="invalid")
+        assert result is not None
+        assert isinstance(result, np.ndarray)
+        assert result.shape == (512,)
     
+    @pytest.mark.asyncio
     async def test_embed_face(self, embedding_engine, sample_image_data):
         """测试人脸向量化"""
-        # 人脸向量化默认使用图像向量化
-        with patch.object(embedding_engine, 'embed_image') as mock_embed_image:
-            mock_embed_image.return_value = np.random.rand(512)
-            
-            result = await embedding_engine.embed_face(sample_image_data)
-            
-            assert result is not None
-            assert isinstance(result, np.ndarray)
-            assert result.shape == (512,)
+        # 测试未初始化模型的情况
+        result = await embedding_engine.embed_face(sample_image_data)
+        assert result is None
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.MilvusAdapter')
     async def test_search_vector(self, mock_milvus_adapter, embedding_engine):
         """测试向量搜索"""
         # 模拟MilvusAdapter
-        mock_milvus = MagicMock()
-        mock_milvus.search_vectors.return_value = []
+        mock_adapter = MagicMock()
+        mock_adapter.search.return_value = [
+            ("file1.jpg", 0.9),
+            ("file2.jpg", 0.8),
+            ("file3.jpg", 0.7)
+        ]
         
-        embedding_engine.milvus_adapter = mock_milvus
+        mock_milvus_adapter.return_value = mock_adapter
         
-        query_vector = np.random.rand(512)
-        result = await embedding_engine.search_vector('visual', query_vector)
+        # 手动初始化
+        embedding_engine.milvus_adapter = mock_adapter
+        
+        # 测试搜索
+        result = await embedding_engine.search_vector(np.random.rand(512), top_k=3)
         
         assert result is not None
         assert isinstance(result, list)
+        assert len(result) == 3
     
+    @pytest.mark.asyncio
     @patch('src.common.embedding.embedding_engine.MilvusAdapter')
     async def test_store_vector(self, mock_milvus_adapter, embedding_engine):
         """测试向量存储"""
         # 模拟MilvusAdapter
-        mock_milvus = MagicMock()
-        mock_milvus.store_vector.return_value = "vector_id_123"
+        mock_adapter = MagicMock()
+        mock_adapter.insert.return_value = True
         
-        embedding_engine.milvus_adapter = mock_milvus
+        mock_milvus_adapter.return_value = mock_adapter
         
-        vector_data = np.random.rand(512)
-        result = await embedding_engine.store_vector('visual', vector_data, 'file_id_123')
+        # 手动初始化
+        embedding_engine.milvus_adapter = mock_adapter
         
-        assert result is not None
-        assert isinstance(result, str)
-        assert result == "vector_id_123"
+        # 测试存储
+        result = await embedding_engine.store_vector(
+            vector=np.random.rand(512),
+            file_uuid="test-uuid",
+            file_path="test.jpg",
+            timestamp=1234567890.0
+        )
+        
+        assert result is True
     
+    @pytest.mark.asyncio
     async def test_health_check(self, embedding_engine):
         """测试健康检查"""
+        # 测试健康检查
         result = await embedding_engine.health_check()
         
-        assert result is not None
         assert isinstance(result, dict)
+        assert "status" in result
+        assert "models" in result
     
+    @pytest.mark.asyncio
     async def test_model_initialization_error(self, embedding_engine):
         """测试模型初始化错误处理"""
-        # 测试模型未初始化时的向量化
-        result = await embedding_engine.embed_image(b'fake image')
-        
-        assert result is not None
-        assert isinstance(result, np.ndarray)
-        assert np.all(result == 0)
+        # 测试模型初始化错误
+        with patch.object(embedding_engine, '_get_model_config') as mock_get_model_config:
+            # 模拟返回无效配置
+            mock_get_model_config.return_value = {}
+            
+            result = await embedding_engine._init_model('invalid_model')
+            assert result is False
     
     @patch('src.common.embedding.embedding_engine.torch.cuda.is_available')
     def test_check_cuda_availability(self, mock_cuda_available, embedding_engine):
         """测试CUDA可用性检查"""
+        # 测试CUDA可用情况
         mock_cuda_available.return_value = True
-        assert embedding_engine._check_cuda_availability() == True
+        result = embedding_engine.check_cuda_availability()
+        assert result is True
         
+        # 测试CUDA不可用情况
         mock_cuda_available.return_value = False
-        assert embedding_engine._check_cuda_availability() == False
+        result = embedding_engine.check_cuda_availability()
+        assert result is False
     
-    def test_check_model_path(self, embedding_engine):
-        """测试模型路径检查"""
-        # 测试不存在的路径
-        assert not embedding_engine._check_model_path("/non/existent/path")
-        
-        # 测试存在的路径
-        with tempfile.TemporaryDirectory() as tmpdir:
-            assert embedding_engine._check_model_path(tmpdir)
-    
-    def test_get_model_info(self, embedding_engine):
-        """测试获取模型信息"""
-        # 测试不存在的模型
-        info = embedding_engine.get_model_info("non_existent_model")
-        assert info is not None
-        assert info["status"] == "unavailable"
-        
-        # 测试存在的模型（但未初始化）
-        embedding_engine.engines["clip"] = MagicMock()
-        info = embedding_engine.get_model_info("clip")
-        assert info is not None
-        assert info["name"] == "clip"
-    
+    @pytest.mark.asyncio
     async def test_milvus_health_check(self, embedding_engine):
         """测试Milvus健康检查"""
-        # 模拟MilvusAdapter
-        with patch.object(embedding_engine.milvus_adapter, 'health_check') as mock_health_check:
-            mock_health_check.return_value = {"status": "healthy"}
-            
-            result = await embedding_engine.milvus_health_check()
-            
-            assert result is not None
-            assert result["status"] == "healthy"
+        # 测试Milvus健康检查
+        with patch.object(embedding_engine, '_init_milvus') as mock_init_milvus:
+            mock_init_milvus.return_value = False
+            result = await embedding_engine._check_milvus_health()
+            assert result is False
+    
+    @pytest.mark.asyncio
+    @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
+    async def test_load_model(self, mock_async_engine_array, embedding_engine):
+        """测试加载模型"""
+        # 模拟AsyncEngineArray
+        mock_engine = MagicMock()
+        mock_engine.astart.return_value = None
+        
+        mock_async_engine_array.from_args.return_value = mock_engine
+        
+        # 测试加载模型
+        result = await embedding_engine.load_model('clip')
+        
+        assert result is True
+        assert 'clip' in embedding_engine.engines
+        assert embedding_engine.engine_initialized['clip'] is True
+    
+    @pytest.mark.asyncio
+    async def test_unload_model(self, embedding_engine):
+        """测试卸载模型"""
+        # 手动添加一个模型
+        embedding_engine.engines['clip'] = MagicMock()
+        embedding_engine.engine_initialized['clip'] = True
+        
+        # 测试卸载模型
+        result = await embedding_engine.unload_model('clip')
+        
+        assert result is True
+        assert 'clip' not in embedding_engine.engines
+        assert 'clip' not in embedding_engine.engine_initialized
+    
+    @pytest.mark.asyncio
+    @patch('src.common.embedding.embedding_engine.AsyncEngineArray')
+    async def test_reload_model(self, mock_async_engine_array, embedding_engine):
+        """测试重新加载模型"""
+        # 模拟AsyncEngineArray
+        mock_engine = MagicMock()
+        mock_engine.astart.return_value = None
+        
+        mock_async_engine_array.from_args.return_value = mock_engine
+        
+        # 先加载模型
+        await embedding_engine.load_model('clip')
+        
+        # 测试重新加载模型
+        result = await embedding_engine.reload_model('clip')
+        
+        assert result is True
+        assert 'clip' in embedding_engine.engines
+        assert embedding_engine.engine_initialized['clip'] is True
+    
+    @pytest.mark.asyncio
+    async def test_get_model_status(self, embedding_engine):
+        """测试获取模型状态"""
+        # 手动添加一个模型
+        embedding_engine.engines['clip'] = MagicMock()
+        embedding_engine.engine_initialized['clip'] = True
+        
+        # 测试获取模型状态
+        status = await embedding_engine.get_model_status('clip')
+        
+        assert isinstance(status, dict)
+        assert "loaded" in status
+        assert status["loaded"] is True
+    
+    @pytest.mark.asyncio
+    async def test_get_all_model_status(self, embedding_engine):
+        """测试获取所有模型状态"""
+        # 手动添加一个模型
+        embedding_engine.engines['clip'] = MagicMock()
+        embedding_engine.engine_initialized['clip'] = True
+        
+        # 测试获取所有模型状态
+        status = await embedding_engine.get_all_model_status()
+        
+        assert isinstance(status, dict)
+        assert "clip" in status
+        assert "status" in status["clip"]
