@@ -62,6 +62,7 @@ class TestManualOperationManager:
         result = manual_operation_manager.get_operation_history()
         assert isinstance(result, list)
     
+    @pytest.mark.asyncio
     @patch.object(ManualOperationManager, '_execute_operation')
     async def test_start_operation(self, mock_execute_operation, manual_operation_manager):
         """测试启动操作"""
@@ -77,6 +78,7 @@ class TestManualOperationManager:
         assert isinstance(operation_id, str)
         assert len(operation_id) > 0
     
+    @pytest.mark.asyncio
     @patch.object(ManualOperationManager, '_has_conflicting_operation')
     @patch.object(ManualOperationManager, '_execute_operation')
     async def test_start_conflicting_operation(self, 
@@ -93,6 +95,7 @@ class TestManualOperationManager:
                 {}
             )
     
+    @pytest.mark.asyncio
     async def test_get_files_in_directory(self, manual_operation_manager, sample_directory):
         """测试获取目录中的文件"""
         files = await manual_operation_manager._get_files_in_directory(sample_directory)
@@ -101,6 +104,7 @@ class TestManualOperationManager:
         assert isinstance(files, list)
         assert len(files) >= 2
     
+    @pytest.mark.asyncio
     async def test_get_files_in_empty_directory(self, manual_operation_manager):
         """测试获取空目录中的文件"""
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -110,6 +114,7 @@ class TestManualOperationManager:
             assert isinstance(files, list)
             assert len(files) == 0
     
+    @pytest.mark.asyncio
     @patch.object(ManualOperationManager, '_get_files_in_directory')
     @patch.object(ManualOperationManager, '_process_files_batch')
     async def test_execute_full_scan(self, 
@@ -160,20 +165,14 @@ class TestManualOperationManager:
             assert mock_get_files_in_directory.called
             assert mock_process_files_batch.called
     
+    @pytest.mark.asyncio
     @patch.object(ManualOperationManager, '_get_files_in_directory')
     @patch.object(ManualOperationManager, '_process_files_batch')
-    @patch.object(ManualOperationManager.db_adapter, 'get_all_files')
     async def test_execute_incremental_scan(self, 
-                                          mock_get_all_files, 
                                           mock_process_files_batch, 
                                           mock_get_files_in_directory, 
                                           manual_operation_manager):
         """测试执行增量扫描"""
-        # 模拟依赖
-        mock_get_all_files.return_value = [{"file_path": "/test/existing_file.jpg"}]
-        mock_get_files_in_directory.return_value = ["/test/existing_file.jpg", "/test/new_file.mp4"]
-        mock_process_files_batch.return_value = None
-        
         # 创建操作信息
         from src.processing_service.manual_operation_manager import OperationInfo, OperationProgress
         import datetime
@@ -204,8 +203,12 @@ class TestManualOperationManager:
         )
         
         # 模拟配置管理器返回监控目录
-        with patch.object(manual_operation_manager.config_manager, 'get_list') as mock_get_list:
+        with patch.object(manual_operation_manager.config_manager, 'get_list') as mock_get_list, \
+             patch.object(manual_operation_manager.db_adapter, 'get_all_files') as mock_get_all_files:
             mock_get_list.return_value = ["/test/dir1"]
+            mock_get_all_files.return_value = [{"file_path": "/test/existing_file.jpg"}]
+            mock_get_files_in_directory.return_value = ["/test/existing_file.jpg", "/test/new_file.mp4"]
+            mock_process_files_batch.return_value = None
             
             await manual_operation_manager._execute_incremental_scan(operation_info)
             
@@ -214,17 +217,12 @@ class TestManualOperationManager:
             assert mock_get_files_in_directory.called
             assert mock_process_files_batch.called
     
-    @patch.object(ManualOperationManager.db_adapter, 'get_all_files')
+    @pytest.mark.asyncio
     @patch.object(ManualOperationManager, '_process_files_batch')
     async def test_execute_reindex(self, 
                                  mock_process_files_batch, 
-                                 mock_get_all_files, 
                                  manual_operation_manager):
         """测试执行重新索引"""
-        # 模拟依赖
-        mock_get_all_files.return_value = [{"file_path": "/test/file1.jpg"}, {"file_path": "/test/file2.mp4"}]
-        mock_process_files_batch.return_value = None
-        
         # 创建操作信息
         from src.processing_service.manual_operation_manager import OperationInfo, OperationProgress
         import datetime
@@ -254,12 +252,18 @@ class TestManualOperationManager:
             error_message=None
         )
         
-        await manual_operation_manager._execute_reindex(operation_info)
-        
-        # 验证调用
-        assert mock_get_all_files.called
-        assert mock_process_files_batch.called
+        # 模拟依赖
+        with patch.object(manual_operation_manager.db_adapter, 'get_all_files') as mock_get_all_files:
+            mock_get_all_files.return_value = [{"file_path": "/test/file1.jpg"}, {"file_path": "/test/file2.mp4"}]
+            mock_process_files_batch.return_value = None
+            
+            await manual_operation_manager._execute_reindex(operation_info)
+            
+            # 验证调用
+            assert mock_get_all_files.called
+            assert mock_process_files_batch.called
     
+    @pytest.mark.asyncio
     @patch.object(ManualOperationManager, '_get_files_in_directory')
     @patch.object(ManualOperationManager, '_process_files_batch')
     async def test_execute_specific_dir_scan(self, 
@@ -308,6 +312,7 @@ class TestManualOperationManager:
         assert mock_get_files_in_directory.called
         assert mock_process_files_batch.called
     
+    @pytest.mark.asyncio
     async def test_has_conflicting_operation(self, manual_operation_manager):
         """测试检查冲突操作"""
         # 测试无冲突操作
@@ -317,6 +322,7 @@ class TestManualOperationManager:
         )
         assert not result
     
+    @pytest.mark.asyncio
     async def test_get_operation_directories(self, manual_operation_manager):
         """测试获取操作涉及的目录"""
         # 测试全量扫描
@@ -338,20 +344,10 @@ class TestManualOperationManager:
         
         assert dirs == ["/test/specific_dir"]
     
-    @patch.object(ManualOperationManager.db_adapter, 'get_temp_files_to_delete')
-    @patch.object(ManualOperationManager.db_adapter, 'mark_file_as_deleted')
+    @pytest.mark.asyncio
     async def test_execute_cleanup_temp_files(self, 
-                                            mock_mark_file_as_deleted, 
-                                            mock_get_temp_files_to_delete, 
                                             manual_operation_manager):
         """测试执行临时文件清理"""
-        # 模拟依赖
-        mock_get_temp_files_to_delete.return_value = [
-            {"file_id": "temp_file_1", "file_path": "/tmp/temp1.jpg"},
-            {"file_id": "temp_file_2", "file_path": "/tmp/temp2.mp4"}
-        ]
-        mock_mark_file_as_deleted.return_value = None
-        
         # 创建操作信息
         from src.processing_service.manual_operation_manager import OperationInfo, OperationProgress
         import datetime
@@ -381,26 +377,34 @@ class TestManualOperationManager:
             error_message=None
         )
         
-        # 模拟文件存在
-        with patch('src.processing_service.manual_operation_manager.os.path.exists') as mock_exists:
+        # 模拟依赖
+        with patch.object(manual_operation_manager.db_adapter, 'get_temp_files_to_delete') as mock_get_temp_files_to_delete, \
+             patch.object(manual_operation_manager.db_adapter, 'mark_file_as_deleted') as mock_mark_file_as_deleted, \
+             patch('os.path.exists') as mock_exists, \
+             patch('os.remove') as mock_remove:
+            mock_get_temp_files_to_delete.return_value = [
+                {"file_id": "temp_file_1", "file_path": "/tmp/temp1.jpg"},
+                {"file_id": "temp_file_2", "file_path": "/tmp/temp2.mp4"}
+            ]
+            mock_mark_file_as_deleted.return_value = None
             mock_exists.return_value = True
+            mock_remove.return_value = None
             
-            with patch('src.processing_service.manual_operation_manager.os.remove') as mock_remove:
-                mock_remove.return_value = None
-                
-                await manual_operation_manager._execute_cleanup_temp_files(operation_info)
-                
-                # 验证调用
-                assert mock_get_temp_files_to_delete.called
-                assert mock_remove.called
-                assert mock_mark_file_as_deleted.called
+            await manual_operation_manager._execute_cleanup_temp_files(operation_info)
+            
+            # 验证调用
+            assert mock_get_temp_files_to_delete.called
+            assert mock_remove.called
+            assert mock_mark_file_as_deleted.called
     
+    @pytest.mark.asyncio
     async def test_stop_operation(self, manual_operation_manager):
         """测试停止操作"""
         # 测试停止不存在的操作
         result = await manual_operation_manager.stop_operation("non_existent_op_id")
         assert not result
     
+    @pytest.mark.asyncio
     async def test_pause_resume_operation(self, manual_operation_manager):
         """测试暂停和恢复操作"""
         # 测试暂停不存在的操作
@@ -433,6 +437,7 @@ class TestManualOperationManager:
         assert 'start' in manual_operation_manager.event_callbacks
         assert len(manual_operation_manager.event_callbacks['start']) == 1
     
+    @pytest.mark.asyncio
     async def test_trigger_event(self, manual_operation_manager):
         """测试触发事件"""
         # 测试触发事件
@@ -477,6 +482,7 @@ class TestManualOperationManager:
         
         assert called
     
+    @pytest.mark.asyncio
     @patch.object(ManualOperationManager, '_execute_full_scan')
     @patch.object(ManualOperationManager, '_execute_incremental_scan')
     @patch.object(ManualOperationManager, '_execute_reindex')
@@ -563,11 +569,13 @@ class TestManualOperationManager:
         with pytest.raises(ValueError):
             await manual_operation_manager._execute_operation(operation_info)
     
+    @pytest.mark.asyncio
     async def test_should_pause_operation(self, manual_operation_manager):
         """测试检查操作是否应该暂停"""
         result = await manual_operation_manager._should_pause_operation("test_op_id")
         assert not result
     
+    @pytest.mark.asyncio
     async def test_pause_operation(self, manual_operation_manager):
         """测试暂停操作"""
         # 创建操作信息
