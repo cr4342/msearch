@@ -1,563 +1,417 @@
-# iFlow CLI 上下文文档 - msearch 项目
+# msearch 项目上下文文档
 
 ## 项目概述
 
-msearch 是一款跨平台的多模态检索系统，采用微服务架构设计，旨在成为用户的"第二大脑"。它允许用户通过自然语言、图片截图或音频片段快速、精准地在本地素材库中定位相关的图片、视频（精确到关键帧）和音频文件，实现"定位到秒"的检索体验。
+msearch 是一款跨平台的多模态检索系统，采用单体架构设计，专注于单机桌面应用场景。系统使用 michaelfeil/infinity 作为多模型服务引擎，支持文本、图像、视频、音频四种模态的精准检索。
 
-**项目状态**: 单元测试补全完成，核心功能验证通过
-**最后更新**: 2025-12-31
-**Git版本**: 914a48b42b323dda5d6953c374d25ff44b2f3959
-
-### 核心价值
+### 核心特性
 
 - **智能检索**: 无需手动整理、无需添加标签即可实现智能检索
 - **跨模态搜索**: 支持用任意模态（文本、图像、音频）检索其他模态内容
-- **高精度定位**: 支持毫秒级时间戳精确定位，时间戳精度±2秒要求
+- **时序定位**: 支持视频片段级时序定位，时间戳精度±5秒
 - **零配置**: 素材无需整理、无需标签
 - **高性能本地推理**: 利用Infinity Python-native模式实现高效向量化
-- **微服务架构**: 松耦合设计，支持未来服务拆分和独立部署
-- **配置驱动**: 所有参数可配置，支持环境变量覆盖和热重载
-- **异步处理**: 基于asyncio的高性能异步处理架构
-- **模块化设计**: 组件间低耦合，易于维护和扩展
-- **测试质量保证**: 完整的测试体系，核心功能测试覆盖率85%+
+- **单体架构**: 模块化设计，易于理解和维护
 
-### 快速开始
+### 技术栈
 
-```bash
-# 1. 环境配置
-python3 -m venv venv
-source venv/bin/activate  # Linux/macOS
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+- **语言**: Python 3.8+
+- **AI模型框架**: PyTorch, Transformers
+- **向量化引擎**: infinity-emb[all]
+- **向量数据库**: Milvus Lite
+- **关系数据库**: SQLite
+- **Web框架**: FastAPI (用于API服务)
+- **GUI**: PySide6 (可选，用于桌面界面)
+- **媒体处理**: OpenCV, FFmpeg, Librosa
+- **文件监控**: Watchdog
 
-# 2. 基础验证
-python -c "
-import sys
-sys.path.insert(0, 'src')
-from src.core.config_manager import get_config_manager
-from src.core.logging_config import setup_logging
-from src.common.storage.database_adapter import DatabaseAdapter
-print('✓ 核心组件初始化成功')
-"
+## 架构设计
 
-# 3. 验证测试文件
-python3 validate_tests.py
+### 简化架构概述
 
-# 4. 运行测试
-pytest tests/ -v --tb=short
+基于实际项目状态和分析，推荐采用以下简化架构：
 
-# 5. 启动应用
-python src/main.py
+#### 1. 核心服务层（5个核心模块）
+```
+┌─────────────────────────────────────────────────────────┐
+│                   主应用程序 (main.py)                    │
+├─────────────────────────────────────────────────────────┤
+│  ┌─────────┐  ┌─────────┐  ┌─────────┐  ┌─────────┐   │
+│  │ 文件服务 │  │ 向量化  │  │ 存储服务 │  │ 检索服务 │   │
+│  │  (合并) │  │  服务   │  │  (合并) │  │         │   │
+│  └─────────┘  └─────────┘  └─────────┘  └─────────┘   │
+└─────────────────────────────────────────────────────────┘
 ```
 
-## 技术架构
+#### 2. 实际实现模块（当前状态）
+```
+src/
+├── main.py              # 应用入口
+├── api_server.py        # FastAPI服务
+├── core/                # 核心功能模块
+│   ├── task_manager.py       # 任务管理
+│   ├── embedding_engine.py   # 向量化引擎（统一调用Infinity和CLIP4Clip）
+│   ├── vector_store.py       # 向量存储（Milvus Lite操作）
+│   ├── config_manager.py     # 配置管理
+│   ├── infinity_manager.py   # Infinity引擎封装
+│   └── ... 其他辅助模块
+├── components/          # 辅助组件
+│   ├── database_manager.py   # SQLite数据库管理
+│   └── search_engine.py      # 多模态检索引擎
+├── ui/                  # PySide6用户界面
+└── utils/               # 工具类
+```
 
-### 核心技术栈
+### 模块职责说明
 
-| 层级 | 技术选择 | 核心特性 |
-|------|----------|----------|
-| **微服务架构** | **异步Python** | 基于asyncio的高性能异步处理 |
-| **共享组件层** | **可拆分模块** | 易于微服务拆分的共享组件设计 |
-| **文件处理服务** | **独立服务模块** | 文件监控、预处理、向量化 |
-| **检索服务** | **独立服务模块** | 多模态检索、结果融合 |
-| **AI推理层** | **michaelfeil/infinity** | 多模型服务引擎，高吞吐量低延迟 |
-| **向量存储层** | **Milvus Lite** | 高性能本地向量数据库，CPU/GPU加速，支持分布式扩展 |
-| **元数据层** | **SQLite** | 轻量级关系数据库，零配置，文件级便携 |
-| **配置管理** | **YAML + 环境变量** | 配置驱动设计，支持热重载 |
-| **日志系统** | **Python logging** | 多级别日志，自动轮转，分类存储 |
-| **多模态模型** | **CLIP/CLAP/Whisper** | 专业化模型架构，针对不同模态优化 |
-| **媒体处理** | **FFmpeg + OpenCV + Librosa** | 专业级预处理，场景检测+智能切片 |
-| **文件监控** | **Watchdog** | 实时增量处理，跨平台文件系统事件 |
-| **测试框架** | **pytest + pytest-asyncio** | 异步测试支持，覆盖率报告 |
+#### 核心模块
+1. **任务管理器 (TaskManager)**
+   - 负责任务进度跟踪和状态管理
+   - 支持手动操作（全量扫描、增量扫描、重新向量化）
+   - 使用内存队列管理任务（简化设计）
 
-### 专业化AI模型架构
+2. **向量化引擎 (EmbeddingEngine)**
+   - 统一管理所有AI模型调用
+   - 集成Infinity引擎（CLIP/CLAP/Whisper）
+   - 直接调用CLIP4Clip进行视频片段级向量化
+   - 提供统一的向量化接口
 
-| 模态类型 | 模型选择 | 应用场景 | 技术优势 |
-|---------|---------|---------|---------|
-| **文本-图像** | CLIP | 文本检索图片内容 | 跨模态语义对齐，高精度图像理解 |
-| **文本-视频** | CLIP | 文本检索视频内容 | 跨模态语义对齐，精确时间定位 |
-| **文本-音频** | CLAP | 文本检索音乐内容 | 专业音频语义理解 |
-| **语音-文本** | Whisper | 语音内容转录检索 | 高精度多语言语音识别 |
-| **音频分类** | inaSpeechSegmenter | 音频内容智能分类 | 精准区分音乐、语音、噪音 |
-| **人脸识别** | FaceNet/InsightFace | 人脸特征提取 | 高精度人脸识别和匹配 |
-| **媒体处理** | FFmpeg | 视频场景检测切片 | 专业级媒体预处理能力 |
+3. **向量存储 (VectorStore)**
+   - 管理Milvus Lite向量数据库
+   - 负责向量CRUD操作和相似度检索
+   - 与SQLite元数据库协同工作
 
-### 系统架构
+#### 辅助模块
+4. **配置管理器 (ConfigManager)**
+   - 管理YAML配置文件
+   - 支持硬件自适应配置生成
+   - 提供配置验证和热重载
+
+5. **检索引擎 (SearchEngine)**
+   - 实现多模态检索功能
+   - 支持文本、图像、音频查询
+   - 融合不同模态的检索结果
+   - 提供结果排序和丰富功能
+
+#### 扩展模块（根据需求可选）
+- **批量处理器 (BatchProcessor)**: 批量任务处理优化
+- **缓存管理器 (CacheManager)**: 临时数据和模型缓存
+- **性能监控器 (PerformanceMonitor)**: 系统性能监控
+- **文件类型检测器 (FileTypeDetector)**: 智能媒体文件识别
+
+### 架构优势
+- **简化维护**: 模块职责清晰，减少依赖复杂度
+- **快速开发**: 避免过度设计，聚焦核心功能
+- **易于扩展**: 插件式设计支持功能扩展
+- **跨平台**: 全Python实现，支持Windows/macOS/Linux
+
+## 项目结构
 
 ```
 msearch/
-├── src/
-│   ├── main.py             # 应用入口
-│   ├── api/                # API层
-│   │   ├── app.py          # FastAPI应用
-│   │   └── routes/         # API路由
-│   ├── common/             # 共享组件层
-│   │   ├── embedding/      # 向量化引擎
-│   │   ├── models/         # 数据模型
-│   │   └── storage/        # 存储适配器
-│   ├── core/               # 核心组件
-│   │   ├── config_manager.py
-│   │   ├── logging_config.py
-│   │   └── ...
-│   ├── processing_service/ # 文件处理服务
-│   │   ├── file_monitor.py
-│   │   ├── orchestrator.py
-│   │   ├── task_manager.py
-│   │   ├── media_processor.py
-│   │   └── manual_operation_manager.py
-│   ├── search_service/     # 检索服务
-│   │   ├── smart_retrieval_engine.py
-│   │   └── face_manager.py
-│   └── utils/              # 工具类
-├── config/
-│   ├── config.yml          # 主配置文件
-│   └── model_config.yml
-├── tests/                  # 测试目录
-└── data/                   # 数据目录
+├── config/                    # 配置文件
+│   └── config.yml            # 主配置文件
+├── data/                      # 数据目录
+│   ├── cache/                 # 缓存数据
+│   ├── database/              # 数据库文件（SQLite + Milvus Lite）
+│   ├── models/                # AI模型文件
+│   └── logs/                  # 日志文件
+├── docs/                      # 项目文档
+│   ├── api_documentation.md   # API文档
+│   ├── architecture.md        # 架构设计
+│   ├── INSTALL.md             # 安装指南
+│   ├── user_manual.md         # 用户手册
+│   └── technical_implementation.md # 技术实现
+├── logs/                      # 运行时日志
+├── scripts/                   # 实用脚本
+│   ├── install.sh             # Linux安装脚本
+│   ├── install_windows.py     # Windows安装脚本（GBK编码）
+│   ├── download_models_only.py # 模型下载脚本
+│   ├── start_all.sh           # 启动脚本
+│   ├── stop_all.sh            # 停止脚本
+│   └── hardware_analysis.py   # 硬件分析脚本
+├── src/                       # 源代码
+│   ├── main.py               # 应用入口
+│   ├── api_server.py         # FastAPI服务
+│   ├── core/                 # 核心模块
+│   ├── components/           # 辅助组件
+│   ├── ui/                   # 用户界面（PySide6）
+│   └── utils/                # 工具类
+├── storage/                  # 存储目录（Milvus集合数据）
+├── tests/                    # 测试代码
+├── webui/                    # Web界面（开发测试用）
+│   └── index.html
+└── requirements.txt          # Python依赖
 ```
 
-## 核心组件
+## 开发约定
 
-### 1. 文件监控器 (FileMonitor)
+### 代码规范
+- 遵循Python PEP 8编码规范
+- 使用类型注解提高代码可读性
+- 所有异步函数使用`async/await`
+- 模块化设计，单一职责原则
 
-实时监控指定目录的文件变化，写入基础元数据，触发处理流程：
+### 配置管理
+- 使用YAML格式配置文件
+- 配置驱动设计，无硬编码参数
+- 支持环境变量覆盖
+- 配置热重载支持
 
-- **实时监控**: 使用watchdog库监控文件系统事件
-- **文件类型过滤**: 仅处理支持的媒体文件格式
-- **防抖处理**: 避免重复触发，500ms防抖延迟
-- **元数据提取**: 自动提取UUID、hash、路径等基础信息
-- **增量处理**: 检测到新文件或文件修改时自动触发处理
-- **删除处理**: 检测到文件删除时触发索引清理事件
+### 错误处理
+- 使用Python异常类进行错误处理
+- 提供友好的错误消息
+- 详细的错误日志记录
+- 支持错误重试机制
 
-### 2. 处理调度器 (ProcessingOrchestrator)
+### 日志系统
+- 多级别日志管理（DEBUG/INFO/WARNING/ERROR/CRITICAL）
+- 分类存储（主日志、错误日志、性能日志）
+- 自动日志轮转，防止日志文件过大
+- 结构化日志便于分析
 
-作为系统的核心调度组件，负责协调各专业处理模块的调用顺序和数据流转：
+## 构建和运行
 
-- **策略路由**: 根据文件类型选择处理策略
-- **流程编排**: 管理预处理→向量化→存储的调用顺序
-- **状态管理**: 跟踪处理进度、状态转换和错误恢复
-- **资源协调**: 协调CPU/GPU资源分配
-- **异步处理**: 基于asyncio的高性能异步处理
-- **错误恢复**: 处理异常和错误恢复机制
-- **文件类型大小写处理**: 支持大小写不敏感的文件扩展名识别
-- **动态模型选择**: 根据音频类型（音乐/语音）动态选择向量化模型
+### 环境要求
+- **Python**: 3.8+
+- **内存**: 最低8GB，推荐16GB+
+- **GPU**: 支持CUDA的GPU（推荐，用于加速AI推理）
+- **磁盘空间**: 至少10GB（用于模型文件和数据）
 
-### 3. 任务管理器 (TaskManager)
+### 安装依赖
+```bash
+# 使用pip安装
+pip install -r requirements.txt
 
-管理文件处理任务的生命周期，提供持久化任务队列：
+# 使用uv加速安装（推荐）
+pip install uv
+uv pip install -r requirements.txt
+```
 
-- **任务持久化**: 使用SQLite存储任务状态，支持系统重启恢复
-- **状态管理**: PENDING → PROCESSING → COMPLETED/FAILED/RETRY
-- **优先级队列**: 支持紧急任务插队
-- **并发控制**: 限制同时处理的任务数量
-- **失败重试**: 支持指数退避算法的重试机制
-- **任务统计**: 提供任务执行统计和监控
+### 启动应用
+```bash
+# 启动完整应用（包含UI和后台服务）
+python src/main.py
 
-### 4. 媒体处理器 (MediaProcessor)
+# 仅启动API服务
+python src/api_server.py
 
-具体处理媒体预处理的worker模块：
+# 使用脚本启动
+bash scripts/start_all.sh
+```
 
-- **格式标准化**: 统一转换为系统支持的标准格式
-- **分辨率优化**: 降采样高分辨率内容，减少显存占用
-- **场景检测**: 使用FFmpeg检测视频场景转换点
-- **音频分类**: 使用inaSpeechSegmenter区分音乐、语音、噪音
-- **质量过滤**: 过滤低质量、过短或纯噪音的片段
-- **音频分离**: 从视频中分离音频轨道进行独立处理
-- **文件类型识别**: 自动识别并分类音频内容类型
+### 配置文件说明
+系统使用`config/config.yml`进行配置，主要配置项：
 
-### 5. 向量化引擎 (EmbeddingEngine)
+```yaml
+system:
+  log_level: INFO
+  max_workers: 4
 
-使用Infinity封装各AI模型，提供向量化方法：
+monitoring:
+  directories: []  # 监控目录列表
+  check_interval: 5  # 检查间隔（秒）
 
-- **CLIP模型**: 文本-图像/视频检索
-- **CLAP模型**: 文本-音乐检索  
-- **Whisper模型**: 语音转文本检索
-- **Python-native模式**: 直接内存调用，避免HTTP序列化开销
-- **批处理优化**: 提升GPU利用率
-- **异步支持**: 支持异步向量化处理
-- **健康检查**: 模型状态监控和故障检测
-- **动态模型路由**: 根据内容类型选择最合适的模型
+processing:
+  image:
+    max_resolution: 2048  # 图像最大分辨率
+  video:
+    target_resolution: 720  # 视频目标分辨率
+    max_segment_duration: 5  # 最大片段时长（秒）
 
-### 6. 智能检索引擎 (SmartRetrievalEngine)
-
-负责多模态检索、结果排序：
-
-- **查询类型识别**: 自动识别查询意图（人名、音频、视觉、通用）
-- **动态权重分配**: 根据查询类型调整模型权重
-- **多模态融合**: 融合不同模型的检索结果
-- **相似文件检索**: 基于文件内容的相似性检索
-- **搜索建议**: 提供智能搜索建议和热门搜索
-- **结果丰富**: 为检索结果添加详细元数据
-
-### 7. 人脸管理器 (FaceManager)
-
-管理人脸识别和检索功能：
-
-- **人脸检测**: 使用InsightFace/FaceNet检测人脸
-- **特征提取**: 提取人脸特征向量
-- **人脸匹配**: 基于特征向量的相似度匹配
-- **人员管理**: 管理已知人员信息和别名
-
-### 8. 数据库适配器 (DatabaseAdapter)
-
-统一的数据库访问接口，支持存储层可替换性：
-
-- **统一接口**: 抽象化数据库操作，支持未来数据库切换
-- **表结构管理**: 自动创建和初始化数据库表结构
-- **CRUD操作**: 提供完整的增删改查操作
-- **事务支持**: 确保数据一致性和完整性
-- **索引优化**: 为常用查询创建索引，提升性能
-- **连接管理**: 高效的数据库连接管理
-- **数据迁移**: 支持数据库结构升级和数据迁移
-
-### 9. Milvus适配器 (MilvusAdapter)
-
-Milvus Lite向量数据库适配器：
-
-- **轻量级**: 集成的Milvus Lite，无需独立服务
-- **高效**: 基于Pymilvus库的优化实现
-- **自动管理**: 自动创建和管理向量集合
-- **索引优化**: 支持多种索引类型和参数配置
-- **批量操作**: 高效的批量向量存储和检索
-- **健康检查**: 定期检查连接状态和集合完整性
-- **多集合支持**: 支持不同模态的向量集合（visual, audio_music, audio_speech等）
-
-### 10. 向量存储管理器 (VectorStorageManager)
-
-统一的向量存储管理器，提供高级向量操作：
-
-- **多模态支持**: 支持视觉、音频音乐、音频语音、人脸、文本等向量类型
-- **性能优化**: 包含批量存储、搜索优化、维度自动调整等功能
-- **错误处理**: 完善的重试机制、异常处理和恢复功能
-- **混合检索**: 支持多向量类型的融合搜索
-- **集合管理**: 自动管理向量集合的创建与维护
-- **健康检查**: 向量存储健康状态监控
-
-### 11. 配置管理器 (ConfigManager)
-
-统一配置管理器，支持热重载和环境变量覆盖：
-
-- **配置驱动**: 所有参数可配置，无硬编码
-- **热重载**: 支持配置文件修改后自动重载
-- **环境变量**: 支持环境变量覆盖配置项
-- **配置验证**: 自动验证配置文件正确性
-- **类型转换**: 自动转换配置值类型
-- **嵌套访问**: 支持点号分隔的嵌套配置访问
-- **多类型获取**: 支持get_int、get_float、get_bool、get_list等方法
-
-### 12. 日志系统 (LoggingSystem)
-
-多级别日志系统，支持分类存储和自动轮转：
-
-- **多级别日志**: DEBUG/INFO/WARNING/ERROR/CRITICAL
-- **分类存储**: 主日志、错误日志、性能日志、时间戳日志
-- **自动轮转**: 防止日志文件过大，支持按大小轮转
-- **性能监控**: 专门的性能日志记录器
-- **时间戳日志**: 专门用于调试时间精度问题
-- **格式化**: 统一的日志格式，包含时间戳、级别、模块名
+models:
+  clip_model: openai/clip-vit-base-patch32
+  clap_model: laion/clap-htsat-fused
+  whisper_model: openai/whisper-base
+  clip4clip_model: clip4clip/ViT-B-16
+```
 
 ## 工作流程
 
-### 文件处理流程
-
-1. **文件监控**: FileMonitor实时监控指定目录，检测新文件变化
-2. **任务创建**: 发现新文件时，创建处理任务到TaskManager
-3. **调度处理**: Orchestrator协调整个处理流程
-   - 根据文件类型选择处理策略
-   - 创建预处理任务并通知MediaProcessor
-4. **媒体预处理**: MediaProcessor执行具体预处理
-   - 图像：分辨率调整、格式标准化
-   - 视频：场景检测、音频分离、切片处理
-   - 音频：格式转换、内容分类
-5. **向量化**: EmbeddingEngine将预处理结果转换为向量
-6. **数据存储**: DatabaseAdapter将向量和元数据存储到数据库
-7. **向量存储**: VectorStorageManager将向量存储到Milvus Lite
-8. **状态更新**: 更新任务状态为完成
-
-### 检索流程
-
-1. **查询接收**: SmartRetrievalEngine接收用户查询
-2. **查询分析**: 识别查询类型（文本、图像、音频、人名）
-3. **向量化**: 使用相应的AI模型将查询转换为向量
-4. **相似度搜索**: 在向量数据库中搜索相似向量
-5. **结果融合**: 融合不同模型的检索结果
-6. **结果排序**: 根据相似度分数排序结果
-7. **元数据丰富**: 添加文件详细信息和元数据
-8. **结果返回**: 返回格式化的检索结果
-
-### 人脸检索流程
-
-1. **人脸检测**: FaceManager检测输入图像中的人脸
-2. **特征提取**: 提取人脸特征向量
-3. **人员识别**: 在已知人员中搜索匹配
-4. **结果返回**: 返回匹配的人员信息和相关文件
-
-### 音频处理流程（新增）
-
-1. **音频分类**: MediaProcessor使用inaSpeechSegmenter识别音频类型（music/speech/mixed/unknown）
-2. **动态模型选择**: Orchestrator根据音频类型选择向量化模型
-   - 音乐类型：使用CLAP模型（audio_music集合）
-   - 语音类型：使用Whisper模型进行转录和向量化（audio_speech集合）
-   - 其他类型：默认使用CLAP模型（audio_music集合）
-3. **向量化存储**: EmbeddingEngine将向量存储到对应Milvus集合
-
-### 视频处理流程（优化）
-
-1. **视频帧处理**: MediaProcessor将视频切片为≤5秒的片段，提取关键帧
-2. **帧向量化**: Orchestrator调用EmbeddingEngine的embed_image方法处理视频帧
-3. **音频分离**: 从视频中分离音频并按照音频处理流程处理
-
-## 数据库设计
-
-### 核心表结构
-
-| 表名 | 主要字段 | 用途 |
-|------|---------|------|
-| files | id, file_path, file_type, file_size, file_hash, created_at, modified_at, status | 文件基础信息 |
-| tasks | id, file_id, task_type, status, progress, error_message, created_at, updated_at | 处理任务信息 |
-| media_segments | id, file_id, segment_type, segment_index, start_time_ms, end_time_ms, data_path | 媒体片段信息 |
-| vectors | id, file_id, task_id, segment_id, vector_data, model_name, vector_type | 向量数据 |
-| video_segments | segment_id, file_uuid, segment_index, start_time, end_time, duration | 视频片段信息 |
-| file_relationships | id, source_file_id, derived_file_id, relationship_type, metadata | 文件关系信息 |
-| persons | id, name, aliases, description | 人员信息 |
-| file_faces | id, file_id, person_id, timestamp, confidence, bbox | 文件人脸信息 |
-
-## 依赖管理
-
-项目依赖通过requirements.txt管理：
-
-### 核心依赖
-- **AI框架**: torch, torchvision, transformers, infinity-emb[all]
-- **异步处理**: asyncio
-- **数据库**: sqlalchemy, pymilvus, faiss-cpu
-- **Web框架**: fastapi, uvicorn
-- **媒体处理**: pillow, opencv-python, librosa, soundfile, pydub, ffmpeg-python
-- **AI模型**: openai-whisper, inaspeechsegmenter, facenet-pytorch, insightface, sentence-transformers
-- **系统工具**: watchdog, psutil, pyyaml
-- **配置管理**: pydantic
-- **GUI**: PySide6 (可选)
-
-### 开发和测试依赖
-- **测试框架**: pytest, pytest-asyncio, pytest-cov
-- **代码质量**: black, mypy, flake8
-- **验证工具**: validate_tests.py - 测试文件语法验证脚本
-
-## 启动和运行
-
-### 环境配置
-
-```bash
-# 创建虚拟环境
-python3 -m venv venv
-source venv/bin/activate  # Linux/macOS
-# 或 venv\Scripts\activate  # Windows
-
-# 安装依赖
-pip install -r requirements.txt
-
-# 或使用国内镜像源
-pip install -r requirements.txt -i https://pypi.tuna.tsinghua.edu.cn/simple
+### 1. 文件处理与向量化流程
+```
+文件监控 → 任务创建 → 媒体预处理 → 向量化 → 存储
+    │           │           │          │        │
+ (Watchdog) (TaskManager) (MediaProcessor) (EmbeddingEngine) (VectorStore)
 ```
 
-### 启动服务
+**详细步骤**：
+1. **文件监控**: Watchdog实时监控配置目录，检测新文件
+2. **任务创建**: TaskManager创建处理任务，跟踪进度状态
+3. **媒体预处理**: 
+   - 图像：分辨率调整，格式转换
+   - 视频：场景检测切片，音频分离
+   - 音频：格式转换，内容分类
+4. **向量化**: EmbeddingEngine调用相应模型生成向量
+5. **存储**: VectorStore保存向量，DatabaseManager保存元数据
 
-```bash
-# 启动主应用
-python src/main.py
-
-# 运行基础测试
-python -c "
-import sys
-sys.path.insert(0, 'src')
-from src.core.config_manager import get_config_manager
-from src.core.logging_config import setup_logging
-from src.common.storage.database_adapter import DatabaseAdapter
-
-setup_logging('INFO')
-config_manager = get_config_manager()
-db_adapter = DatabaseAdapter()
-print('✓ 系统初始化成功')
-"
-
-# 验证测试文件语法
-python3 validate_tests.py
-
-# 运行完整测试套件
-pytest tests/ -v --tb=short
-
-# 生成覆盖率报告
-pytest tests/ --cov=src --cov-report=html
+### 2. 检索流程
+```
+用户查询 → 查询向量化 → 向量检索 → 结果融合 → 返回结果
+    │           │           │          │          │
+ (UI/API) (EmbeddingEngine) (VectorStore) (SearchEngine) (UI/API)
 ```
 
-### 服务端口配置
+**详细步骤**：
+1. **用户查询**: 接收文本、图像或音频查询
+2. **查询向量化**: 使用相应模型将查询转换为向量
+3. **向量检索**: 在Milvus Lite中执行相似度搜索
+4. **结果融合**: SearchEngine融合多模态结果，排序
+5. **返回结果**: 返回包含时间戳、相似度分数的结果
 
-- **主应用**: 通过配置文件配置
-- **Milvus Lite数据库**: 无需单独端口，集成在代码中
-- **Infinity服务**: 
-  - CLIP: 7997
-  - CLAP: 7998  
-  - Whisper: 7999
+## 关键组件实现状态
 
-## 开发实践
+### 已实现功能
+- ✅ **基础架构**: 主应用框架、配置管理、日志系统
+- ✅ **向量化引擎**: Infinity引擎集成、基础模型调用
+- ✅ **存储系统**: SQLite元数据管理、Milvus Lite向量存储
+- ✅ **任务管理**: 基础任务跟踪和状态管理
+- ✅ **API服务**: FastAPI基础接口
 
-### 代码规范
+### 待完善功能
+- 🔄 **文件监控**: Watchdog集成需要完善
+- 🔄 **视频处理**: CLIP4Clip视频片段级向量化
+- 🔄 **UI界面**: PySide6用户界面需要完善
+- 🔄 **硬件自适应**: 自动硬件检测和模型选择
 
-- 使用类型注解
-- 遵循 PEP 8 代码风格
-- 使用 black 进行代码格式化
-- 使用 mypy 进行类型检查
-- 使用 flake8 进行代码质量检查
+### 性能要求
+- **检索响应**: ≤2秒返回前20个结果
+- **视频定位精度**: ±5秒（CLIP4Clip片段级）
+- **并发处理**: 支持4+个并发任务
+- **内存使用**: 模型加载后≤4GB内存占用
 
-### 测试策略
+## 开发指南
 
-- 单元测试使用 pytest
-- 异步测试支持 (pytest-asyncio)
-- 覆盖率报告
-- 集成测试框架
-- Mock技术隔离外部依赖
-- 测试文件语法验证 (validate_tests.py)
+### 添加新功能
+1. **确定需求**: 参考`docs/requirements.md`需求文档
+2. **设计接口**: 保持模块化，定义清晰接口
+3. **实现功能**: 遵循现有代码风格和规范
+4. **编写测试**: 添加单元测试和集成测试
+5. **更新文档**: 更新相关文档和示例
 
-### 重要测试文件
+### 调试技巧
+```bash
+# 启用调试日志
+python src/main.py --log-level DEBUG
 
-| 测试文件 | 测试内容 | 行数 |
-|---------|---------|------|
-| test_config_manager.py | 配置管理器测试 | 175行 |
-| test_timestamp_accuracy.py | 时间戳精度测试 | 209行 |
-| test_multimodal_fusion.py | 多模态融合测试 | 287行 |
-| test_database_architecture.py | 数据库架构测试 | 316行 |
-| test_error_handling.py | 错误处理测试 | 261行 |
-| test_vector_storage_manager.py | 向量存储管理器测试 | 264行 |
-| test_task_manager.py | 任务管理器测试 | 265行 |
-| test_api_endpoints.py | API端点测试 | 246行 |
-| test_system_integration.py | 系统集成测试 | 260行 |
-| test_orchestrator.py | 处理调度器测试 | 16个测试用例 |
+# 运行特定测试
+pytest tests/test_task_manager.py -v
 
-## 部署方案
+# 检查配置
+python -c "from src.core.config_manager import ConfigManager; cm = ConfigManager('config/config.yml'); print(cm.config)"
+```
 
-### 国内镜像优化部署
+### 性能优化
+- **批量处理**: 使用BatchProcessor进行批量向量化
+- **缓存策略**: 使用CacheManager缓存常用数据
+- **异步处理**: 所有I/O操作使用异步处理
+- **资源管理**: 监控GPU/CPU使用，动态调整批处理大小
 
-项目支持国内镜像优化部署：
-- 使用 https://pypi.tuna.tsinghua.edu.cn/simple 作为PyPI镜像
-- 使用 https://hf-mirror.com 作为HuggingFace镜像
-- 使用 https://kkgithub.com/ 作为GitHub镜像
+## 部署说明
 
-### 离线部署
+### 桌面应用打包
+```bash
+# 使用Nuitka打包（跨平台）
+python -m nuitka --standalone --onefile src/main.py
 
-项目支持完整的离线部署：
-- 离线资源下载脚本（`scripts/download_all_resources.sh`）
-- 一键部署脚本（`scripts/install.sh`）
-- 预下载模型文件和依赖包
-- Milvus Lite集成在代码中，无需单独二进制文件
+# 使用PyInstaller打包
+pyinstaller --onefile --windowed src/main.py
+```
 
-### 绿色安装部署
+### 模型部署
+```bash
+# 下载所有AI模型
+python scripts/download_models_only.py
 
-项目支持绿色安装部署：
-- 所有依赖和模型可离线下载
-- 无需网络连接即可完成部署
-- 支持断点续传和增量下载
+# 国内用户使用镜像
+export HF_ENDPOINT=https://hf-mirror.com
+export HF_HUB_ENABLE_HF_TRANSFER=1
+```
 
-## 硬件自适应
+### 数据备份
+```bash
+# 备份数据库
+cp data/database/msearch.db backup/msearch_$(date +%Y%m%d).db
 
-系统根据硬件环境自动选择最优模型：
-- CUDA环境：高性能模型（需要NVIDIA GPU和CUDA支持）
-- OpenVINO环境：中等性能模型（适用于Intel硬件）
-- CPU环境：基础性能模型（资源占用较低）
+# 备份配置
+cp config/config.yml backup/config_$(date +%Y%m%d).yml
+```
 
-## 项目完成状态
+## 故障排除
 
-### 已完成的核心功能
+### 常见问题
+1. **模型加载失败**
+   - 检查网络连接
+   - 验证模型路径权限
+   - 使用国内镜像源
 
-经过严格的架构重构和测试验证，项目已完成以下核心功能：
+2. **内存不足**
+   - 降低批处理大小
+   - 使用轻量级模型
+   - 增加系统内存
 
-1. **✅ 微服务架构重构**
-   - 共享组件层：易于拆分的向量化引擎、存储抽象层、文件关系管理
-   - 文件处理服务：独立的文件监控、调度、任务管理、媒体处理、手动操作
-   - 检索服务：独立的智能检索引擎、人脸管理器
-   - 用户界面层：为未来UI扩展预留接口
+3. **GPU相关错误**
+   - 检查CUDA驱动版本
+   - 验证GPU内存是否充足
+   - 降级到CPU模式
 
-2. **✅ 异步处理架构**
-   - 基于asyncio的高性能异步处理
-   - 任务状态管理和持久化
-   - 错误恢复和重试机制
-   - 资源协调和负载均衡
+### 日志分析
+```bash
+# 查看错误日志
+tail -f logs/error.log
 
-3. **✅ 配置驱动设计**
-   - 统一配置管理器实现
-   - 环境变量覆盖机制
-   - 配置验证和热重载
-   - 多环境配置支持
+# 查看性能日志
+tail -f logs/performance.log
 
-4. **✅ 数据库架构优化**
-   - 统一数据库适配器
-   - SQLite数据库表结构自动创建
-   - Milvus向量数据库适配器
-   - 索引优化，提升查询性能
+# 搜索特定错误
+grep -r "ERROR" logs/
+```
 
-5. **✅ 向量存储优化**
-   - MilvusAdapter，支持Milvus Lite向量数据库
-   - VectorStorageManager提供高级向量操作
-   - 性能优化的批量存储和检索功能
-   - 统一的向量类型管理和集合映射
+## 扩展开发
 
-6. **✅ AI模型集成**
-   - CLIP、CLAP、Whisper模型集成
-   - Infinity Python-native模式
-   - 人脸识别模型集成 (FaceNet/InsightFace)
-   - 批处理优化和异步支持
-   - 健康检查和故障检测
+### 添加新模型
+1. 在`EmbeddingEngine`中添加模型调用接口
+2. 更新配置管理器支持新模型配置
+3. 添加对应的测试用例
+4. 更新文档说明
 
-7. **✅ 测试质量保证**
-   - 131个测试通过，覆盖所有核心功能
-   - 核心组件初始化测试通过
-   - 配置管理和向量存储管理器测试
-   - 多模态检索和错误处理测试
-   - 基础架构验证测试
-   - pytest测试框架集成
+### 添加新文件类型
+1. 在`FileTypeDetector`中添加类型识别
+2. 在`MediaProcessor`中添加相应处理逻辑
+3. 更新数据库schema支持新类型
+4. 测试完整处理流程
 
-## 常见问题解决
+### 插件系统（未来扩展）
+- 支持动态加载功能插件
+- 插件生命周期管理
+- 插件间通信机制
+- 插件配置管理
 
-### 1. ImportError: cannot import name 'MilvusAdapter'
+## 版本信息
 
-**问题**: MilvusAdapter类导出问题
-**解决**: 使用别名 `MilvusAdapter = VectorStorageAdapter`
+### 当前版本
+- **架构版本**: 2.3（简化单体架构）
+- **Python版本**: 3.8+
+- **核心模型**: CLIP、CLAP、Whisper、CLIP4Clip
+- **数据库**: SQLite + Milvus Lite
 
-### 2. ImportError: cannot import name 'FileNotFoundError'
+### 更新历史
+- **2026-01-04**: 简化架构设计，聚焦核心功能
+- **2026-01-04**: 更新项目结构，优化模块划分
+- **2025-01-04**: 初始版本，微服务架构
 
-**问题**: 缺少自定义异常类
-**解决**: 在 `src/utils/exceptions.py` 中添加缺失的异常类定义
+## 贡献指南
 
-### 3. Test failures due to interface mismatches
+请参考`docs/CONTRIBUTING.md`了解详细的贡献指南，包括：
+- 代码提交规范
+- 测试要求
+- 文档更新
+- 问题反馈流程
 
-**问题**: 测试代码与实际组件接口不匹配
-**解决**: 
-- 修复mock配置管理器的返回值结构
-- 使用正确的模块路径进行patch
-- 更新断言以匹配实际API
+## 许可证
 
-### 4. ImportError: attempted relative import beyond top-level package
-
-**问题**: 相对导入路径错误
-**解决**: 使用绝对导入路径如 `from src.api.app import create_app`
-
-### 5. AttributeError: module 'api' has no attribute 'app'
-
-**问题**: mock路径错误
-**解决**: 使用 `patch('src.api.app.get_config_manager', ...)` 而不是 `patch('api.app.get_config_manager', ...)`
-
-### 6. 视频向量化错误
-
-**问题**: 调度器中使用了不存在的 `embed_video_frames` 方法
-**解决**: 使用 `embed_image` 方法处理视频帧，因为视频帧本质上是图像
-
-### 7. 音频处理优化
-
-**问题**: 音频处理未根据类型动态选择模型
-**解决**: 媒体处理器识别音频类型（music/speech），调度器根据类型选择CLAP或Whisper模型
-
-### 8. 文件类型大小写敏感问题
-
-**问题**: 大写扩展名（如.MP4）无法正确识别
-**解决**: 在调度器中将文件类型转换为小写再进行比较
+本项目采用MIT许可证，详见LICENSE文件。
 
 ---
-
-*项目状态: 单元测试补全完成，核心功能验证通过 - 最后更新: 2025-12-31*
+*最后更新: 2026-01-04*
+*基于实际项目状态和分析优化的上下文文档*

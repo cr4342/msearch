@@ -1,0 +1,94 @@
+system:
+  log_level: INFO
+  max_workers: 4
+  health_check_interval: 30  # 健康检查间隔（秒）
+
+monitoring:
+  directories:
+    - path: /path/to/media
+      priority: 1
+      recursive: true
+  check_interval: 5  # 秒
+  debounce_delay: 500  # 毫秒，防抖延迟
+
+processing:
+  image:
+    max_resolution: 2048
+    max_size_mb: 10
+    supported_formats: ['jpg', 'jpeg', 'png', 'webp']
+  video:
+    target_resolution: 720
+    target_fps: 8
+    max_segment_duration: 5
+    scene_threshold: 0.15
+    supported_formats: ['mp4', 'avi', 'mov', 'mkv']
+  audio:
+    sample_rate: 16000
+    channels: 1
+    min_music_duration: 30
+    min_speech_duration: 3
+    supported_formats: ['mp3', 'wav', 'flac', 'aac']
+
+models:
+  clip_model: openai/clip-vit-base-patch32
+  clap_model: laion/clap-htsat-fused
+  whisper_model: openai/whisper-base
+  facenet_model: facenet-pytorch
+  model_cache_dir: data/models
+  enable_model_warmup: true
+
+database:
+  sqlite_path: data/database/msearch.db
+  milvus_lite_path: data/database/milvus_lite.db  # 确保以.db结尾
+  vector_index_type: IVF_FLAT
+  vector_index_params:
+    nlist: 128
+  vector_metric_type: IP
+
+retry:
+  initial_delay: 1  # 初始重试间隔（秒）
+  multiplier: 2  # 重试倍数
+  max_attempts: 5  # 最大重试次数
+  task_specific:
+    preprocessing:
+      max_attempts: 3
+      initial_delay: 0.5
+    vectorization:
+      max_attempts: 5
+      initial_delay: 1
+    storage:
+      max_attempts: 3
+      initial_delay: 0.5
+
+logging:
+  level: INFO
+  format: '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+  rotation:
+    max_size_mb: 100
+    backup_count: 10
+  handlers:
+    console:
+      enabled: true
+    file:
+      enabled: true
+      path: logs/msearch.log
+    error_file:
+      enabled: true
+      path: logs/error.log
+      level: ERROR
+    performance_file:
+      enabled: true
+      path: logs/performance.log
+      level: INFO
+    timestamp_file:
+      enabled: true
+      path: logs/timestamp.log
+      level: DEBUG
+
+api:
+  host: 127.0.0.1
+  port: 8000
+  enable_cors: true
+  rate_limit:
+    enabled: true
+    requests_per_minute: 60

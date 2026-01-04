@@ -1,30 +1,25 @@
 #!/usr/bin/env python3
 """
 msearch API 服务启动脚本
+根据新的简化架构，API功能将集成到主应用中
 """
-
-import uvicorn
 import sys
+import logging
 from pathlib import Path
 
+# 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.api.app import app
-from src.core.config_manager import get_config_manager
+# 简单的API服务实现
+def start_api_server():
+    """启动API服务"""
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger(__name__)
+    
+    logger.info("API服务功能已集成到主应用中")
+    logger.info("请直接运行 main.py 启动完整服务")
+
 
 if __name__ == "__main__":
-    config_manager = get_config_manager()
-    host = config_manager.get("api.host", "0.0.0.0")
-    port = config_manager.get_int("api.port", 8000)
-    log_level = config_manager.get("api.log_level", "info")
-    reload = config_manager.get_bool("api.reload", False)
-    
-    uvicorn.run(
-        app,
-        host=host,
-        port=port,
-        log_level=log_level,
-        reload=reload,
-        access_log=True
-    )
+    start_api_server()

@@ -2,187 +2,120 @@
 
 ## 1. 项目概述
 
-msearch 是一个多模态检索系统，支持文本、图像、视频、音频四种模态的精准检索。系统采用专业化多模型架构，使用 michaelfeil/infinity 作为高吞吐量、低延迟的多模型服务引擎。
+msearch 是一款跨平台的多模态检索系统，采用单体架构设计，专注于单机桌面应用场景。系统使用 michaelfeil/infinity 作为多模型服务引擎，支持文本、图像、视频、音频四种模态的精准检索。
 
 ### 1.1 核心特性
 
-- **多模态检索**: 支持文本、图像、视频、音频的跨模态检索
-- **高性能推理**: 使用 Infinity 引擎实现毫秒级向量生成
-- **精确时间定位**: 视频检索支持 ±2 秒精度的时间戳定位
-- **智能预处理**: 自动降采样、场景检测、音频分离
-- **本地部署**: 完全本地化部署，数据隐私可控
+- **智能检索**: 无需手动整理、无需添加标签即可实现智能检索
+- **跨模态搜索**: 支持用任意模态（文本、图像、音频）检索其他模态内容
+- **高精度定位**: 支持毫秒级时间戳精确定位，视频时序定位精度±5秒
+- **零配置**: 素材无需整理、无需标签
+- **高性能本地推理**: 利用Infinity Python-native模式实现高效向量化
+- **单体架构**: 简洁清晰的模块划分，易于理解和维护
 
 ### 1.2 技术栈
 
-| 技术层级 | 技术选择 | 版本要求 |
-|---------|---------|---------|
-| 编程语言 | Python | 3.9-3.12 |
-| 用户界面 | PySide6 | ≥6.5.0 |
-| API框架 | FastAPI | ≥0.104.0 |
-| AI推理引擎 | michaelfeil/infinity | ≥0.0.34 |
-| 向量数据库 | Milvus Lite | ≥2.3.0 |
-| 元数据库 | SQLite | 3.x |
-| 依赖管理 | uv (astral-sh/uv) | ≥0.1.0 |
-| 应用打包 | Nuitka | ≥1.8.0 |
+| 技术层级 | 技术选择 | 核心特性 | 选型理由 |
+|---------|---------|---------|---------|
+| **任务管理** | **persist-queue + SQLite** | 线程安全、磁盘持久化、基于SQLite的队列 | 防止任务丢失，自动持久化，支持故障恢复 |
+| **异步处理** | **asyncio** | 基于asyncio的高性能异步处理 | 高并发，低延迟 |
+| **AI推理层** | **michaelfeil/infinity** | 多模型服务引擎，高吞吐量低延迟 | 零配置部署，GPU自动调度 |
+| **向量存储层** | **Milvus Lite** | 高性能本地向量数据库，CPU/GPU加速，支持分布式扩展 | 单机运行，无需额外服务，低延迟，支持更多向量索引类型 |
+| **元数据层** | **SQLite** | 轻量级关系数据库，零配置，文件级便携 | 零配置，文件级数据便携性 |
+| **配置管理** | **YAML + 环境变量** | 配置驱动设计，支持热重载 | 灵活配置，动态调整 |
+| **日志系统** | **Python logging** | 多级别日志，自动轮转，分类存储 | 完善的日志管理 |
+| **多模态模型** | **CLIP/CLIP4Clip/CLAP/Whisper** | 专业化模型架构，针对不同模态优化 | 高精度多模态理解 |
+| **媒体处理** | **FFmpeg + OpenCV + Librosa** | 专业级预处理，场景检测+智能切片 | 专业级媒体处理能力 |
+| **文件监控** | **Watchdog** | 实时增量处理，跨平台文件系统事件 | 实时文件监控 |
+| **文件扫描** | **os.walk + pathlib** | 递归目录遍历，跨平台路径处理 | 初始文件扫描 |
+| **测试框架** | **pytest + pytest-asyncio** | 异步测试支持，覆盖率报告 | 完整的测试体系 |
 
 ## 2. 项目目录结构
 
 ```
 msearch/
-├── .git/                           # Git版本控制
-├── .github/                        # GitHub配置
-│   └── workflows/                  # CI/CD工作流
-│       └── tests.yml              # 自动化测试配置
-├── .kiro/                         # Kiro IDE配置
-│   ├── settings/                  # IDE设置
-│   ├── specs/                     # 项目规格文档
-│   └── steering/                  # 开发指导规则
-├── config/                        # 配置文件目录
-│   ├── config.yml                # 主配置文件
-│   ├── config_dev.yml            # 开发环境配置
-│   ├── config_prod.yml           # 生产环境配置
-│   ├── models.yml                # 模型配置
-│   ├── alerts.yml                # 告警规则配置
-│   └── milvus_config.yaml        # Milvus Lite配置
-├── data/                          # 数据目录
-│   ├── database/                 # SQLite数据库
-│   │   └── msearch.db           # 主数据库文件
-│   ├── models/                   # AI模型文件
-│   │   ├── clip/                # CLIP模型
-│   │   ├── clap/                # CLAP模型
-│   │   ├── whisper/             # Whisper模型
-│   │   └── .infinity_cache/     # Infinity缓存
-│   ├── milvus/                   # Milvus Lite向量数据库
-│   ├── temp/                     # 临时文件
-│   │   ├── audio/               # 临时音频文件
-│   │   ├── video/               # 临时视频文件
-│   │   └── images/              # 临时图像文件
-│   ├── backups/                  # 备份文件
-│   └── checkpoints/              # 任务检查点
-├── docs/                           # 文档目录
-│   ├── architecture.md           # 架构文档（本文件）
-│   ├── api_documentation.md      # API文档
-│   ├── technical_implementation.md # 技术实现指南
-│   ├── test_strategy.md          # 测试策略文档
-│   └── user_manual.md            # 用户手册
-├── examples/                      # 示例代码
-│   ├── media_preprocessing_example.py  # 媒体预处理示例
-│   └── time_accurate_retrieval_demo.py # 时间精确检索示例
-├── logs/                          # 日志目录
-│   ├── msearch.log               # 主日志文件
-│   ├── error.log                 # 错误日志
-│   └── performance.log           # 性能日志
-├── data/temp/                   # 临时目录（不纳入Git）
-│   └── offline/                 # 离线资源缓存
-│       └── models/              # 离线模型缓存
-├── scripts/                       # 脚本目录
-│   ├── install_auto.sh           # 自动安装脚本
-│   ├── install_offline.sh        # 离线安装脚本
-│   ├── download_all_resources.sh # 下载所有资源
-│   ├── setup_models.py           # 模型设置脚本
-│   └── # Milvus Lite无需单独启动脚本
-
-│   ├── build_with_nuitka.sh      # Nuitka打包脚本
-│   ├── create_distribution.sh    # 创建分发包
-│   ├── maintain_database.py      # 数据库维护
-│   ├── backup_milvus.py          # Milvus Lite备份
-│   ├── verify_installation.py    # 安装验证
-│   └── generate_test_report.py   # 测试报告生成
-├── src/                           # 源代码目录
-│   ├── __init__.py               # 包初始化
-│   ├── main.py                   # 主入口文件
-│   ├── api/                      # API服务层
-│   │   ├── __init__.py
-│   │   ├── app.py               # FastAPI应用实例
-│   │   ├── routes/              # API路由
-│   │   │   ├── __init__.py
-│   │   │   ├── search.py       # 检索API
-│   │   │   ├── config.py       # 配置管理API
-│   │   │   ├── tasks.py        # 任务管理API
-│   │   │   └── status.py       # 系统状态API
-│   │   ├── models/              # Pydantic数据模型
-│   │   │   ├── __init__.py
-│   │   │   ├── request.py      # 请求模型
-│   │   │   └── response.py     # 响应模型
-│   │   └── middleware/          # 中间件
-│   │       ├── __init__.py
-│   │       ├── cors.py         # CORS中间件
-│   │       ├── error_handler.py # 错误处理
-│   │       └── logging.py      # 日志中间件
-│   ├── business/                 # 业务逻辑层
-│   │   ├── __init__.py
-│   │   ├── processing_orchestrator.py  # 调度器
-│   │   ├── task_manager.py             # 任务管理器
-│   │   ├── smart_retrieval.py          # 智能检索引擎
-│   │   ├── face_manager.py             # 人脸管理器
-│   │   └── embedding_engine.py         # 向量化引擎
-│   ├── processors/              # 媒体处理器
-│   │   ├── __init__.py
-│   │   ├── base_processor.py   # 处理器基类
-│   │   ├── image_processor.py  # 图像处理器
-│   │   ├── video_processor.py  # 视频处理器
-│   │   └── audio_processor.py  # 音频处理器
-│   ├── storage/                 # 数据存储层
-│   │   ├── __init__.py
-│   │   ├── database_manager.py # SQLite数据库管理器
-│   │   ├── vector_store.py     # Milvus Lite向量存储器
-│   │   └── timestamp_database.py # 时间戳数据库
-│   ├── core/                     # 核心组件
-│   │   ├── __init__.py
-│   │   ├── config_manager.py    # 配置管理器
-│   │   ├── logger.py            # 日志系统
-│   │   ├── file_monitor.py      # 文件监控器
-│   │   └── exceptions.py        # 自定义异常
-│   └── gui/                     # 用户界面（PySide6）
-│       ├── __init__.py
-│       ├── main_window.py       # 主窗口
-│       ├── search_widget.py     # 检索界面
-│       ├── config_widget.py     # 配置界面
-│       ├── progress_widget.py   # 进度监控界面
-│       └── resources/           # UI资源
-│           ├── icons/
-│           └── styles/
-├── tests/                        # 测试目录
+├── .gitignore
+├── IFLOW.md
+├── README.md
+├── requirements.txt
+├── requirements-test.txt
+├── .git/
+├── .kiro/
+│   └── specs/
+│       └── multimodal-search-system/
+│           ├── design.md
+│           ├── requirements.md
+│           └── tasks.md
+├── config/
+│   └── config.yml          # 主配置文件
+├── data/
+│   ├── database/           # 数据库文件
+│   ├── logs/               # 日志文件
+│   └── models/             # AI模型文件
+├── docs/
+│   ├── api_documentation.md
+│   ├── design.md
+│   ├── development_plan.md
+│   ├── requirements.md
+│   ├── technical_implementation.md
+│   ├── test_strategy.md
+│   └── user_manual.md
+├── examples/
+│   ├── media_preprocessing_example.py
+│   └── time_accurate_retrieval_demo.py
+├── scripts/
+│   ├── download_all_resources.sh
+│   ├── install_auto.sh
+│   └── install_offline.sh
+├── src/                    # 源代码目录
 │   ├── __init__.py
-│   ├── unit/                    # 单元测试
+│   ├── main.py             # 应用入口
+│   │
+│   ├── core/               # 3大核心块
 │   │   ├── __init__.py
-│   │   ├── test_config_manager.py
-│   │   ├── test_database_manager.py
-│   │   ├── test_vector_store.py
-│   │   └── test_embedding_engine.py
-│   ├── integration/             # 集成测试
+│   │   ├── task_manager.py        # 任务管理器（用户任务进度展示和手动管理）
+│   │   ├── embedding_engine.py    # 向量化引擎（直接集成Infinity和CLIP4Clip）
+│   │   └── vector_store.py        # 向量存储（专注Milvus Lite）
+│   │
+│   ├── components/         # 辅助组件
 │   │   ├── __init__.py
-│   │   ├── test_file_processing_flow.py
-│   │   └── test_search_flow.py
-│   ├── performance/             # 性能测试
+│   │   ├── file_scanner.py        # 文件扫描（初始扫描）
+│   │   ├── file_monitor.py        # 文件监控（实时监控）
+│   │   ├── media_processor.py     # 媒体处理（视频切片、音频提取等）
+│   │   ├── database_manager.py   # 数据库管理（SQLite）
+│   │   ├── config_manager.py      # 配置管理
+│   │   ├── config_generator.py    # 配置生成器（硬件自适应）
+│   │   ├── hardware_detector.py   # 硬件检测器
+│   │   ├── model_selector.py      # 模型选择器
+│   │   └── search_engine.py       # 检索引擎
+│   │
+│   ├── ui/                 # 用户界面
 │   │   ├── __init__.py
-│   │   ├── test_processing_performance.py
-│   │   └── test_search_performance.py
-│   ├── accuracy/                # 精度测试
-│   │   ├── __init__.py
-│   │   └── test_timestamp_accuracy.py
-│   ├── real_model/              # 真实模型测试
-│   │   ├── __init__.py
-│   │   └── test_real_model_inference.py
-│   ├── e2e/                     # 端到端测试
-│   │   ├── __init__.py
-│   │   └── test_real_data_workflow.py
-│   ├── testdata/                # 测试数据
-│   │   ├── images/
-│   │   ├── videos/
-│   │   ├── audios/
-│   │   └── test_config.yml
-│   └── output/                  # 测试输出
-│       └── test_report.json
-├── deploy_test/                  # 部署测试（不纳入Git）
-├── .gitignore                    # Git忽略文件
-├── .python-version               # Python版本
-├── pytest.ini                    # pytest配置
-├── requirements.txt              # 依赖列表
-├── requirements-test.txt         # 测试依赖
-├── pyproject.toml               # 项目配置（uv）
-├── README.md                     # 项目说明
-└── LICENSE                       # 许可证
+│   │   ├── main_window.py
+│   │   ├── search_widget.py
+│   │   ├── config_widget.py
+│   │   ├── task_control_widget.py # 任务管理控制面板
+│   │   └── setup_wizard.py        # 初次启动设置向导
+│
+├── tests/                   # 测试目录
+│   ├── __init__.py
+│   ├── conftest.py
+│   ├── test_task_manager.py
+│   ├── test_embedding_engine.py
+│   ├── test_vector_store.py
+│   ├── test_media_processor.py
+│   ├── test_config_manager.py
+│   ├── test_database_manager.py
+│   ├── test_timestamp_accuracy.py
+│   └── test_multimodal_fusion.py
+├── logs/                    # 日志目录（项目根目录）
+│   ├── msearch.log
+│   ├── error.log
+│   ├── performance.log
+│   └── timestamp.log
+├── temp/                   # 临时文件目录
+├── testdata/               # 测试数据
+└── venv/                   # 虚拟环境
 ```
 
 ## 3. 开发优先级说明
