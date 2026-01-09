@@ -2,7 +2,7 @@
 
 ## 1. 概述
 
-本文档描述 msearch 多模态检索系统的简化技术架构。系统采用单体架构设计，专注于单机桌面应用场景，使用 michaelfeil/infinity 作为多模型服务引擎，支持文本、图像、视频、音频四种模态的精准检索。
+本文档描述 msearch 多模态检索系统的简化技术架构。系统采用单体架构设计，专注于单机桌面应用场景，通过Python直接集成模型，支持文本、图像、视频、音频四种模态的精准检索。
 
 ### 1.1 项目目标
 
@@ -10,7 +10,7 @@
 - **跨模态搜索**: 支持用任意模态（文本、图像、音频）检索其他模态内容
 - **高精度定位**: 支持毫秒级时间戳精确定位，时间戳精度±2秒要求
 - **零配置**: 素材无需整理、无需标签
-- **高性能本地推理**: 利用Infinity Python-native模式实现高效向量化
+- **高性能本地推理**: 利用Python实现高效向量化
 - **单体架构**: 简洁清晰的模块划分，易于理解和维护
 
 ### 1.2 系统工作流程
@@ -43,12 +43,12 @@
 |---------|---------|---------|---------|
 | **任务管理** | **persist-queue + SQLite** | 线程安全、磁盘持久化、基于SQLite的队列 | 防止任务丢失，自动持久化，支持故障恢复 |
 | **异步处理** | **asyncio** | 基于asyncio的高性能异步处理 | 高并发，低延迟 |
-| **AI推理层** | **michaelfeil/infinity** | 多模型服务引擎，高吞吐量低延迟 | 零配置部署，GPU自动调度 |
+| **AI推理层** | **Python模型集成** | 直接模型调用，高吞吐量低延迟 | 零配置部署，GPU自动调度 |
 | **向量存储层** | **Milvus Lite** | 高性能本地向量数据库，CPU/GPU加速，支持分布式扩展 | 单机运行，无需额外服务，低延迟，支持更多向量索引类型 |
 | **元数据层** | **SQLite** | 轻量级关系数据库，零配置，文件级便携 | 零配置，文件级数据便携性 |
 | **配置管理** | **YAML + 环境变量** | 配置驱动设计，支持热重载 | 灵活配置，动态调整 |
 | **日志系统** | **Python logging** | 多级别日志，自动轮转，分类存储 | 完善的日志管理 |
-| **多模态模型** | **CLIP/CLIP4Clip/CLAP/Whisper** | 专业化模型架构，针对不同模态优化 | 高精度多模态理解 |
+| **多模态模型** | **apple/mobileclip/vidore/colSmol-500M/vidore/colqwen2.5-v0.2/Whisper** | 专业化模型架构，针对不同模态优化 | 高精度多模态理解 |
 | **媒体处理** | **FFmpeg + OpenCV + Librosa** | 专业级预处理，场景检测+智能切片 | 专业级媒体处理能力 |
 | **文件监控** | **Watchdog** | 实时增量处理，跨平台文件系统事件 | 实时文件监控 |
 | **文件扫描** | **os.walk + pathlib** | 递归目录遍历，跨平台路径处理 | 初始文件扫描 |
@@ -57,73 +57,53 @@
 #### 1.3.2 专业化AI模型架构
 | 模态类型 | 模型选择 | 应用场景 | 技术优势 |
 |---------|---------|---------|---------|
-| **文本-图像** | CLIP | 文本检索图片内容 | 跨模态语义对齐，高精度图像理解 |
-| **文本-视频** | CLIP4Clip | 文本检索视频片段内容 | 片段级时序理解，降低计算和存储开销 |
-| **文本-音频** | CLAP | 文本检索音乐内容 | 专业音频语义理解 |
+| **图像/视频向量化** | apple/mobileclip | 轻量级图像视频向量化 | 适配CPU和低端GPU，资源消耗低 |
+| **图像/视频向量化** | vidore/colSmol-500M | 平衡性能与资源消耗 | 中配硬件的最优选择 |
+| **图像/视频向量化** | vidore/colqwen2.5-v0.2 | 高性能多模态模型 | 高配硬件的最佳选择 |
 | **语音-文本** | Whisper | 语音内容转录检索 | 高精度多语言语音识别 |
 | **音频分类** | inaSpeechSegmenter | 音频内容智能分类 | 精准区分音乐、语音、噪音 |
-| **人脸识别** | FaceNet | 人脸特征提取 | 高精度人脸识别和匹配 |
 | **媒体处理** | FFmpeg | 视频场景检测切片 | 专业级媒体预处理能力 |
 
 #### 1.3.3 模型选择策略
-**CLIP模型（文本-图像检索）**
-- 模型版本：openai/clip-vit-base-patch32（基础版）/ openai/clip-vit-large-patch14-336（高精度版）
-- 核心能力：文本-图像跨模态语义对齐
-- 应用场景：文本查询图片、图像相似度检索、静态图像内容分析
-- 向量维度：512维（base版本）/ 768维（large版本）
-- 集成方式：通过michaelfeil/infinity引擎
+**图像/视频向量化模型选择（硬件自适应）**
 
-**CLIP4Clip模型（文本-视频片段检索）**
-- 模型版本：clip4clip/ViT-B-16（基础版）/ clip4clip/ViT-L-14（高精度版）
-- 核心能力：基于CLIP的视频-文本检索，支持片段级时序理解和定位
-- 应用场景：文本查询视频片段、视频内容语义检索、时序定位
-- 向量维度：512维（base版本）/ 768维（large版本）
-- 集成方式：直接集成到EmbeddingEngine中，不依赖Infinity引擎
-- 性能优势：相比CLIP逐帧向量化，计算时间减少80-90%，向量存储量减少70-80%
-- 时序精度：片段级定位，精度±5秒（相比CLIP逐帧的±2秒有所降低）
-
-**CLAP模型（文本-音频检索）**
-- 模型版本：laion/clap-htsat-fused
-- 核心能力：专业音频-文本语义对齐，针对音乐内容优化
-- 应用场景：音乐风格检索、乐器识别、音频情感分析
+**apple/mobileclip（轻量级模型）**
+- 核心能力：轻量级图像-文本跨模态语义对齐
+- 应用场景：低配硬件环境下的图像/视频向量化
 - 向量维度：512维
-- 集成方式：通过michaelfeil/infinity引擎
+- 集成方式：直接使用Python transformers库调用
+- 硬件要求：适用于CPU和低端GPU，显存占用低
+
+**vidore/colSmol-500M（平衡型模型）**
+- 核心能力：平衡性能与资源消耗的图像/视频向量化
+- 应用场景：中配硬件环境下的图像/视频向量化
+- 向量维度：512维
+- 集成方式：直接使用Python transformers库调用
+- 硬件要求：适用于中端GPU，提供较好的性能与资源平衡
+
+**vidore/colqwen2.5-v0.2（高性能模型）**
+- 核心能力：高性能多模态图像/视频向量化
+- 应用场景：高配硬件环境下的图像/视频向量化
+- 向量维度：512维
+- 集成方式：直接使用Python transformers库调用
+- 硬件要求：适用于高端GPU，提供最佳性能
 
 **Whisper模型（语音-文本转换）**
-- 模型版本：openai/whisper-base/medium/large（根据硬件配置选择）
+- 模型版本：openai/whisper-base（根据硬件配置选择）
 - 核心能力：高精度多语言语音识别
 - 应用场景：语音内容转录、语音语义检索
 - 支持语言：99种语言
-- 集成方式：通过michaelfeil/infinity引擎
-
-**FaceNet模型（人脸识别）**
-- 模型版本：facenet-pytorch
-- 核心能力：人脸特征提取和相似度计算
-- 应用场景：人脸检测、人脸识别、人名检索
-- 识别精度：95%以上
-- 集成方式：独立模块（src/components/facenet_manager.py）
+- 集成方式：直接使用Python transformers库调用
 
 **inaSpeechSegmenter（音频内容分类）**
 - 核心能力：智能音频内容分类，精准区分音乐、语音、噪音
 - 应用场景：音频预处理、处理策略路由
 - 分类准确率：90%以上
-- 集成方式：独立模块（src/components/audio_classifier.py）
+- 集成方式：直接集成到MediaProcessor中
 
-#### 1.3.4 michaelfeil/infinity 引擎优势
-> **重要说明**: 本项目采用 **michaelfeil/infinity** (https://github.com/michaelfeil/infinity) 作为多模型服务引擎。Infinity 是一个专为文本嵌入、重排序模型、CLIP、CLAP 和 ColPali 设计的高吞吐量、低延迟服务引擎。
-
-| 特性 | 技术优势 | 业务价值 |
-|------|---------|---------|
-| **高吞吐量** | 专为嵌入模型优化的REST API | 支持大规模文件批量处理 |
-| **多后端支持** | CUDA/OpenVINO/CPU自适应 | 适配不同硬件环境 |
-| **智能批处理** | 动态批处理优化GPU利用率 | 提升处理效率，降低成本 |
-| **低延迟响应** | 毫秒级向量生成 | 实时检索体验 |
-| **热加载支持** | 模型动态切换无需重启 | 灵活的模型管理 |
-| **Python-native** | 直接Python集成，无需HTTP | 避免通信开销，性能更优 |
-
-#### 1.3.5 技术选型优势
+#### 1.3.4 技术选型优势
 **性能优势**:
-- Infinity引擎的Python-native模式避免HTTP通信开销
+- 直接Python模型集成避免HTTP通信开销
 - Milvus Lite的IVF_FLAT/IVF_SQ8索引算法提供毫秒级检索响应
 - FastAPI的异步处理机制提升系统并发能力
 - 分辨率降采样减少70-80%显存占用
@@ -143,7 +123,6 @@
 **跨平台优势**:
 - PySide6提供原生跨平台UI体验
 - SQLite和Milvus Lite支持Windows/macOS/Linux
-- Infinity引擎自适应硬件环境
 - 统一的数据格式确保跨平台兼容
 - Nuitka支持编译为各平台原生可执行文件
 
@@ -210,12 +189,10 @@ graph TB
     end
     
     subgraph "AI推理层"
-        Infinity[infinity Python-native<br/>CLIP/CLAP/Whisper]
-        CLIP[CLIP 模型]
-        CLAP[CLAP 模型]
+        MobileClip[apple/mobileclip 模型]
+        ColSmol[vidore/colSmol-500M 模型]
+        ColQwen[vidore/colqwen2.5-v0.2 模型]
         Whisper[Whisper 模型]
-        CLIP4Clip[CLIP4Clip 模型]
-        FaceNet[FaceNet 模型]
         InaSpeechSegmenter[inaSpeechSegmenter]
     end
     
@@ -248,12 +225,10 @@ graph TB
     ConfigGenerator --> ConfigManager
     HardwareDetector --> ModelSelector
     
-    EmbeddingEngine --> Infinity
-    EmbeddingEngine --> CLIP4Clip
-    Infinity --> CLIP
-    Infinity --> CLAP
-    Infinity --> Whisper
-    FaceManager --> FaceNet
+    EmbeddingEngine --> MobileClip
+    EmbeddingEngine --> ColSmol
+    EmbeddingEngine --> ColQwen
+    EmbeddingEngine --> Whisper
     MediaProcessor --> InaSpeechSegmenter
     
     DatabaseManager --> MilvusLite
@@ -314,7 +289,7 @@ msearch/
 │   ├── core/               # 3大核心块
 │   │   ├── __init__.py
 │   │   ├── task_manager.py        # 任务管理器（用户任务进度展示和手动管理）
-│   │   ├── embedding_engine.py    # 向量化引擎（直接集成Infinity和CLIP4Clip）
+│   │   ├── embedding_engine.py    # 向量化引擎
 │   │   └── vector_store.py        # 向量存储（专注Milvus Lite）
 │   │
 │   ├── components/         # 辅助组件
@@ -396,11 +371,10 @@ graph TB
     end
     
     subgraph "AI模型层"
-        Infinity[infinity Python-native]
-        CLIP[CLIP模型]
-        CLAP[CLAP模型]
+        MobileClip[apple/mobileclip模型]
+        ColSmol[vidore/colSmol-500M模型]
+        ColQwen[vidore/colqwen2.5-v0.2模型]
         Whisper[Whisper模型]
-        CLIP4Clip[CLIP4Clip模型]
     end
     
     subgraph "数据层"
@@ -420,11 +394,10 @@ graph TB
     
     TaskManager --> DatabaseManager
     
-    EmbeddingEngine --> Infinity
-    EmbeddingEngine --> CLIP4Clip
-    Infinity --> CLIP
-    Infinity --> CLAP
-    Infinity --> Whisper
+    EmbeddingEngine --> MobileClip
+    EmbeddingEngine --> ColSmol
+    EmbeddingEngine --> ColQwen
+    EmbeddingEngine --> Whisper
     
     VectorStore --> MilvusLite
     VectorStore --> DatabaseManager
@@ -586,42 +559,49 @@ scanner:
 
 ### 3.3 核心块2: 向量化引擎 (EmbeddingEngine)
 
-**职责**: 统一管理所有AI模型（CLIP/CLAP/Whisper/CLIP4Clip），提供统一的向量化接口。
+**职责**: 统一管理所有AI模型（apple/mobileclip、vidore/colSmol-500M、vidore/colqwen2.5-v0.2、Whisper），提供统一的向量化接口。
 
 **设计原则**:
 - EmbeddingEngine 是所有模型调用的统一抽象层
-- 直接使用 michaelfeil/infinity 的 Python-native 模式封装 CLIP/CLAP/Whisper 模型
-- 直接使用 CLIP4Clip 模型进行视频片段级向量化和时序定位
-- 不需要单独的 InfinityManager 和 CLIP4ClipManager 类
+- 直接使用 Python 驱动大模型
+- 采用硬件自适应模型选择策略
 - 所有方法返回标准化的向量格式（List[float]）
 - 其他组件只需依赖 EmbeddingEngine，无需关心底层模型实现
 
 **核心功能**:
-1. **统一模型管理**: 直接管理 CLIP/CLAP/Whisper/CLIP4Clip 模型
-2. **向量化处理**: 将媒体内容转换为向量（图像、音频、视频、文本）
-3. **查询向量化**: 将用户查询转换为向量
-4. **批量处理**: 支持批量向量化提升效率
-5. **模型预热**: 支持 infinity 的模型预热以提升首次调用性能
+1. **统一模型管理**: 直接管理图像/视频向量化模型和Whisper模型
+2. **硬件自适应模型选择**: 根据硬件配置自动选择最优模型
+3. **向量化处理**: 将媒体内容转换为向量（图像、视频、文本）
+4. **查询向量化**: 将用户查询转换为向量
+5. **批量处理**: 支持批量向量化提升效率
 6. **多后端支持**: 自动选择最优后端（torch/cuda/openvino）
-7. **视频片段处理**: 使用 CLIP4Clip 进行视频片段级向量化和时序定位
+7. **视频片段处理**: 进行视频片段级向量化和时序定位
 8. **健康检查端点**: 提供HTTP健康检查接口，返回模型加载状态、GPU/CPU使用情况、模型性能指标等信息
 9. **异常处理**: 遵循系统异常处理体系，便于监控和问题定位
+
+**硬件自适应模型选择策略**:
+
+#### 图像/视频向量化模型
+- **低配硬件**: apple/mobileclip（轻量级，适配CPU和低端GPU）
+- **中配硬件**: vidore/colSmol-500M（平衡性能与资源消耗）
+- **高配硬件**: vidore/colqwen2.5-v0.2（高性能多模态模型）
+
+#### 语音转文本模型
+- **通用**: openai/whisper-small
 
 **核心接口**:
 ```python
 class EmbeddingEngine:
     # 文件向量化（统一使用路径作为输入）
     async def embed_image_from_path(self, file_path: str) -> List[float]
-    async def embed_audio_from_path(self, file_path: str) -> List[float]
     
-    # 视频片段向量化（使用 CLIP4Clip）
+    # 视频片段向量化
     async def embed_video_segment(self, file_path: str) -> Tuple[List[float], float]
     async def embed_video_segments_batch(self, file_paths: List[str]) -> List[Tuple[List[float], float]]
     
     # 查询向量化（统一使用路径或文本）
     async def embed_text_query(self, text: str, target_modality: str) -> List[float]
     async def embed_image_from_path(self, file_path: str) -> List[float]
-    async def embed_audio_from_path(self, file_path: str) -> List[float]
     
     # 语音处理
     async def transcribe_audio_from_path(self, file_path: str) -> str
@@ -633,28 +613,35 @@ class EmbeddingEngine:
 **向量化方法映射**:
 | 接口方法 | 输入 | 输出 | 使用模型 | 应用场景 |
 |---------|------|------|---------|---------|
-| `embed_image_from_path(file_path)` | 文件路径 | 512维向量 | CLIP (infinity) | 图像向量化（文件和查询） |
-| `embed_audio_from_path(file_path)` | 文件路径 | 512维向量 | CLAP (infinity) | 音频向量化（文件和查询） |
-| `embed_video_segment(file_path)` | 视频片段文件路径 | (向量, 片段中心时间戳) | CLIP4Clip | 视频片段向量化 |
-| `embed_video_segments_batch(file_paths)` | 视频片段文件路径列表 | [(向量, 片段中心时间戳), ...] | CLIP4Clip | 批量视频片段向量化 |
-| `embed_text_query(text, target_modality)` | 文本字符串、目标模态 | 512维向量 | CLIP/CLAP (infinity) | 文本查询向量化 |
-| `transcribe_audio_from_path(file_path)` | 文件路径 | 文本字符串 | Whisper (infinity) | 语音转录 |
-| `embed_batch(file_paths, modality)` | 文件路径列表、模态 | 批量向量列表 | 多模型 | 批量向量化 |
+| `embed_image_from_path(file_path)` | 文件路径 | 512维向量 | 硬件自适应选择 | 图像向量化（文件和查询） |
+| `embed_video_segment(file_path)` | 视频片段文件路径 | (向量, 片段中心时间戳) | 硬件自适应选择 | 视频片段向量化 |
+| `embed_video_segments_batch(file_paths)` | 视频片段文件路径列表 | [(向量, 片段中心时间戳), ...] | 硬件自适应选择 | 批量视频片段向量化 |
+| `embed_text_query(text, target_modality)` | 文本字符串、目标模态 | 512维向量 | 硬件自适应选择 | 文本查询向量化 |
+| `transcribe_audio_from_path(file_path)` | 文件路径 | 文本字符串 | Whisper | 语音转录 |
+| `embed_batch(file_paths, modality)` | 文件路径列表、模态 | 批量向量列表 | 硬件自适应选择 | 批量向量化 |
 
 **内部实现说明**:
-- **CLIP/CLAP/Whisper**: 直接使用 michaelfeil/infinity 的 Python-native 模式（AsyncEmbeddingEngine），避免 HTTP 通信开销
-- **CLIP4Clip**: 直接使用 CLIP4Clip 模型进行视频片段级向量化和时序定位
+- **图像/视频向量化**: 根据硬件配置自动选择apple/mobileclip、vidore/colSmol-500M或vidore/colqwen2.5-v0.2模型
+- **Whisper**: 直接使用Python驱动Whisper模型进行语音转录
 - **优势**: 统一的模型调用接口，简化依赖关系，便于维护和扩展
 
 ### 3.4 核心块3: 向量存储 (VectorStore)
 
-**职责**: 专注于 Milvus Lite 向量数据库的操作和管理。
+**职责**: 专注于 Milvus Lite 向量数据库的操作和管理，支持智能视频切片的时间定位机制。
 
 **核心功能**:
 1. **向量集合管理**: 创建、删除、检查向量集合
 2. **向量CRUD操作**: 插入、查询、删除向量数据
 3. **相似度检索**: 提供高性能向量相似度检索
 4. **批量操作**: 支持批量向量插入和查询
+5. **时间定位机制**: 支持视频切片的精确时间定位
+6. **向量元数据管理**: 管理向量的原始视频时间戳信息
+
+**时间定位机制**:
+- 视频切片后生成切片文件（如a-segment0.mp4, a-segment1.mp4）
+- 向量化时记录切片的原始视频时间戳
+- 向量存储时设计结合切片重计算时间的机制
+- 检索结果包含精确的时间位置信息
 
 **核心接口**:
 ```python
@@ -672,10 +659,36 @@ class VectorStore:
     # 批量操作
     async def batch_insert(self, collection: str, vectors: List[List[float]], ids: List[str], metadata: List[Dict] = None) -> None
     async def batch_search(self, collection: str, query_vectors: List[List[float]], limit: int) -> List[List[Dict]]
+    
+    # 时间定位相关
+    async def insert_video_vector(self, vector: List[float], video_info: Dict) -> str
+    async def get_vectors_with_timestamps(self, collection: str, query_vector: List[float], limit: int) -> List[Dict]
+    async def calculate_original_timestamp(self, segment_info: Dict) -> float
+    async def get_segment_info(self, segment_id: str) -> Dict
+```
+
+**向量元数据格式**:
+```python
+{
+    "vector_id": "vec-001",
+    "file_id": "file-001",
+    "segment_id": "seg-001",
+    "original_file": "/path/to/a.mp4",
+    "segment_file": "/path/to/a-segment0.mp4",
+    "start_time": 0.0,  # 原始视频中的开始时间（秒）
+    "end_time": 5.0,    # 原始视频中的结束时间（秒）
+    "duration": 5.0,
+    "timestamp": 2.5,   # 关键帧在原始视频中的精确时间戳（秒）
+    "frame_index": 75,  # 关键帧在原始视频中的帧索引
+    "modality": "video",
+    "model_name": "vidore/colqwen2.5-v0.2",
+    "created_at": "2026-01-09T10:00:00"
+}
 ```
 
 **集成组件**:
 - **DatabaseManager**: SQLite元数据库管理，用于存储文件元数据和任务状态
+- **MediaProcessor**: 媒体处理器，提供视频切片和时间戳信息
 
 ### 3.4.1 DatabaseManager (数据库管理器)
 
@@ -757,9 +770,9 @@ class ModelSelector:
 ```
 
 **模型推荐策略**:
-- **CUDA兼容GPU**: 推荐使用CUDA_INT8加速，选择高精度模型（CLIP-large、CLAP-large、Whisper-medium）
-- **OpenVINO支持CPU**: 推荐使用OpenVINO后端，选择中等精度模型（CLIP-base、CLAP-base、Whisper-base）
-- **低硬件配置**: 推荐轻量级模型（CLIP-base、CLAP-base、Whisper-base）
+- **CUDA兼容GPU**: 推荐使用CUDA_INT8加速，选择高精度模型（vidore/colqwen2.5-v0.2、Whisper-medium）
+- **OpenVINO支持CPU**: 推荐使用OpenVINO后端，选择中等精度模型（vidore/colSmol-500M、Whisper-base）
+- **低硬件配置**: 推荐轻量级模型（apple/mobileclip、Whisper-base）
 
 ### 3.4.4 ConfigGenerator (配置生成器)
 
@@ -1136,10 +1149,10 @@ MediaProcessor.process_file(file_path, config)
     ↓
 EmbeddingEngine.embed_*_from_path(file_path)
     ├─ 根据模态选择AI模型
-    ├─ 图像：CLIP模型
-    ├─ 视频：CLIP模型（关键帧）
-    ├─ 音频（音乐）：CLAP模型
-    └─ 音频（语音）：Whisper + CLIP
+    ├─ 图像：硬件自适应模型（apple/mobileclip/vidore/colSmol-500M/vidore/colqwen2.5-v0.2）
+    ├─ 视频：硬件自适应模型（关键帧）
+    ├─ 音频（音乐）：Whisper转录+硬件自适应模型
+    └─ 音频（语音）：Whisper转录+硬件自适应模型
     ↓
 返回向量化结果
     ↓
@@ -1213,9 +1226,9 @@ result = await media_processor.process_file(
 SearchEngine.接收查询请求
     ↓
 EmbeddingEngine.查询向量化 (路径或文本输入)
-    ├─ 文本查询：CLIP/CLAP向量化
-    ├─ 图像查询：CLIP向量化
-    └─ 音频查询：CLAP向量化或Whisper转录
+    ├─ 文本查询：硬件自适应模型向量化
+    ├─ 图像查询：硬件自适应模型向量化
+    └─ 音频查询：Whisper转录+硬件自适应模型向量化
     ↓
 VectorStore.向量相似度检索
     ↓
@@ -1253,47 +1266,36 @@ TaskManager.实时更新进度
 
 ### 5.2 时间戳精度要求
 
-- **片段级定位精度**: ±5秒（CLIP4Clip片段级向量化）
+- **片段级定位精度**: ±5秒（片段级向量化）
 - **时间戳容差**: ±10秒（片段中心时间戳的容差范围）
 - **切片边界精度**: ±0.1秒（场景检测切片边界）
-- **帧级精度**: ±0.033秒（30fps，仅用于参考，CLIP4Clip不提供帧级精度）
 
 **精度说明**:
-- **片段级定位**: CLIP4Clip模型预测的片段中心时间戳，精度为±5秒，适用于快速检索和粗略定位
 - **时间戳容差**: 在检索时，允许±10秒的容差范围，以适应片段级定位的不确定性
 - **适用场景**: 快速检索、粗略定位、大视频库管理
 - **局限性**: 不适用于需要帧级精度的场景（如逐帧编辑、精确时间点定位）
 
 ### 5.3 核心数据结构
 
-#### 5.3.1 files表（文件元数据）
+### 5.3 时间定位数据结构
 
-files表存储所有文件的元数据，包括原始文件和预处理生成的派生文件（如分离的音频、提取的帧等）。
+为实现精确的视频切片与时间定位，系统采用了三层数据结构设计：视频元数据表、视频切片表和向量与时间映射表。
 
-**Schema定义**: 详见 [3.4.1 DatabaseManager](#341-databasemanager-数据库管理器) 中的 `FileMetadata` Schema
-
-**数据库表结构**:
+#### 5.3.1 视频元数据表 (VIDEO_METADATA)
 ```sql
-CREATE TABLE files (
-    file_uuid TEXT PRIMARY KEY,
-    file_path TEXT NOT NULL UNIQUE,
-    file_name TEXT NOT NULL,
-    file_type TEXT NOT NULL CHECK(file_type IN ('video', 'audio', 'image', 'derived')),
-    modality TEXT NOT NULL CHECK(modality IN ('video', 'audio', 'image', 'text')),
-    file_hash TEXT NOT NULL,
-    file_size INTEGER NOT NULL CHECK(file_size >= 0),
-    source_file_uuid TEXT,
-    derived_type TEXT CHECK(derived_type IN ('separated_audio', 'video_segment', 'thumbnail')),
-    total_duration REAL CHECK(total_duration >= 0),
-    frame_rate REAL CHECK(frame_rate >= 0),
-    resolution TEXT,
-    width INTEGER CHECK(width >= 0),
-    height INTEGER CHECK(height >= 0),
-    sample_rate INTEGER CHECK(sample_rate >= 0),
-    channels INTEGER CHECK(channels >= 0),
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (source_file_uuid) REFERENCES files(file_uuid)
+CREATE TABLE VIDEO_METADATA (
+    video_uuid VARCHAR(36) PRIMARY KEY,
+    file_path TEXT NOT NULL,
+    duration FLOAT NOT NULL,  -- 总时长(秒)
+    frame_count INTEGER,
+    fps FLOAT,
+    width INTEGER,
+    height INTEGER,
+    has_audio BOOLEAN DEFAULT false,
+    processing_status TEXT DEFAULT 'pending',  -- pending/processing/completed/partial
+    processed_duration FLOAT DEFAULT 0.0,       -- 已处理的总时长(秒)
+    total_segments INTEGER DEFAULT 0,            -- 总切片数量
+    indexed_segments INTEGER DEFAULT 0          -- 已索引切片数量
 );
 ```
 
@@ -1301,78 +1303,32 @@ CREATE TABLE files (
 
 | 字段名 | 类型 | 说明 | 示例值 |
 |-------|------|------|--------|
-| file_uuid | UUID | 文件唯一标识（主键） | "video-abc123" |
+| video_uuid | UUID | 视频唯一标识（主键） | "video-abc123" |
 | file_path | String | 文件完整路径 | "/home/user/videos/interview.mp4" |
-| file_name | String | 文件名 | "interview.mp4" |
-| file_type | FileType | 文件类型（video/audio/image/derived） | "video" |
-| modality | ModalityType | 模态类型（video/audio/image/text） | "video" |
-| file_hash | String | 文件内容哈希（SHA256） | "a1b2c3d4..." |
-| file_size | Integer | 文件大小（字节） | 104857600 |
-| source_file_uuid | UUID | **源文件UUID（派生文件关联到原始文件）** | "video-abc123" 或 NULL |
-| derived_type | DerivedType | 派生类型（separated_audio/video_segment/thumbnail） | "separated_audio" 或 NULL |
-| total_duration | Float | 视频/音频总时长（秒） | 360.0 |
-| frame_rate | Float | 视频帧率 | 30.0 |
-| resolution | String | 视频/图像分辨率 | "1920x1080" |
-| width | Integer | 图像宽度 | 1920 |
-| height | Integer | 图像高度 | 1080 |
-| sample_rate | Integer | 音频采样率 | 16000 |
-| channels | Integer | 音频声道数 | 1 |
-| created_at | Timestamp | 记录创建时间 | 2024-01-01 10:00:00 |
-| updated_at | Timestamp | 记录更新时间 | 2024-01-01 10:05:00 |
+| duration | Float | 视频总时长（秒） | 360.0 |
+| frame_count | Integer | 总帧数 | 10800 |
+| fps | Float | 帧率 | 30.0 |
+| width | Integer | 视频宽度 | 1920 |
+| height | Integer | 视频高度 | 1080 |
+| has_audio | Boolean | 是否包含音频 | true |
+| processing_status | String | 处理状态 | "completed" |
+| processed_duration | Float | 已处理时长（秒） | 360.0 |
+| total_segments | Integer | 总切片数量 | 72 |
+| indexed_segments | Integer | 已索引切片数量 | 72 |
 
-**重要说明**:
-- **原始文件**: `source_file_uuid` 为 NULL，`derived_type` 为 NULL
-- **派生文件**: `source_file_uuid` 指向原始文件的 `file_uuid`，`derived_type` 标识派生类型
-- **文件类型**: `file_type` 区分原始文件（video/audio/image）和派生文件（derived）
-- **关联查询**: 通过 `source_file_uuid` 可以从派生文件追溯到原始文件
-
-**派生类型说明**:
-| derived_type | 说明 | 示例 |
-|-------------|------|------|
-| separated_audio | 从视频中分离的音频 | video.mp4 → audio.wav |
-| video_segment | 视频场景检测切片 | video.mp4 → segment_001.mp4 |
-| thumbnail | 生成的缩略图 | video.mp4 → thumb.jpg |
-
-**Schema使用示例**:
-```python
-# 创建文件元数据
-file_metadata = FileMetadata(
-    file_uuid="video-abc123",
-    file_path="/home/user/videos/interview.mp4",
-    file_name="interview.mp4",
-    file_type=FileType.VIDEO,
-    modality=ModalityType.VIDEO,
-    file_hash="a1b2c3d4...",
-    file_size=104857600,
-    total_duration=360.0,
-    frame_rate=30.0,
-    resolution="1920x1080",
-    width=1920,
-    height=1080
-)
-
-# 插入数据库
-file_uuid = await database_manager.insert_file_metadata(file_metadata)
-```
-
-#### 5.3.2 video_segments表（视频切片元数据）
-
-**Schema定义**: 详见 [3.4.1 DatabaseManager](#341-databasemanager-数据库管理器) 中的 `VideoSegment` Schema
-
-**数据库表结构**:
+#### 5.3.2 视频切片表 (VIDEO_SEGMENTS)
 ```sql
-CREATE TABLE video_segments (
-    segment_id TEXT PRIMARY KEY,
-    file_uuid TEXT NOT NULL,
-    segment_index INTEGER NOT NULL CHECK(segment_index >= 0),
-    start_time REAL NOT NULL CHECK(start_time >= 0),
-    end_time REAL NOT NULL CHECK(end_time >= 0),
-    duration REAL NOT NULL CHECK(duration >= 0),
-    scene_boundary BOOLEAN DEFAULT 0,
-    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-    FOREIGN KEY (file_uuid) REFERENCES files(file_uuid),
-    CHECK(end_time >= start_time),
-    CHECK(duration = end_time - start_time)
+CREATE TABLE VIDEO_SEGMENTS (
+    segment_id VARCHAR(36) PRIMARY KEY,
+    video_uuid VARCHAR(36) NOT NULL,
+    segment_index INTEGER NOT NULL,  -- 按时间顺序索引
+    start_time FLOAT NOT NULL,       -- 起始时间(秒)
+    end_time FLOAT NOT NULL,         -- 结束时间(秒)
+    duration FLOAT NOT NULL,         -- 时长(秒)
+    frame_path TEXT,                 -- 关键帧存储路径
+    scene_confidence FLOAT,          -- 场景变化置信度
+    segment_status TEXT DEFAULT 'indexed',  -- indexed/pending/skipped
+    FOREIGN KEY (video_uuid) REFERENCES VIDEO_METADATA(video_uuid)
 );
 ```
 
@@ -1381,347 +1337,434 @@ CREATE TABLE video_segments (
 | 字段名 | 类型 | 说明 | 示例值 |
 |-------|------|------|--------|
 | segment_id | UUID | 切片唯一标识 | "seg-001" |
-| file_uuid | UUID | 原始视频唯一标识 | "video-abc123" |
-| segment_index | Integer | 按原始视频时序的片段序号（从0开始） | 0, 1, 2... |
-| start_time | Float | 在原始视频中的起始时间(秒) | 0.0, 120.5, 245.3 |
-| end_time | Float | 在原始视频中的结束时间(秒) | 120.5, 245.3, 360.0 |
-| duration | Float | 片段时长(秒) = end_time - start_time | 120.5, 124.8, 114.7 |
-| scene_boundary | Boolean | 是否为场景边界切片 | true/false |
+| video_uuid | UUID | 原始视频唯一标识 | "video-abc123" |
+| segment_index | Integer | 按时间顺序索引 | 0, 1, 2... |
+| start_time | Float | 起始时间(秒) | 0.0, 5.0, 10.0... |
+| end_time | Float | 结束时间(秒) | 5.0, 10.0, 15.0... |
+| duration | Float | 切片时长(秒) | 5.0 |
+| frame_path | String | 关键帧存储路径 | "/tmp/seg-001.jpg" |
+| scene_confidence | Float | 场景变化置信度 | 0.85 |
+| segment_status | String | 切片状态 | "indexed" |
 
-**重要约束**:
-1. **切片时间连续性**: 相邻切片的时间必须连续，即前一切片的结束时间必须等于后一切片的开始时间
-2. **切片时长准确性**: 切片时长必须等于结束时间减去开始时间的差值
-3. **切片序号完整性**: 切片序号必须按时序连续递增，从0开始编号
-
-**Schema使用示例**:
-```python
-# 创建视频切片
-segment = VideoSegment(
-    segment_id="seg-001",
-    file_uuid="video-abc123",
-    segment_index=0,
-    start_time=0.0,
-    end_time=120.5,
-    duration=120.5,
-    scene_boundary=True
-)
-
-# 插入数据库
-segment_id = await database_manager.insert_video_segment(segment)
-
-# 批量插入切片
-segments = [
-    VideoSegment(segment_id="seg-001", file_uuid="video-abc123", segment_index=0, start_time=0.0, end_time=120.5, duration=120.5, scene_boundary=True),
-    VideoSegment(segment_id="seg-002", file_uuid="video-abc123", segment_index=1, start_time=120.5, end_time=245.3, duration=124.8, scene_boundary=False),
-    VideoSegment(segment_id="seg-003", file_uuid="video-abc123", segment_index=2, start_time=245.3, end_time=360.0, duration=114.7, scene_boundary=True)
-]
-segment_ids = await database_manager.batch_insert_video_segments(segments)
+#### 5.3.3 向量与时间映射表 (VECTOR_TIMESTAMP_MAP)
+```sql
+CREATE TABLE VECTOR_TIMESTAMP_MAP (
+    vector_id VARCHAR(36) PRIMARY KEY,
+    segment_id VARCHAR(36) NOT NULL,
+    frame_timestamp FLOAT,           -- 帧在切片中的时间(秒)
+    absolute_timestamp FLOAT,        -- 帧在原始视频中的绝对时间(秒)
+    relative_position FLOAT,         -- 帧在切片中的相对位置(0.0-1.0)
+    is_keyframe BOOLEAN DEFAULT true,
+    FOREIGN KEY (segment_id) REFERENCES VIDEO_SEGMENTS(segment_id)
+);
 ```
 
-#### 5.3.3 video_vectors的Payload结构（向量存储）
-
-**Schema定义**: 详见 [3.4.1 DatabaseManager](#341-databasemanager-数据库管理器) 中的 `VideoVectorPayload` Schema
-
-**Payload字段说明**:
+**字段说明**:
 
 | 字段名 | 类型 | 说明 | 示例值 |
 |-------|------|------|--------|
-| file_uuid | UUID | 原始视频唯一标识 | "video-abc123" |
-| segment_id | UUID | 切片唯一标识 | "seg-001" |
-| segment_center_timestamp | Float | **片段中心时间戳(秒，CLIP4Clip预测)** | 0.0, 2.5, 5.0... |
+| vector_id | UUID | 向量唯一标识 | "vec-001" |
+| segment_id | UUID | 关联的切片ID | "seg-001" |
+| frame_timestamp | Float | 帧在切片中的时间(秒) | 2.5 |
+| absolute_timestamp | Float | 帧在原始视频中的绝对时间(秒) | 2.5 |
+| relative_position | Float | 帧在切片中的相对位置 | 0.5 |
+| is_keyframe | Boolean | 是否为关键帧 | true |
 
-**设计说明**:
-- **最小化payload**: 只存储必要的引用信息（file_uuid、segment_id）和CLIP4Clip预测的片段中心时间戳
-- **数据库为主**: 其他详细信息（segment_index、start_time、end_time、duration、scene_boundary）从video_segments表查询
-- **CLIP4Clip预测时间戳**: segment_center_timestamp由CLIP4Clip模型预测，表示片段在原始视频中的中心时间位置
+#### 5.3.4 文件关联机制
 
-**Schema使用示例**:
-```python
-# 创建向量Payload
-payload = VideoVectorPayload(
-    file_uuid="video-abc123",
-    segment_id="seg-001",
-    segment_center_timestamp=60.25
-)
-
-# 存储向量时使用Payload
-metadata = payload.dict()
-vector_store.insert_vectors(collection="video_vectors", vectors=[vector], ids=["vec-001"], metadata=[metadata])
-```
-|-------|------|------|--------|
-| segment_id | UUID | 切片唯一标识 | "seg-001" |
-| file_uuid | UUID | 原始视频唯一标识 | "video-abc123" |
-| segment_index | Integer | 按原始视频时序的片段序号（从0开始） | 0, 1, 2... |
-| start_time | Float | 在原始视频中的起始时间(秒) | 0.0, 120.5, 245.3 |
-| end_time | Float | 在原始视频中的结束时间(秒) | 120.5, 245.3, 360.0 |
-| duration | Float | 片段时长(秒) = end_time - start_time | 120.5, 124.8, 114.7 |
-| scene_boundary | Boolean | 是否为场景边界切片 | true/false |
-
-**重要约束**:
-1. **切片时间连续性**: 相邻切片的时间必须连续，即前一切片的结束时间必须等于后一切片的开始时间
-2. **切片时长准确性**: 切片时长必须等于结束时间减去开始时间的差值
-3. **切片序号完整性**: 切片序号必须按时序连续递增，从0开始编号
-
-#### 5.3.2 video_vectors的Payload结构（向量存储）
-
-| 字段名 | 类型 | 说明 | 示例值 |
-|-------|------|------|--------|
-| file_uuid | UUID | 原始视频唯一标识 | "video-abc123" |
-| segment_id | UUID | 切片唯一标识 | "seg-001" |
-| segment_center_timestamp | Float | **片段中心时间戳(秒，CLIP4Clip预测)** | 0.0, 2.5, 5.0... |
-
-**设计说明**:
-- **最小化payload**: 只存储必要的引用信息（file_uuid、segment_id）和CLIP4Clip预测的片段中心时间戳
-- **数据库为主**: 其他详细信息（segment_index、start_time、end_time、duration、scene_boundary）从video_segments表查询
-- **CLIP4Clip预测时间戳**: segment_center_timestamp由CLIP4Clip模型预测，表示片段在原始视频中的中心时间位置
-
-#### 5.3.3 预处理文件与原始文件的关联机制
-
-为确保向量化后的检索结果能够正确返回原始文件ID，系统建立了完整的预处理文件与原始文件的关联机制。
+为确保向量化后的检索结果能够正确返回原始文件ID，系统建立了完整的文件关联机制：
 
 **核心原则**:
-1. **向量存储始终使用原始文件ID**: 无论向量化的是原始文件还是预处理生成的派生文件，向量存储的metadata中的`file_uuid`始终指向原始文件
-2. **派生文件通过source_file_uuid追溯**: 所有预处理生成的派生文件（分离的音频、提取的帧等）都通过`source_file_uuid`字段关联到原始文件
-3. **检索时自动追溯**: 检索时通过向量存储的`file_uuid`直接查询原始文件元数据，无需额外追溯步骤
+1. **向量存储始终使用原始视频UUID**: 无论向量化的是原始视频还是切片，向量存储的metadata中的`video_uuid`始终指向原始视频
+2. **切片通过video_uuid关联**: 所有视频切片都通过`video_uuid`字段关联到原始视频
+3. **向量通过segment_id关联**: 向量通过`segment_id`字段关联到具体切片，进而关联到原始视频
+4. **时间映射确保精确性**: 向量与时间映射表确保每个向量都能映射到原始视频的精确时间点
 
 **关联示例**:
 
-**场景1: 视频切片向量化**
 ```
-原始文件: interview.mp4 (file_uuid = "video-abc123")
-    ↓ 预处理（场景检测切片）
-切片文件: segment_001.mp4 (file_uuid = "seg-file-001", source_file_uuid = "video-abc123")
-    ↓ CLIP4Clip向量化
-向量存储: {
-  "file_uuid": "video-abc123",  // 始终使用原始文件ID
-  "segment_id": "seg-001",
-  "segment_center_timestamp": 122.9
-}
-```
-
-**场景2: 音频分离向量化**
-```
-原始文件: video_with_audio.mp4 (file_uuid = "video-def456")
-    ↓ 预处理（音频分离）
-分离音频: audio_separated.wav (file_uuid = "audio-001", source_file_uuid = "video-def456", derived_type = "separated_audio")
-    ↓ 向量化
-向量存储: {
-  "file_uuid": "video-def456",  // 始终使用原始文件ID
-  "segment_id": NULL,
-  "segment_center_timestamp": NULL
-}
-```
-
-**关键实现逻辑**:
-
-1. **预处理阶段**:
-   - 为原始文件生成唯一UUID（file_uuid）
-   - 为每个派生文件生成独立UUID，但设置`source_file_uuid`指向原始文件
-   - 将原始文件和派生文件的元数据都存储到files表
-
-2. **向量化阶段**:
-   - 从派生文件的元数据中读取`source_file_uuid`
-   - 如果`source_file_uuid`存在，使用它作为向量存储的`file_uuid`
-   - 如果`source_file_uuid`不存在（即原始文件），直接使用文件的`file_uuid`
-
-3. **检索阶段**:
-   - 向量检索返回的结果中包含`file_uuid`（原始文件ID）
-   - 直接使用`file_uuid`查询原始文件元数据
-   - 无需追溯派生文件链路
-
-**数据库查询示例**:
-
-```sql
--- 查询原始文件元数据
-SELECT * FROM files 
-WHERE file_uuid = 'video-abc123' 
-  AND source_file_uuid IS NULL;
-
--- 查询某个原始文件的所有派生文件
-SELECT * FROM files 
-WHERE source_file_uuid = 'video-abc123';
-
--- 查询某个切片的原始文件
-SELECT f.* 
-FROM files s
-JOIN files f ON s.source_file_uuid = f.file_uuid
-WHERE s.file_uuid = 'seg-file-001';
+VIDEO_METADATA (video_uuid = "video-abc123")
+    ↓ 一对多关联
+VIDEO_SEGMENTS (segment_id = "seg-001", video_uuid = "video-abc123")
+    ↓ 一对多关联
+VECTOR_TIMESTAMP_MAP (vector_id = "vec-001", segment_id = "seg-001")
+    ↓ 关联到向量存储
+向量存储 (metadata = {"video_uuid": "video-abc123", "segment_id": "seg-001", "vector_id": "vec-001"})
 ```
 
 **设计优势**:
-- **简化检索逻辑**: 检索结果直接包含原始文件ID，无需额外追溯
-- **支持多级派生**: 可以支持多级预处理（视频→切片→帧），最终向量存储始终指向原始文件
-- **数据一致性**: 通过外键约束确保派生文件的`source_file_uuid`有效
-- **灵活扩展**: 新增预处理类型只需扩展`derived_type`枚举，不影响检索逻辑
+- **精确时间定位**: 通过三层关联确保每个向量都能映射到原始视频的精确时间点
+- **高效查询**: 分离的表结构便于高效查询和更新
+- **支持部分索引**: 支持超大视频的部分索引和渐进式处理
+- **灵活扩展**: 便于未来添加更多视频元数据字段
 
-### 5.4 视频预处理与向量化流程
+### 5.4 切片与向量化流程
 
-#### 5.4.1 预处理阶段（音频分离+视频切片）
+#### 5.4.1 智能视频切片机制
 
-视频预处理采用先分离音频后切片的处理流程，具体步骤如下：
+**两阶段切片策略**
+```
+第一阶段：FFMPEG场景检测切片
+├── 使用FFMPEG场景检测功能(scene detection)
+├── 检测视觉变化阈值(scene=0.3)
+├── 每个场景作为一个基础切片
+└── 限制单个切片最大时长5秒 (适用于短视频场景)
 
-1. **视频元数据提取**
-   - 获取视频的唯一标识、总时长、帧率等基础信息
-   - 检测视频是否包含音频轨道
+第二阶段：关键帧提取
+├── 从每个基础切片中提取1-3个关键帧
+├── 优先提取切片中间帧
+└── 每个关键帧记录在原始视频中的精确时间戳
+```
 
-2. **音频分离处理**
-   - 若视频包含音频轨道，使用FFmpeg进行音频分离
-   - 将分离的音频转换为标准格式：PCM 16位编码、16kHz采样率、单声道
-   - 为分离的音频生成独立UUID，存储到临时目录
-   - 在数据库中创建音频文件记录，标记为"derived"类型，并关联到源视频
-   - 异步提交音频处理任务，包括音频分类和向量化
+**超大视频特殊处理策略**
+```
+预处理优先级策略:
+IF 视频文件 > 3GB 或 时长超过30分钟:
+   1. 先处理开头5分钟内容
+   2. 识别关键场景后处理转场点
+   3. 后台逐步处理剩余内容
+   4. 用户可实时看到部分结果
+   5. 显示处理进度和可检索范围
+   
+ELIF 长时固定场景（如监控录像）:
+   1. 每120秒强制提取1帧
+   2. 优先处理音频活跃时段
+   3. 使用运动检测算法跳过静止段
+   4. 对于无变化片段，标记为"静止段"不单独切片
+   
+ELSE: # 标准处理
+   1. 完整执行FFMPEG场景检测切片
+   2. 按5秒最大时长分割
+   3. 提取全部关键帧
+```
 
-3. **严格场景检测切片**
-   - 使用FFmpeg的场景检测功能，采用0.15的严格阈值（默认值为0.4）
-   - 检测视频中的场景变化边界点
-   - 对每个场景进行切片，确保最大切片时长不超过5秒
-   - 对于过长的场景，按最大时长均匀切分
-
-4. **切片元数据生成**
-   - 为每个切片生成唯一UUID
-   - 记录切片的起止时间、时长、索引等信息
-   - 标记切片是否为场景边界切片
-   - 标记切片是否包含音频
-   - 每个切片只提取1帧（中间帧）用于后续向量化
-
-5. **切片验证**
-   - 验证相邻切片的时间连续性（误差小于0.001秒）
-   - 验证切片总时长与视频总时长的一致性（误差小于0.1秒）
-
-6. **处理结果输出**
-   - 返回包含切片元数据和音频信息的结果
-   - 记录处理统计信息，包括总时长、切片数、平均片段时长等
+**音频辅助切片优化**
+```
+轻量级音频分析:
+1. 预提取视频开头10秒音频
+2. 使用InaSpeechSegmenter进行音频分类
+3. IF 识别为语音内容:
+      - 降低场景检测阈值(scene=0.25)以捕获更多细节
+      - 优先保证语音段完整性
+   ELSE IF 识别为音乐内容:
+      - 保持默认场景阈值(scene=0.3)
+      - 优先保证视觉变化完整性
+   ELSE: # 无音频或噪声
+      - 提高场景检测阈值(scene=0.35)减少切片数量
+```
 
 #### 5.4.2 向量化阶段
 
-向量化阶段负责将预处理后的文件转换为向量嵌入，并确保向量存储时关联到原始文件ID。视频向量化采用CLIP4Clip模型进行片段级向量化，而非逐帧向量化，以大幅降低计算时间和向量存储量。
+向量化阶段负责将预处理后的文件转换为向量嵌入，并确保向量存储时关联到原始视频的精确时间位置。
 
 **核心原则**:
-- **向量存储的file_uuid始终指向原始文件**: 这是确保检索结果能够正确返回原始文件ID的关键
-- **预处理文件仅作为中间产物**: 预处理生成的文件（切片、分离的音频等）只用于向量化，不影响检索结果
-- **使用CLIP4Clip进行片段级向量化**: 直接对视频片段进行向量化，无需提取帧，大幅提升性能
+- **向量存储始终关联到原始视频**: 无论向量化的是原始视频还是切片，向量存储的metadata中的`video_uuid`始终指向原始视频
+- **时间映射确保精确性**: 每个向量都通过向量与时间映射表关联到原始视频的精确时间点
+- **使用硬件自适应模型**: 根据硬件配置自动选择最优模型进行向量化
+- **向量存储与切片时间关联**: 向量存储时结合切片信息重计算时间，确保检索结果能精确映射到原始视频时间位置
 
 **向量化流程**:
 
-1. **片段级向量化**: 使用EmbeddingEngine统一调用CLIP4Clip模型对视频片段进行向量化，无需提取帧
+1. **片段级向量化**: 使用EmbeddingEngine统一调用硬件自适应模型对视频切片进行向量化
 
-2. **时间戳获取**: CLIP4Clip模型预测片段的中心时间戳（`segment_center_timestamp`），该时间戳表示片段在原始视频中的时间位置
+2. **时间戳生成**: 
+   - 对于切片中间帧：使用切片起始时间 + 切片时长的一半作为绝对时间戳
+   - 对于多个关键帧：分别计算每个关键帧的绝对时间戳
+   - 智能视频切片与时间定位相结合：例如a.mp4被切片为a-segment0.mp4,a-segment1.mp4，向量化时记录每个切片的精确时间信息
 
-3. **确定原始文件ID**: 
-   - 对于视频切片：从`video_segments`表读取`file_uuid`（原始视频ID）
-   - 对于分离的音频：从`files`表读取派生文件的`source_file_uuid`
-   - 对于原始文件：直接使用文件的`file_uuid`
+3. **向量与时间映射**: 
+   - 为每个生成的向量创建唯一ID
+   - 在VECTOR_TIMESTAMP_MAP表中创建向量与时间的映射关系
+   - 记录帧在切片中的时间、绝对时间和相对位置
+   - 设计结合切片重计算时间的机制：向量存储时关联切片信息，确保检索结果能精确映射到原始视频时间位置
 
-4. **向量化**: 通过EmbeddingEngine调用CLIP4Clip模型生成视频片段向量嵌入
-
-5. **存储向量**: 将向量和元数据存储到向量数据库，metadata包含：
+4. **存储向量**: 将向量和元数据存储到向量数据库，metadata包含：
    ```python
    {
-     "file_uuid": original_file_uuid,  # 原始文件ID（关键）
-     "segment_id": segment_id,         # 切片ID（如果是切片）
-     "segment_center_timestamp": segment_center_timestamp  # 片段中心时间戳
+     "video_uuid": video_uuid,  # 原始视频ID
+     "segment_id": segment_id,  # 切片ID
+     "vector_id": vector_id,    # 向量ID
+     "absolute_timestamp": absolute_timestamp,  # 绝对时间戳
+     "segment_file": segment_file_path,  # 切片文件路径
+     "original_file": original_file_path  # 原始文件路径
    }
    ```
+
+5. **更新处理状态**: 
+   - 更新VIDEO_METADATA表中的processed_duration和indexed_segments字段
+   - 如果所有切片都已处理，将processing_status更新为"completed"
+   - 否则，保持为"partial"或"processing"
 
 **实现伪代码**:
 
 ```python
 async def vectorize_video_segment(segment_file_path: str, segment_id: str):
     """
-    使用EmbeddingEngine统一调用CLIP4Clip向量化视频切片，确保使用原始文件ID
+    使用EmbeddingEngine统一调用硬件自适应模型向量化视频切片，确保精确时间定位
     """
     # 1. 查询切片元数据
     segment_metadata = await database_manager.query_segment_metadata(segment_id)
-    original_file_uuid = segment_metadata['file_uuid']  # 获取原始视频ID
+    video_uuid = segment_metadata['video_uuid']  # 获取原始视频ID
+    start_time = segment_metadata['start_time']
+    duration = segment_metadata['duration']
     
-    # 2. 使用EmbeddingEngine统一调用CLIP4Clip进行片段级向量化
-    vector, segment_center_timestamp = await embedding_engine.embed_video_segment(segment_file_path)
+    # 2. 提取关键帧并获取时间戳
+    keyframes = await media_processor.extract_keyframes(segment_file_path, count=2)
     
-    # 3. 存储向量（关键：使用原始文件ID）
-    metadata = {
-        'file_uuid': original_file_uuid,  # 原始文件ID
-        'segment_id': segment_id,
-        'segment_center_timestamp': segment_center_timestamp
-    }
-    await vector_store.insert_vectors('video_vectors', [vector], [segment_id], [metadata])
-```
-
-```python
-async def vectorize_video_segments_batch(segment_paths: List[str], segment_ids: List[str]):
-    """
-    批量向量化视频切片，提高处理效率
-    """
-    # 1. 批量查询切片元数据
-    segments_metadata = await database_manager.query_segments_metadata(segment_ids)
-    
-    # 2. 批量向量化（通过EmbeddingEngine统一调用CLIP4Clip）
-    vectors, timestamps = await embedding_engine.embed_video_segments_batch(segment_paths)
-    
-    # 3. 准备批量插入数据
-    vectors_list = []
-    ids_list = []
-    metadatas_list = []
-    
-    for i, segment_id in enumerate(segment_ids):
-        original_file_uuid = segments_metadata[i]['file_uuid']
+    for i, keyframe_path in enumerate(keyframes):
+        # 3. 计算关键帧的绝对时间戳（结合切片重计算时间的机制）
+        frame_timestamp = start_time + (duration * (i + 0.5) / len(keyframes))
+        
+        # 4. 使用EmbeddingEngine统一调用硬件自适应模型进行向量化
+        vector = await embedding_engine.embed_image_from_path(keyframe_path)
+        
+        # 5. 生成向量ID
+        vector_id = str(uuid.uuid4())
+        
+        # 6. 创建向量与时间映射
+        await database_manager.create_vector_timestamp_map(
+            vector_id=vector_id,
+            segment_id=segment_id,
+            frame_timestamp=frame_timestamp - start_time,  # 帧在切片中的时间
+            absolute_timestamp=frame_timestamp,           # 帧在原始视频中的绝对时间
+            relative_position=(i + 0.5) / len(keyframes),  # 帧在切片中的相对位置
+            is_keyframe=True
+        )
+        
+        # 7. 存储向量（关键：使用原始视频ID和向量ID，结合切片时间重计算机制）
         metadata = {
-            'file_uuid': original_file_uuid,
-            'segment_id': segment_id,
-            'segment_center_timestamp': timestamps[i]
+            'video_uuid': video_uuid,         # 原始视频ID
+            'segment_id': segment_id,         # 切片ID
+            'vector_id': vector_id,           # 向量ID
+            'absolute_timestamp': frame_timestamp,  # 绝对时间戳
+            'segment_file': segment_file_path,  # 切片文件路径
+            'original_file': segment_metadata['original_file_path']  # 原始文件路径
         }
-        vectors_list.append(vectors[i])
-        ids_list.append(segment_id)
-        metadatas_list.append(metadata)
+        await vector_store.insert_vectors('video_vectors', [vector], [vector_id], [metadata])
     
-    # 4. 批量存储向量
-    await vector_store.insert_vectors('video_vectors', vectors_list, ids_list, metadatas_list)
+    # 8. 更新切片状态
+    await database_manager.update_segment_status(segment_id, 'indexed')
+    
+    # 9. 更新视频处理状态
+    await database_manager.update_video_processing_status(video_uuid)
 ```
+
+### 5.5 检索与时间定位流程
+
+#### 5.5.1 视频检索流程
+
+```
+# 1. 在向量数据库检索相似向量
+vector_results = VectorStore.search_vectors(collection, query_vector, limit)
+
+# 2. 按视频聚合结果,收集相似度分数和时间戳列
+aggregated_results = {}
+for result in vector_results:
+    video_uuid = result['video_uuid']
+    if video_uuid not in aggregated_results:
+        aggregated_results[video_uuid] = []
+    aggregated_results[video_uuid].append({
+        'similarity_score': result['similarity_score'],
+        'absolute_timestamp': result['absolute_timestamp'],
+        'segment_id': result['segment_id'],
+        'vector_id': result['vector_id']
+    })
+
+# 3. 按视频聚合相似度排序
+final_results = []
+for video_uuid, segments in aggregated_results.items():
+    # 计算视频的平均相似度或最大相似度
+    max_similarity = max(segment['similarity_score'] for segment in segments)
+    
+    # 获取视频元数据
+    video_metadata = await database_manager.query_video_metadata(video_uuid)
+    
+    # 获取最相似的切片
+    most_similar_segment = max(segments, key=lambda x: x['similarity_score'])
+    
+    # 构建最终结果
+    final_results.append({
+        'video_uuid': video_uuid,
+        'file_path': video_metadata['file_path'],
+        'similarity_score': max_similarity,
+        'best_match_timestamp': most_similar_segment['absolute_timestamp'],
+        'matched_segments': segments,
+        'processing_status': video_metadata['processing_status'],
+        'total_segments': video_metadata['total_segments'],
+        'indexed_segments': video_metadata['indexed_segments'],
+        'total_duration': video_metadata['duration'],
+        'processed_duration': video_metadata['processed_duration']
+    })
+
+# 4. 按相似度分数降序排序
+final_results.sort(key=lambda x: x['similarity_score'], reverse=True)
+```
+
+### 5.6 用户交互优化
+
+#### 5.6.1 检索结果展示
+
+**视频检索结果示例**:
+```
+┌─────────────────────────────────────────────────┐
+│ 视频: interview.mp4 (总时长: 15分32秒)         │
+│ 相似度: 94%                                    │
+│ 定位位置: 02:15-02:19                          │
+│ 切片ID: seg-7890abc                            │
+│ 精确时间戳: 02:17.3                            │
+│ 状态: 完全索引                                 │
+│ [缩略图]                                       │
+│ [在播放器中打开] [添加到收藏] [复制时间戳]     │
+└─────────────────────────────────────────────────┘
+```
+
+**超大视频部分索引示例**:
+```
+┌─────────────────────────────────────────────────┐
+│ 视频: security_camera.mp4 (总时长: 24小时)     │
+│ 相似度: 86%                                    │
+│ 定位位置: 03:45-03:49                          │
+│ 状态: 部分索引 (已索引: 00:00-05:00 + 转场点)   │
+│ 注意: 更多内容正在后台索引...                  │
+│ [缩略图]                                       │
+│ [在播放器中打开] [添加到收藏] [复制时间戳]     │
+│ [查看索引进度]                                 │
+└─────────────────────────────────────────────────┘
+```
+
+**索引进度面板**:
+```
+┌─────────────────────────────────────────────────┐
+│ 视频: wedding_video.mp4 (4.2GB, 2小时15分)     │
+│ 索引状态: 已索引开头30分钟 (22%)                │
+│ 可检索时段: 00:00-30:00                        │
+│ 等待处理: 关键转场点(5处) + 剩余内容            │
+│ [暂停后台处理] [优先完成此视频] [跳过]         │
+└─────────────────────────────────────────────────┘
+```
+
+### 5.7 性能与资源优化
+
+#### 5.7.1 资源自适应切片策略
 
 ```python
-async def vectorize_separated_audio(audio_file_path: str, audio_uuid: str):
-    """
-    向量化分离的音频，确保使用原始文件ID
-    """
-    # 1. 查询音频文件元数据
-    audio_metadata = await database_manager.query_file_metadata(audio_uuid)
-    original_file_uuid = audio_metadata['source_file_uuid']  # 获取原始视频ID
+def determine_slice_strategy(hardware_profile, video_duration):
+    """根据硬件配置和视频时长选择切片策略"""
     
-    # 2. 向量化音频
-    vector = await embedding_engine.embed_audio_from_path(audio_file_path)
-    
-    # 3. 存储向量（关键：使用原始文件ID）
-    metadata = {
-        'file_uuid': original_file_uuid,  # 原始文件ID
-        'segment_id': None,
-        'segment_center_timestamp': None
-    }
-    await vector_store.insert_vectors('audio_vectors', [vector], [audio_uuid], [metadata])
+    if hardware_profile.memory < 8 * 1024:  # 8GB内存以下
+        return {
+            "max_segments": 10,          # 最大10个切片
+            "keyframes_per_segment": 1,  # 每切片1帧
+            "scene_threshold": 0.4,      # 较高阈值，更少切片
+            "max_segment_duration": 10   # 最大切片时长10秒
+        }
+    elif video_duration > 1800:  # 超长视频(>30分钟)
+        return {
+            "max_segments": 30,          # 控制最大切片数量
+            "keyframes_per_segment": 1,
+            "scene_threshold": 0.3,
+            "max_segment_duration": 5,   # 严格控制在5秒
+            "use_motion_detection": True # 使用运动检测优化
+        }
+    else:  # 标准策略
+        return {
+            "max_segments": 20,
+            "keyframes_per_segment": 2,  # 每切片2帧
+            "scene_threshold": 0.3,
+            "max_segment_duration": 5
+        }
 ```
 
-**CLIP4Clip向量化优势**:
+#### 5.7.2 内存优化技术
 
-1. **计算效率提升**: 片段级向量化相比逐帧向量化，计算时间减少80-90%
-2. **存储空间节省**: 向量存储量减少70-80%
-3. **显存占用降低**: 避免处理大量帧导致的显存溢出风险
-4. **时序定位能力**: CLIP4Clip天然具备时序定位能力，直接预测片段中心时间戳
+- **流式切片处理**: 逐个处理切片，避免一次性加载整个视频
+- **分块向量化**: 每次只向量化1-2个切片，处理完成后再加载下一批
+- **缓存清理策略**: 处理完一批切片后立即清理内存缓存
+- **智能跳过**: 跳过无明显变化的切片，减少处理量
+- **优先级调度**: 优先处理用户可能感兴趣的切片（如开头、转场点）
 
-**时序定位精度**:
+### 5.8 视频检索结果数据结构
 
-- **片段级定位精度**: ±5秒（容差±10秒）
-- **适用场景**: 快速检索、粗略定位、大视频库管理
-- **局限性**: 不适用于需要帧级精度的场景（如逐帧编辑、精确时间点定位）
+为解决长视频切片后多个向量与原始视频的关联问题，系统设计了完整的检索结果数据结构，确保用户能够准确识别检索结果来自哪个文件以及具体的时间位置。
 
-**关键保证机制**:
+#### 5.8.1 视频检索结果结构
 
-1. **数据库约束**: 
-   - `video_segments`表的`file_uuid`字段必须指向有效的原始文件
-   - `files`表的`source_file_uuid`字段必须指向有效的原始文件（外键约束）
+**基础检索结果字段**:
+```json
+{
+  "result_id": "uuid",
+  "video_uuid": "video-abc123",
+  "file_path": "/path/to/original_video.mp4",
+  "file_name": "original_video.mp4",
+  "file_type": "video",
+  "similarity_score": 0.95,
+  "modality": "video",
+  "processing_status": "completed",
+  "total_segments": 72,
+  "indexed_segments": 72
+}
+```
 
-2. **向量化前验证**:
-   ```python
-   # 在向量化前验证原始文件ID的有效性
-   if not await database_manager.file_exists(original_file_uuid):
-       raise ValueError(f"原始文件不存在: {original_file_uuid}")
+**视频切片扩展字段**（当结果来自视频切片时）:
+```json
+{
+  "segment_id": "seg-001",
+  "segment_index": 5,
+  "start_time": 120.5,
+  "end_time": 125.3,
+  "duration": 4.8,
+  "absolute_timestamp": 122.9,
+  "scene_confidence": 0.85,
+  "is_segment": true,
+  "thumbnail_path": "/path/to/thumbnails/seg-001.jpg",
+  "matched_segments": [
+    {
+      "segment_id": "seg-001",
+      "absolute_timestamp": 122.9,
+      "similarity_score": 0.92,
+      "thumbnail_path": "/path/to/thumbnails/seg-001.jpg"
+    },
+    {
+      "segment_id": "seg-002",
+      "absolute_timestamp": 127.5,
+      "similarity_score": 0.88,
+      "thumbnail_path": "/path/to/thumbnails/seg-002.jpg"
+    }
+  ]
+}
+```
+
+**超大视频部分索引结果**:
+```json
+{
+  "result_id": "uuid",
+  "video_uuid": "video-def456",
+  "file_path": "/path/to/security_camera.mp4",
+  "file_name": "security_camera.mp4",
+  "file_type": "video",
+  "similarity_score": 0.86,
+  "modality": "video",
+  "processing_status": "partial",
+  "total_segments": 17280,
+  "indexed_segments": 360,
+  "processed_duration": 1800,
+  "total_duration": 86400,
+  "available_segments": [
+    {
+      "start_time": 0,
+      "end_time": 1800,
+      "segment_count": 360
+    },
+    {
+      "start_time": 7200,
+      "end_time": 7230,
+      "segment_count": 6
+    }
+  ]
+}
+
+
+
    ```
 
 3. **检索时无需追溯**:
@@ -1995,16 +2038,17 @@ processing:
     supported_formats: ['mp3', 'wav', 'flac', 'aac']
 
 models:
-  clip_model: openai/clip-vit-base-patch32
-  clap_model: laion/clap-htsat-fused
+  # 图像/视频向量化模型（硬件自适应）
+  light_model: apple/mobileclip          # 低配硬件
+  balanced_model: vidore/colSmol-500M    # 中配硬件
+  high_model: vidore/colqwen2.5-v0.2     # 高配硬件
+  
   whisper_model: openai/whisper-base
-  facenet_model: facenet-pytorch
-  clip4clip_model: clip4clip/ViT-B-16
-  clip4clip_vector_dim: 512
-  clip4clip_temporal_precision: 5  # 片段级定位精度（秒）
-  clip4clip_timestamp_tolerance: 10  # 时间戳容差（秒）
   model_cache_dir: data/models
   enable_model_warmup: true
+  vector_dim: 512
+  temporal_precision: 5  # 片段级定位精度（秒）
+  timestamp_tolerance: 10  # 时间戳容差（秒）
 
 database:
   sqlite_path: data/database/msearch.db
@@ -2283,8 +2327,8 @@ async def process_file(file_path: str):
   "success": false,
   "error": {
     "error_type": "ModelNotLoadedError",
-    "message": "CLIP模型未加载，请先加载模型",
-    "details": "模型路径: /models/clip_vit_base_patch32"
+    "message": "硬件自适应模型未加载，请先加载模型",
+    "details": "模型类型: 图像/视频向量化模型"
   }
 }
 ```
@@ -2444,7 +2488,7 @@ bash scripts/install_offline.sh
 ### 11.3 技术栈
 
 - **后端框架**: FastAPI
-- **AI推理引擎**: michaelfeil/infinity
+- **AI推理**: 直接使用Python transformers库调用模型
 - **向量数据库**: Milvus Lite
 
 ### 11.4 快速开始
