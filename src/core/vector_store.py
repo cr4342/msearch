@@ -237,6 +237,97 @@ class VectorStore:
         """检查集合是否存在"""
         return self.client.has_collection(collection_name)
     
+    async def insert_video_vector(self, vector: List[float], video_info: Dict) -> str:
+        """插入视频向量，包含时间定位信息"""
+        try:
+            collection = "video_vectors"
+            
+            if not self.client.has_collection(collection):
+                raise ValueError(f"集合不存在: {collection}")
+            
+            # 生成唯一ID
+            import uuid
+            vector_id = str(uuid.uuid4())
+            
+            # 准备插入数据
+            data = {
+                "id": vector_id,
+                "vector": vector,
+                "file_path": video_info.get("file_path", ""),
+                "file_type": "video",
+                "task_id": video_info.get("task_id", ""),
+                "timestamp": video_info.get("absolute_timestamp", 0.0),
+                "metadata": {
+                    "video_uuid": video_info.get("video_uuid", ""),
+                    "segment_id": video_info.get("segment_id", ""),
+                    "vector_id": vector_id,
+                    "absolute_timestamp": video_info.get("absolute_timestamp", 0.0),
+                    "segment_file": video_info.get("segment_file", ""),
+                    "original_file": video_info.get("original_file", ""),
+                    "start_time": video_info.get("start_time", 0.0),
+                    "end_time": video_info.get("end_time", 0.0),
+                    "duration": video_info.get("duration", 0.0),
+                    "frame_path": video_info.get("frame_path", ""),
+                    "relative_position": video_info.get("relative_position", 0.0)
+                }
+            }
+            
+            # 插入向量
+            self.client.insert(collection, [data])
+            
+            # 刷新集合以确保数据可用
+            self.client.flush(collection)
+            
+            self.logger.info(f"插入视频向量到集合 {collection}: {vector_id}")
+            return vector_id
+        except Exception as e:
+            self.logger.error(f"插入视频向量失败: {e}")
+            raise
+    
+    async def get_vectors_with_timestamps(self, collection: str, query_vector: List[float], 
+                                        limit: int) -> List[Dict]:
+        """搜索向量并返回包含时间戳信息的结果"""
+        try:
+            if not self.client.has_collection(collection):
+                raise ValueError(f"集合不存在: {collection}")
+            
+            # 执行搜索
+            results = self.client.search(
+                collection,
+                [query_vector],
+                limit=limit,
+                output_fields=["id", "file_path", "file_type", "task_id", "timestamp", "metadata"]
+            )
+            
+            # 格式化结果，包含时间戳信息
+            formatted_results = []
+            for result in results[0]:  # 取第一个查询的结果
+                formatted_results.append({
+                    'id': result['id'],
+                    'distance': result['distance'],
+                    'file_path': result['entity'].get('file_path', ''),
+                    'file_type': result['entity'].get('file_type', ''),
+                    'task_id': result['entity'].get('task_id', ''),
+                    'timestamp': result['entity'].get('timestamp', 0.0),
+                    'video_uuid': result['entity'].get('metadata', {}).get('video_uuid', ''),
+                    'segment_id': result['entity'].get('metadata', {}).get('segment_id', ''),
+                    'vector_id': result['entity'].get('metadata', {}).get('vector_id', ''),
+                    'absolute_timestamp': result['entity'].get('metadata', {}).get('absolute_timestamp', 0.0),
+                    'segment_file': result['entity'].get('metadata', {}).get('segment_file', ''),
+                    'original_file': result['entity'].get('metadata', {}).get('original_file', ''),
+                    'start_time': result['entity'].get('metadata', {}).get('start_time', 0.0),
+                    'end_time': result['entity'].get('metadata', {}).get('end_time', 0.0),
+                    'duration': result['entity'].get('metadata', {}).get('duration', 0.0),
+                    'frame_path': result['entity'].get('metadata', {}).get('frame_path', ''),
+                    'relative_position': result['entity'].get('metadata', {}).get('relative_position', 0.0)
+                })
+            
+            self.logger.debug(f"向量搜索完成 {collection}: 找到 {len(formatted_results)} 个结果")
+            return formatted_results
+        except Exception as e:
+            self.logger.error(f"搜索向量失败: {collection}, 错误: {e}")
+            raise
+    
     async def insert_vectors(self, collection: str, vectors: List[List[float]], 
                            ids: List[str], metadata: List[Dict] = None) -> None:
         """插入向量"""
