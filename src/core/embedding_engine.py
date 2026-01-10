@@ -213,7 +213,16 @@ class EmbeddingEngine:
                 self._load_clip_model()
                 # 预热一次
                 dummy_image = Image.new('RGB', (224, 224), color='white')
-                self.embed_image_from_path.__wrapped__(self, dummy_image)
+                # 保存为临时文件进行预热
+                import tempfile
+                with tempfile.NamedTemporaryFile(suffix='.png', delete=False) as temp_file:
+                    dummy_image.save(temp_file, format='PNG')
+                    temp_path = temp_file.name
+                try:
+                    self.embed_image(temp_path)
+                finally:
+                    import os
+                    os.unlink(temp_path)
                 logger.info("模型预热完成")
             
             return True
@@ -594,3 +603,17 @@ class EmbeddingEngine:
         except Exception as e:
             logger.error(f"图像向量化失败: {e}")
             raise
+
+
+def create_embedding_engine(config: Dict[str, Any]) -> EmbeddingEngine:
+    """
+    创建向量化引擎实例
+    
+    Args:
+        config: 配置字典
+    
+    Returns:
+        EmbeddingEngine实例
+    """
+    engine = EmbeddingEngine(config)
+    return engine
