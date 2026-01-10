@@ -116,21 +116,17 @@ class MSearchApp:
                        f"GPU={'有' if hardware_info['gpu']['has_gpu'] else '无'}")
             
             # 初始化数据库管理器
-            self.database_manager = DatabaseManager(self.config.config)
-            if not self.database_manager.initialize():
-                logger.error("数据库管理器初始化失败")
-                return False
+            db_path = self.config.get('database.sqlite.path', 'data/database/sqlite/msearch.db')
+            self.database_manager = DatabaseManager(db_path)
             logger.info("数据库管理器初始化完成")
             
             # 初始化向量存储
-            self.vector_store = VectorStore(self.config.config)
-            if not self.vector_store.initialize():
-                logger.error("向量存储初始化失败")
-                return False
+            lancedb_dir = self.config.get('database.lancedb.data_dir', 'data/database/lancedb')
+            self.vector_store = VectorStore(lancedb_dir)
             logger.info("向量存储初始化完成")
             
             # 初始化向量化引擎
-            self.embedding_engine = EmbeddingEngine(self.config.config, self.hardware_detector)
+            self.embedding_engine = EmbeddingEngine(self.config.config)
             if not self.embedding_engine.initialize():
                 logger.error("向量化引擎初始化失败")
                 return False
