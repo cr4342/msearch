@@ -348,3 +348,18 @@ class VectorStore:
         except Exception as e:
             logger.error(f"创建向量索引失败: {e}")
             return False
+
+
+def create_vector_store(config: Dict[str, Any]) -> VectorStore:
+    """
+    创建向量存储实例
+    
+    Args:
+        config: 配置字典
+    
+    Returns:
+        VectorStore实例
+    """
+    vector_store = VectorStore(config)
+    vector_store.initialize()
+    return vector_store
