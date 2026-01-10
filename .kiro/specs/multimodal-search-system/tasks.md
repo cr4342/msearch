@@ -2,7 +2,12 @@
 
 ## 版本 v0.1 - 基于3核心块架构
 
-根据最新的设计文档，项目架构已简化为3个核心块，所有开发任务将围绕这3个核心块展开。系统采用硬件自适应模型策略，仅使用apple/mobileclip、vidore/colSmol-500M和vidore/colqwen2.5-v0.2进行图像/视频向量化。
+根据最新的设计文档，项目架构已简化为3个核心块，所有开发任务将围绕这3个核心块展开。系统采用硬件自适应模型策略，仅使用以下模型进行图像/视频向量化：
+- **低配硬件**：apple/mobileclip（轻量级，适配CPU和低端GPU）
+- **中配硬件**：vidore/colSmol-500M（平衡性能与资源消耗）
+- **高配硬件**：vidore/colqwen2.5-v0.2（高性能多模态模型）
+
+系统已明确放弃michaelfeil/infinity，使用Python直接驱动大模型。
 
 ### 开发顺序说明
 1. **核心功能开发**：优先完成3大核心块的实现
@@ -33,7 +38,9 @@
   - [x] apple/mobileclip（低配硬件）
   - [x] vidore/colSmol-500M（中配硬件）
   - [x] vidore/colqwen2.5-v0.2（高配硬件）
+  - [ ] vidore/colqwen-omni-v0.1（服务化超高配）
 - [x] Whisper模型集成（用于语音转录）
+- [ ] CLAP模型集成（用于文本-音乐检索）
 - [x] 硬件自适应模型选择实现
 - [x] 向量化方法实现（使用路径作为输入）
   - [x] `embed_image_from_path(file_path)`
@@ -41,6 +48,7 @@
   - [x] `embed_video_segments_batch(file_paths)`
   - [x] `embed_text_query(text, target_modality)`
   - [x] `transcribe_audio_from_path(file_path)`
+  - [ ] `embed_audio_from_path(file_path)`
 - [x] 批量处理支持
 - [x] 模型预热机制
 - [x] 健康检查端点
@@ -48,7 +56,7 @@
 
 ### 核心块3: 向量存储 (VectorStore)
 - [x] VectorStore基础类实现
-- [x] Milvus Lite集成
+- [x] LanceDB集成
 - [x] 向量集合管理
 - [x] 向量CRUD操作
 - [x] 相似度检索功能

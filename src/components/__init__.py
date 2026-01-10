@@ -1,3 +1,0 @@
-"""
-Components package for msearch
-"""
