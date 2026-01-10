@@ -657,3 +657,17 @@ class TaskManager:
         
         except Exception as e:
             logger.error(f"加载持久化任务失败: {e}")
+
+
+def create_task_manager(config: Dict[str, Any]) -> TaskManager:
+    """
+    创建任务管理器实例
+    
+    Args:
+        config: 配置字典
+    
+    Returns:
+        TaskManager实例
+    """
+    task_manager = TaskManager(config)
+    return task_manager
