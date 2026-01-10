@@ -53,6 +53,8 @@
 - [x] 模型预热机制
 - [x] 健康检查端点
 - [x] 统一错误码体系
+- [x] 模型懒加载机制
+- [x] 任务优先级系统（视觉任务优先）
 
 ### 核心块3: 向量存储 (VectorStore)
 - [x] VectorStore基础类实现
@@ -75,10 +77,23 @@
     - [ ] VIDEO_SEGMENTS表创建
     - [ ] VECTOR_TIMESTAMP_MAP表创建
     - [ ] 表间关联关系实现
+  - [x] 基于文件哈希的去重和引用计数
+    - [x] get_or_create_file_by_hash()方法实现
+    - [x] add_file_reference()方法实现
+    - [x] remove_file_reference()方法实现
+    - [x] get_file_references()方法实现
+    - [x] get_reference_count()方法实现
+    - [x] cleanup_orphaned_files()方法实现
 - [x] SearchEngine检索引擎
   - [ ] 视频检索流程优化
   - [ ] 检索结果聚合与排序（按视频聚合结果，收集相似度分数和时间戳列）
   - [ ] 超大视频部分索引结果处理
+- [x] FileIndexer文件索引器
+  - [x] 基于文件哈希的去重和引用计数
+    - [x] calculate_file_hash()方法实现
+    - [x] check_duplicate_file()方法实现
+    - [x] handle_duplicate_file()方法实现
+    - [x] deduplicate_index()方法实现
 - [ ] MediaProcessor媒体处理器
   - [ ] 智能视频切片机制实现
     - [ ] 两阶段切片策略（FFMPEG场景检测+关键帧提取）
@@ -100,10 +115,18 @@
       - [ ] 视频开头10秒音频预提取
       - [ ] InaSpeechSegmenter音频分类
       - [ ] 根据音频类型调整场景检测阈值
+      - [x] 音频价值阈值过滤（仅处理>5秒的音频片段）
   - [ ] 时间定位功能
-    - [ ] 关键帧精确时间戳生成
+    - [x] 简化时序定位（≤6秒视频统一使用segment_id="full"）
+    - [ ] 关键帧精确时间戳生成（仅用于>6秒视频）
     - [ ] 向量与时间映射实现
     - [ ] 切片与时间定位结合机制（向量存储时结合切片重计算时间）
+  - [x] 媒体价值判断（前置过滤）
+    - [x] has_media_value()方法实现
+    - [x] get_min_media_value_duration()方法实现
+  - [x] 音频分段器优化
+    - [x] has_audio_value()方法实现
+    - [x] get_min_audio_value_duration()方法实现
 - [x] 日志系统实现（多级别、分类存储、自动轮转）
 - [x] 统一错误码体系
 
