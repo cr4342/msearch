@@ -467,16 +467,38 @@ pytest --cov=src --cov-report=html
   - [x] DatabaseManager（数据库管理器）
   - [x] VectorStore（向量存储）
   - [x] EmbeddingEngine（向量化引擎）
+    - [x] CLIP模型集成
+    - [x] Whisper模型集成
+    - [x] CLAP模型集成
+    - [x] 硬件自适应模型选择
+    - [x] 音频向量化（embed_audio_from_path）
   - [x] TaskManager（任务管理器）
 - [x] 辅助组件实现
   - [x] HardwareDetector（硬件检测器）
   - [x] FileMonitor（文件监控器）
   - [x] MediaProcessor（媒体处理器）
 - [x] 主程序入口（main.py）
+- [x] API服务层
+  - [x] API服务器（api_server.py）
+  - [x] RESTful API接口
+  - [x] 检索API
+  - [x] 文件管理API
+  - [x] 任务管理API
+  - [x] 系统信息API
+- [x] 时间定位机制
+  - [x] VIDEO_METADATA表
+  - [x] VIDEO_SEGMENTS表
+  - [x] VECTOR_TIMESTAMP_MAP表
+  - [x] 向量元数据管理（包含时间戳信息）
+  - [x] 时间戳查询接口
 
 ### 进行中
-- [ ] API接口实现
 - [ ] 单元测试编写
+- [ ] 视频检索流程优化
+- [ ] 检索结果聚合与排序
+- [ ] 智能视频切片机制
+- [ ] 关键帧精确时间戳生成
+- [ ] 向量与时间映射完善
 
 ### 待开发
 - [ ] 集成测试
@@ -510,5 +532,5 @@ pytest --cov=src --cov-report=html
 
 *最后更新: 2026-01-10*
 *架构: TaskManager + EmbeddingEngine + VectorStore + 辅助组件 + API层*
-*状态: 核心模块和辅助组件已完成，主程序入口已实现*
-*优化: 短视频优化、音频价值判断、文件去重、任务优先级管理*
+*状态: 核心模块、辅助组件、API服务层和时间定位机制已完成*
+*优化: 短视频优化、音频价值判断、文件去重、任务优先级管理、CLAP音频向量化*
