@@ -158,8 +158,8 @@ class TaskManager:
             # 计算最终优先级（包含等待时间补偿和流水线连续性奖励）
             final_priority = self.priority_calculator.calculate_priority(
                 task, 
-                wait_time_compensation=True,
-                pipeline_continuity=True
+                file_info={'file_id': file_id} if file_id else None,
+                file_priority=priority
             )
             
             # 添加到队列

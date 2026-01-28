@@ -9,10 +9,22 @@ from typing import Optional, Dict, Any, List
 from datetime import datetime
 from pathlib import Path
 import uuid
+import sys
 
-from ...data.constants import IndexStatus, ProcessingStatus
-from ...data.models.base_models import FileMetadata
-from ...data.extractors.metadata_extractor import MetadataExtractor
+# 处理导入路径
+if __name__ == "__main__":
+    from data.constants import IndexStatus, ProcessingStatus
+    from data.models.base_models import FileMetadata
+    from data.extractors.metadata_extractor import MetadataExtractor
+else:
+    try:
+        from ...data.constants import IndexStatus, ProcessingStatus
+        from ...data.models.base_models import FileMetadata
+        from ...data.extractors.metadata_extractor import MetadataExtractor
+    except ImportError:
+        from data.constants import IndexStatus, ProcessingStatus
+        from data.models.base_models import FileMetadata
+        from data.extractors.metadata_extractor import MetadataExtractor
 
 
 class FileIndexer:

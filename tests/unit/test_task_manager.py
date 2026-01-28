@@ -223,8 +223,9 @@ async def test_task_executor():
     
     try:
         # 注册处理器
-        def mock_handler(task):
-            return {"status": "success", "task_id": task.id}
+        def mock_handler(task_data):
+            # task_data是task.task_data，不是task对象
+            return {"status": "success"}
         
         executor.register_handler("image_preprocess", mock_handler)
         

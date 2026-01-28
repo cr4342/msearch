@@ -92,7 +92,8 @@ class TaskGroup:
             TaskType.VIDEO_SLICE,
             TaskType.FILE_EMBED_IMAGE,
             TaskType.FILE_EMBED_VIDEO,
-            TaskType.FILE_EMBED_AUDIO
+            TaskType.FILE_EMBED_AUDIO,
+            TaskType.FILE_EMBED_TEXT
         }
         return [t for t in self.tasks.values() if t.type in core_types]
     

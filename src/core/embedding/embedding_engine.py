@@ -48,7 +48,7 @@ from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
-from src.core.models.model_manager import (
+from core.models.model_manager import (
     ModelManager,
     ModelConfig,
     EmbeddingService,
@@ -371,13 +371,15 @@ class EmbeddingEngine:
         
         # 设置默认模型类型
         self._default_image_model = 'chinese_clip_base'
+        self._default_text_model = 'chinese_clip_base'  # 文本搜索使用相同的CLIP模型
         self._default_audio_model = 'audio_model'
         
         # 设置默认模型
         active_models = self.models_config.get('active_models', [])
         if active_models:
-            # 第一个活跃模型作为默认图像/视频模型
+            # 第一个活跃模型作为默认图像/视频/文本模型
             self._default_image_model = active_models[0]
+            self._default_text_model = active_models[0]  # 文本使用相同的模型
             # 查找音频模型
             for model_id in active_models:
                 model_config = self.models_config.get('available_models', {}).get(model_id, {})
@@ -387,6 +389,7 @@ class EmbeddingEngine:
         
         logger.info(f"模型配置加载完成，模型数量: {len(self._model_configs)}")
         logger.info(f"默认图像/视频模型: {self._default_image_model}")
+        logger.info(f"默认文本模型: {self._default_text_model}")
         logger.info(f"默认音频模型: {self._default_audio_model}")
     
     def _get_default_model_id(self) -> str:
@@ -583,7 +586,7 @@ class EmbeddingEngine:
             模型客户端实例
         """
         if model_type is None:
-            model_type = self._default_image_model
+            model_type = self._default_text_model  # 使用文本模型进行文本向量化
             
         if self._model_manager is None:
             try:
@@ -1130,7 +1133,7 @@ class EmbeddingEngine:
             raise ValueError("文本内容不能为空")
         
         if model_type is None:
-            model_type = self._default_image_model
+            model_type = self._default_text_model  # 使用文本模型进行文本向量化
         
         with self.monitor_operation(f"embed_text_{model_type}"):
             try:

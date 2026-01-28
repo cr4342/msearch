@@ -22,6 +22,7 @@ import asyncio
 import heapq
 import logging
 import time
+from datetime import datetime
 from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
@@ -69,6 +70,7 @@ class TaskScheduler:
         TaskType.VIDEO_PREPROCESS: 1,
         TaskType.AUDIO_PREPROCESS: 1,
         TaskType.FILE_EMBED_IMAGE: 1,
+        TaskType.FILE_EMBED_TEXT: 1,
         
         # 视频相关 - 中等优先级
         TaskType.VIDEO_SLICE: 3,
@@ -159,7 +161,13 @@ class TaskScheduler:
         # 等待时间补偿
         wait_compensation = 0
         if self.wait_time_compensation_enabled and created_at:
-            wait_time = time.time() - created_at
+            if isinstance(created_at, datetime):
+                # 如果是datetime对象，转换为时间戳
+                created_at_timestamp = created_at.timestamp()
+            else:
+                created_at_timestamp = created_at
+            
+            wait_time = time.time() - created_at_timestamp
             # 每60秒增加1点补偿值，最大999
             wait_compensation = min(
                 self.wait_time_compensation_max,
@@ -184,13 +192,18 @@ class TaskScheduler:
         根据任务等待时间和当前状态重新计算优先级
         """
         current_time = time.time()
-        wait_time = current_time - task.created_at
+        # 处理datetime类型
+        if isinstance(task.created_at, datetime):
+            created_at_timestamp = task.created_at.timestamp()
+        else:
+            created_at_timestamp = task.created_at
+        wait_time = current_time - created_at_timestamp
         
         # 基础优先级
-        base_priority = self.TASK_TYPE_PRIORITY.get(task.type, 5)
+        base_priority = self.TASK_TYPE_PRIORITY.get(task.task_type, 5)
         
         # 任务类型优先级
-        type_priority = self.TASK_TYPE_PRIORITY.get(task.type, 5)
+        type_priority = self.TASK_TYPE_PRIORITY.get(task.task_type, 5)
         
         # 等待时间补偿
         wait_compensation = 0
@@ -273,7 +286,7 @@ class TaskScheduler:
                 task = prioritized_task.task
                 
                 # 检查任务是否已被取消或完成
-                if task.status not in [TaskStatus.PENDING]:
+                if task.status != 'pending':
                     # 从索引中移除
                     if task.id in self._task_index:
                         del self._task_index[task.id]
@@ -310,7 +323,7 @@ class TaskScheduler:
             if task.status != TaskStatus.PENDING:
                 continue
             
-            if task.type in critical_types:
+            if task.task_type in critical_types:
                 result = task
                 if task.id in self._task_index:
                     del self._task_index[task.id]
@@ -399,7 +412,7 @@ class TaskScheduler:
             return [
                 {
                     "id": pt.task.id,
-                    "type": pt.task.type.value,
+                    "type": pt.task.task_type,
                     "priority": pt.task.priority,
                     "created_at": pt.task.created_at,
                     "wait_time": time.time() - pt.task.created_at

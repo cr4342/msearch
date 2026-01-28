@@ -63,12 +63,8 @@
 |------|------|----------|
 | [data_flow.md](./data_flow.md) | 数据流转详细设计 | 1.5, 3.1 |
 | [file_scanner_design_refinement.md](./file_scanner_design_refinement.md) | 文件扫描器详细设计 | 2.3 |
-| [task_management_optimization.md](./task_management_optimization.md) | 任务管理优化设计 | 2.5, 3.3 |
 | [pyside6_ui_design.md](./pyside6_ui_design.md) | 桌面UI详细设计 | 2.10 |
-| [service_evolution.md](./service_evolution.md) | 服务化演进设计 | 7.0 |
 | [deployment.md](./deployment.md) | 部署与运维详细指南 | 5.0 |
-| [api.md](./api.md) | API接口文档 | 2.9, 3.2 |
-| [testing.md](./testing.md) | 测试策略文档 | 8.0 |
 | [requirements.md](./requirements.md) | 需求文档 | 1.1 |
 | [INFINITY_MEMORY_MANAGEMENT.md](./INFINITY_MEMORY_MANAGEMENT.md) | Infinity内存管理 | 2.2, 4.1 |
 | [INFINITY_MODEL_MANAGEMENT.md](./INFINITY_MODEL_MANAGEMENT.md) | Infinity模型管理 | 2.2 |
@@ -4143,6 +4139,94 @@ class VectorStore:
         pass
 ```
 
+### ⚠️ 关键提示：相似度计算（重要）
+
+**问题根源**：如果文字检索结果关联度不高，90%的情况是相似度计算公式错误。
+
+**LanceDB距离类型**：
+- LanceDB默认使用**余弦距离**（Cosine Distance）
+- 公式：`distance = 1 - cosine_similarity`
+- 范围：`[0, 2]`
+
+**CLIP模型相似度**：
+- CLIP模型使用**余弦相似度**（Cosine Similarity）
+- 范围：`[-1, 1]`
+- 1.0：完全相同，0.0：无关/正交，-1.0：完全相反
+
+**正确的相似度转换公式**：
+
+```python
+# ✅ 正确：适用于余弦距离（CLIP模型）
+similarity = 1.0 - float(row['_distance'])
+similarity = max(0.0, min(1.0, similarity))  # 确保在[0,1]范围内
+
+# ❌ 错误：适用于欧氏距离，不适用于余弦距离
+similarity = 1.0 / (1.0 + float(row['_distance']))
+```
+
+**为什么不能使用欧氏距离公式？**
+- 欧氏距离公式 `1/(1+distance)` 适用于欧氏距离（范围 `[0, +∞)`）
+- 余弦距离的范围是 `[0, 2]`，使用欧氏距离公式会导致相似度值偏低
+- 例如：距离0.3（高度相关）→ 欧氏公式给出0.77，实际应该是0.70
+
+**相似度阈值配置**：
+
+```yaml
+search:
+  similarity_threshold: 0.3  # 推荐值：0.3（使用正确的余弦距离转换后）
+```
+
+**阈值设置建议**：
+- 使用正确的余弦距离转换后，推荐阈值为 **0.3**
+- 距离0.3对应相似度0.7（高度相关）
+- 距离0.5对应相似度0.5（中等相关）
+- 距离0.7对应相似度0.3（低度相关）
+
+**实现示例**（`src/core/vector/vector_store.py`）：
+
+```python
+def _results_to_dicts(self, results) -> List[Dict[str, Any]]:
+    """将查询结果转换为字典列表"""
+    result_list = []
+    for _, row in results.iterrows():
+        # 计算相似度（关键修复点）
+        # LanceDB返回的是余弦距离（1 - cosine_similarity）
+        # 所以需要用 1 - distance 转换为相似度
+        similarity = 1.0 - float(row['_distance']) if '_distance' in row else 0.0
+        # 确保相似度在[0, 1]范围内
+        similarity = max(0.0, min(1.0, similarity))
+        
+        result = {
+            'id': row['id'],
+            'vector': row['vector'].tolist(),
+            'modality': row['modality'],
+            'file_id': row['file_id'],
+            'similarity': similarity,  # 使用正确的相似度
+            '_distance': float(row['_distance']),
+            '_score': similarity  # 确保与similarity一致
+        }
+        result_list.append(result)
+    
+    return result_list
+```
+
+**验证方法**：
+1. 检查相似度值是否在合理范围（0.0-1.0）
+2. 高度相关结果（距离<0.3）应该有较高的相似度（>0.7）
+3. 低度相关结果（距离>0.7）应该有较低的相似度（<0.3）
+
+**常见错误**：
+- ❌ 使用 `1/(1+distance)` 转换余弦距离
+- ❌ 相似度阈值设置过高（如0.7）
+- ❌ 忘记将 `_score` 字段与 `similarity` 保持一致
+
+**故障排查清单**：
+1. 检查相似度计算公式是否使用 `1.0 - distance`
+2. 检查相似度阈值是否设置为0.3（而不是0.7）
+3. 检查 `_score` 字段是否与 `similarity` 一致
+4. 验证距离值是否在 `[0, 2]` 范围内（余弦距离）
+5. 测试搜索结果的相关性是否提升
+
 ## 2.8 检索引擎
 
 ### 2.7.1 SearchEngine 类设计
@@ -4363,6 +4447,1398 @@ class WebUI:
 - 样式管理和主题系统
 - 性能优化策略
 - 测试和部署方案
+
+---
+
+## 2.11 API服务设计
+
+### 2.11.1 API设计原则
+
+**RESTful API设计**：
+- 遵循REST架构风格
+- 使用标准HTTP方法（GET、POST、PUT、DELETE）
+- 统一的响应格式
+- 清晰的错误处理
+- 完整的API文档
+
+**分层架构**：
+```
+API层 (src/api/)
+├── __init__.py
+├── api_server.py          # API服务器主入口
+└── v1/                   # API v1版本
+    ├── __init__.py
+    ├── routes.py           # 路由定义
+    ├── handlers.py         # 请求处理器
+    └── schemas.py          # 数据模型定义
+```
+
+**依赖注入**：
+- 所有业务逻辑通过依赖注入获取
+- 便于测试和模块解耦
+- 支持多种部署方式
+
+### 2.11.2 API端点设计
+
+#### 搜索端点
+
+**文本搜索**：
+```http
+POST /api/v1/search/text
+Content-Type: application/json
+
+{
+  "query": "搜索查询文本",
+  "top_k": 20,
+  "modality": "all"
+}
+
+Response:
+{
+  "success": true,
+  "query": "搜索查询文本",
+  "total": 15,
+  "results": [
+    {
+      "file_uuid": "uuid-1234",
+      "file_name": "image.jpg",
+      "file_path": "/path/to/image.jpg",
+      "modality": "image",
+      "score": 0.9543,
+      "metadata": {...}
+    }
+  ]
+}
+```
+
+**图像搜索**：
+```http
+POST /api/v1/search/image
+Content-Type: multipart/form-data
+
+image: <binary>
+
+Response:
+{
+  "success": true,
+  "image": "image.jpg",
+  "total": 10,
+  "results": [...]
+}
+```
+
+**视频搜索**：
+```http
+POST /api/v1/search/video
+Content-Type: application/json
+
+{
+  "query": "视频查询文本",
+  "top_k": 20
+}
+
+Response:
+{
+  "success": true,
+  "query": "视频查询文本",
+  "total": 8,
+  "results": [
+    {
+      "file_uuid": "uuid-5678",
+      "file_name": "video.mp4",
+      "file_path": "/path/to/video.mp4",
+      "modality": "video",
+      "score": 0.8765,
+      "timestamp": {
+        "start_time": 10.5,
+        "end_time": 15.2,
+        "segment_id": "seg_001"
+      }
+    }
+  ]
+}
+```
+
+**音频搜索**：
+```http
+POST /api/v1/search/audio
+Content-Type: multipart/form-data
+
+audio: <binary>
+
+Response:
+{
+  "success": true,
+  "audio": "audio.wav",
+  "total": 5,
+  "results": [...]
+}
+```
+
+#### 索引端点
+
+**索引单个文件**：
+```http
+POST /api/v1/index/file
+Content-Type: application/x-www-form-urlencoded
+
+file_path=/path/to/file.jpg
+
+Response:
+{
+  "success": true,
+  "message": "文件已添加到索引队列",
+  "data": {
+    "task_id": "task-1234"
+  }
+}
+```
+
+**索引目录**：
+```http
+POST /api/v1/index/directory
+Content-Type: application/x-www-form-urlencoded
+
+directory=/path/to/directory
+recursive=true
+
+Response:
+{
+  "success": true,
+  "message": "目录索引任务已创建",
+  "data": {
+    "task_id": "task-5678",
+    "stats": {
+      "total_files": 150,
+      "image_files": 80,
+      "video_files": 50,
+      "audio_files": 20
+    }
+  }
+}
+```
+
+**重新索引所有文件**：
+```http
+POST /api/v1/index/reindex-all
+Content-Type: application/json
+
+Response:
+{
+  "success": true,
+  "message": "重新索引任务已创建",
+  "data": {
+    "task_id": "task-9012"
+  }
+}
+```
+
+**获取索引状态**：
+```http
+GET /api/v1/index/status
+
+Response:
+{
+  "success": true,
+  "stats": {
+    "total_files": 500,
+    "indexed_files": 450,
+    "pending_files": 50,
+    "processing_files": 10,
+    "failed_files": 5,
+    "modality_counts": {
+      "image": 300,
+      "video": 120,
+      "audio": 80
+    }
+  },
+  "last_index_time": "2026-01-28T10:30:00Z",
+  "current_tasks": [
+    {
+      "task_id": "task-1234",
+      "task_type": "image_preprocess",
+      "progress": 0.75,
+      "status": "processing"
+    }
+  ]
+}
+```
+
+#### 文件管理端点
+
+**获取文件列表**：
+```http
+GET /api/v1/files/list?file_type=image&indexed_only=true&limit=20&offset=0
+
+Response:
+{
+  "success": true,
+  "total": 100,
+  "files": [
+    {
+      "file_uuid": "uuid-1234",
+      "file_name": "image.jpg",
+      "file_path": "/path/to/image.jpg",
+      "file_type": "image",
+      "file_size": 1024000,
+      "indexed": true,
+      "indexed_at": "2026-01-28T10:00:00Z"
+    }
+  ]
+}
+```
+
+**获取文件信息**：
+```http
+GET /api/v1/files/{file_uuid}
+
+Response:
+{
+  "success": true,
+  "file_uuid": "uuid-1234",
+  "file_name": "image.jpg",
+  "file_path": "/path/to/image.jpg",
+  "file_type": "image",
+  "file_size": 1024000,
+  "indexed": true,
+  "indexed_at": "2022026-01-28T10:00:00Z",
+  "metadata": {
+    "width": 1920,
+    "height": 1080,
+    "format": "JPEG",
+    "created_at": "2026-01-28T09:00:00Z"
+  }
+}
+```
+
+**获取文件预览**：
+```http
+GET /api/v1/files/preview?path=/path/to/image.jpg
+
+Response: <image/jpeg binary>
+```
+
+**获取文件缩略图**：
+```http
+GET /api/v1/files/thumbnail?path=/path/to/image.jpg
+
+Response: <image/jpeg binary>
+```
+
+#### 任务管理端点
+
+**获取任务列表**：
+```http
+GET /api/v1/tasks/list?task_type=image_preprocess&status=processing&limit=20&offset=0
+
+Response:
+{
+  "success": true,
+  "total": 50,
+  "tasks": [
+    {
+      "id": "task-1234",
+      "task_type": "image_preprocess",
+      "status": "processing",
+      "priority": 1,
+      "progress": 0.75,
+      "current_step": "向量化处理",
+      "step_progress": 0.5,
+      "created_at": "2026-01-28T10:00:00Z",
+      "started_at": "2026-01-28T10:01:00Z",
+      "task_data": {
+        "file_path": "/path/to/image.jpg"
+      }
+    }
+  ]
+}
+```
+
+**获取任务详情**：
+```http
+GET /api/v1/tasks/{task_id}
+
+Response:
+{
+  "success": true,
+  "id": "task-1234",
+  "task_type": "image_preprocess",
+  "status": "processing",
+  "priority": 1,
+  "progress": 0.75,
+  "current_step": "向量化处理",
+  "step_progress": 0.5,
+  "created_at": "2026-01-28T10:00:00Z",
+  "started_at": "2026-01-28T10:01:00Z",
+  "task_data": {
+    "file_path": "/path/to/image.jpg"
+  },
+  "result": null,
+  "error": null
+}
+```
+
+**取消任务**：
+```http
+DELETE /api/v1/tasks/{task_id}
+
+Response:
+{
+  "success": true,
+  "message": "任务已取消"
+}
+```
+
+**更新任务优先级**：
+```http
+POST /api/v1/tasks/{task_id}/priority
+Content-Type: application/json
+
+{
+  "priority": 3
+}
+
+Response:
+{
+  "success": true,
+  "message": "任务优先级已更新",
+  "result": {
+    "task_id": "task-1234",
+    "old_priority": 5,
+    "new_priority": 3
+  }
+}
+```
+
+**取消所有任务**：
+```http
+POST /api/v1/tasks/cancel-all
+Content-Type: application/json
+
+{
+  "cancel_running": "false"
+}
+
+Response:
+{
+  "success": true,
+  "message": "批量取消任务完成",
+  "result": {
+    "cancelled": 45,
+    "failed": 5,
+    "total": 50
+  }
+}
+```
+
+**按类型取消任务**：
+```http
+POST /api/v1/tasks/cancel-by-type
+Content-Type: application/json
+
+{
+  "task_type": "image_preprocess",
+  "cancel_running": "false"
+}
+
+Response:
+{
+  "success": true,
+  "message": "批量取消任务完成",
+  "result": {
+    "task_type": "image_preprocess",
+    "cancelled": 30,
+    "failed": 2,
+    "total": 32
+  }
+}
+```
+
+**获取任务统计**：
+```http
+GET /api/v1/tasks/stats
+
+Response:
+{
+  "success": true,
+  "task_stats": {
+    "overall": {
+      "total": 100,
+      "pending": 20,
+      "running": 5,
+      "completed": 70,
+      "failed": 3,
+      "cancelled": 2
+    },
+    "by_type": {
+      "image_preprocess": {
+        "total": 30,
+        "completed": 25,
+        "failed": 2
+      },
+      "video_preprocess": {
+        "total": 25,
+        "completed": 20,
+        "failed": 1
+      }
+    }
+  },
+  "concurrency": 4,
+  "resource_usage": {
+    "cpu_percent": 45.2,
+    "memory_percent": 62.8,
+    "gpu_percent": 78.5
+  }
+}
+```
+
+#### 系统信息端点
+
+**获取系统信息**：
+```http
+GET /api/v1/system/info
+
+Response:
+{
+  "success": true,
+  "version": "1.0.0",
+  "config": {
+    "models": {
+      "image_video_model": "chinese-clip-vit-base-patch16",
+      "audio_model": "laion/clap-htsat-unfused"
+    },
+    "device": "cuda",
+    "batch_size": 16
+  }
+}
+```
+
+**获取系统统计**：
+```http
+GET /api/v1/system/stats
+
+Response:
+{
+  "success": true,
+  "stats": {
+    "total_files": 500,
+    "indexed_files": 450,
+    "total_vectors": 450,
+    "database_size": "2.5GB",
+    "vector_db_size": "1.8GB"
+  }
+}
+```
+
+**健康检查**：
+```http
+GET /api/v1/health
+
+Response:
+{
+  "status": "healthy",
+  "service": "msearch API",
+  "version": "1.0.0"
+}
+```
+
+### 2.11.3 API数据模型
+
+#### 搜索相关模型
+
+**TextSearchRequest**：
+```python
+class TextSearchRequest(BaseModel):
+    query: str
+    top_k: int = 20
+    modality: str = "all"  # all, image, video, audio
+```
+
+**ImageSearchRequest**：
+```python
+class ImageSearchRequest(BaseModel):
+    top_k: int = 20
+```
+
+**VideoSearchRequest**：
+```python
+class VideoSearchRequest(BaseModel):
+    query: str
+    top_k: int = 20
+```
+
+**AudioSearchRequest**：
+```python
+class AudioSearchRequest(BaseModel):
+    top_k: int = 20
+```
+
+**SearchResponse**：
+```python
+class SearchResponse(BaseModel):
+    success: bool
+    query: Optional[str] = None
+    image: Optional[str] = None
+    audio: Optional[str] = None
+    video: Optional[str] = None
+    total: int
+    results: List[SearchResult]
+```
+
+**SearchResult**：
+```python
+class SearchResult(BaseModel):
+    file_uuid: str
+    file_name: str
+    file_path: str
+    modality: str  # image, video, audio
+    score: float
+    metadata: Dict[str, Any]
+    timestamp: Optional[Dict[str, Any]] = None  # 视频时间戳信息
+```
+
+#### 索引相关模型
+
+**IndexAddRequest**：
+```python
+class IndexAddRequest(BaseModel):
+    file_path: str
+    priority: int = 5
+```
+
+**IndexRemoveRequest**：
+```python
+class IndexRemoveRequest(BaseModel):
+    file_uuid: str
+```
+
+**IndexStatusResponse**：
+```python
+class IndexStatusResponse(BaseModel):
+    success: bool
+    stats: Dict[str, Any]
+    last_index_time: Optional[str] = None
+    current_tasks: List[Dict[str, Any]]
+```
+
+#### 文件相关模型
+
+**FilesListRequest**：
+```python
+class FilesListRequest(BaseModel):
+    file_type: Optional[str] = None
+    indexed_only: bool = False
+    limit: int = 100
+    offset: int = 0
+```
+
+**FilesListResponse**：
+```python
+class FilesListResponse(BaseModel):
+    success: bool
+    total: int
+    files: List[FileInfo]
+```
+
+**FileInfo**：
+```python
+class FileInfo(BaseModel):
+    file_uuid: str
+    file_name: str
+    file_path: str
+    file_type: str
+    file_size: int
+    indexed: bool
+    indexed_at: Optional[str] = None
+    metadata: Dict[str, Any]
+```
+
+#### 任务相关模型
+
+**TasksListRequest**：
+```python
+class TasksListRequest(BaseModel):
+    task_type: Optional[str] = None
+    status: Optional[str] = None
+    limit: int = 100
+    offset: int = 0
+```
+
+**TasksListResponse**：
+```python
+class TasksListResponse(BaseModel):
+    success: bool
+    total: int
+    tasks: List[TaskInfo]
+```
+
+**TaskStatusResponse**：
+```python
+class TaskStatusResponse(BaseModel):
+    success: bool
+    id: str
+    task_type: str
+    status: str
+    priority: int
+    progress: float
+    current_step: Optional[str] = None
+    step_progress: Optional[float] = None
+    created_at: str
+    started_at: Optional[str] = None
+    completed_at: Optional[str] = None
+    task_data: Dict[str, Any]
+    result: Optional[Any] = None
+    error: Optional[str] = None
+```
+
+#### 系统相关模型
+
+**SystemInfo**：
+```python
+class SystemInfo(BaseModel):
+    success: bool
+    version: str
+    config: Dict[str, Any]
+```
+
+**SystemStats**：
+```python
+class SystemStats(BaseModel):
+    success: bool
+    stats: Dict[str, Any]
+```
+
+**ErrorResponse**：
+```python
+class ErrorResponse(BaseModel):
+    success: bool
+    error: str
+    detail: Optional[str] = None
+```
+
+**SuccessResponse**：
+```python
+class SuccessResponse(BaseModel):
+    success: bool
+    message: str
+    data: Optional[Dict[str, Any]] = None
+```
+
+### 2.11.4 API错误处理
+
+**统一错误响应格式**：
+```json
+{
+  "success": false,
+  "error": "错误类型",
+  "detail": "详细错误信息"
+}
+```
+
+**常见错误码**：
+- 400: 请求参数错误
+- 404: 资源不存在
+- 500: 服务器内部错误
+
+**错误处理示例**：
+```python
+@router.get("/files/{file_uuid}")
+async def get_file_info(file_uuid: str):
+    try:
+        file_info = await handlers.handle_file_info(file_uuid)
+        return file_info
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+```
+
+### 2.11.5 API性能要求
+
+根据需求文档的验收标准：
+
+1. **响应时间**：所有API请求应在2秒内返回结果，容差为±0.5秒
+2. **并发处理**：支持多个并发请求，不影响性能
+3. **结果数量**：默认返回前20个最相关项目
+4. **向量数据库性能**：超过10万条记录时保持检索性能无明显下降
+5. **错误处理**：所有错误返回统一格式的错误响应
+
+### 2.11.6 API安全考虑
+
+**输入验证**：
+- 所有输入参数必须经过验证
+- 文件路径必须进行安全检查
+- 防止路径遍历攻击
+
+**访问控制**：
+- 当前版本无需身份验证（单机应用）
+- 未来可扩展为API Key认证
+
+**资源限制**：
+- 文件上传大小限制
+- 请求频率限制（可选）
+- 并发连接数限制
+
+---
+
+## 2.12 CLI设计
+
+### 2.12.1 CLI设计原则
+
+**命令行工具定位**：
+- 用于测试和调试msearch系统
+- 封装所有API接口，提供命令行访问方式
+- 支持自动化脚本和批处理操作
+
+**设计特点**：
+- 直观的命令结构
+- 清晰的帮助信息
+- 友好的错误提示
+- 丰富的输出格式
+
+**依赖关系**：
+- 依赖API服务器运行
+- 使用requests库进行HTTP通信
+- 支持多种输出格式（文本、JSON）
+
+### 2.12.2 CLI命令结构
+
+```
+msearch-cli <command> [options] [arguments]
+
+可用命令：
+  health          健康检查
+  info             系统信息
+  vector-stats     向量统计
+  search          搜索
+  task            任务管理
+  index           文件索引
+  config          配置管理
+  help            帮助信息
+```
+
+### 2.12.3 健康检查命令
+
+**命令**：
+```bash
+python src/cli.py health
+```
+
+**功能**：
+- 检查API服务器连接状态
+- 验证所有组件运行状态
+- 显示系统健康指标
+
+**输出示例**：
+```
+============================================================
+健康检查
+============================================================
+状态: healthy
+
+组件状态:
+  - API服务: running
+  - 数据库: connected
+  - 向量存储: ready
+  - 任务管理器: active
+
+✓ 系统运行正常
+```
+
+### 2.12.4 系统信息命令
+
+**命令**：
+```bash
+python src/cli.py info
+```
+
+**功能**：
+- 显示系统版本信息
+- 显示当前配置信息
+- 显示模型配置详情
+
+**输出示例**：
+```
+============================================================
+系统信息
+============================================================
+状态: true
+
+配置信息:
+  - 版本: 1.0.0
+  - 设备: cuda
+  - 批处理大小: 16
+  - 图像/视频模型: chinese-clip-vit-base-patch16
+  - 音频模型: laion/clap-htsat-unfused
+```
+
+### 2.12.5 向量统计命令
+
+**命令**：
+```bash
+python src/cli.py vector-stats
+```
+
+**功能**：
+- 显示向量数据库统计信息
+- 显示各模态向量数量分布
+- 显示向量维度信息
+
+**输出示例**：
+```
+============================================================
+向量统计
+============================================================
+表名: unified_vectors
+总向量数: 450
+向量维度: 512
+
+模态分布:
+  - image: 300
+  - video: 120
+  - audio: 30
+```
+
+### 2.12.6 搜索命令
+
+#### 文本搜索
+
+**命令**：
+```bash
+python src/cli.py search text "搜索文本" [--top-k 20]
+```
+
+**功能**：
+- 使用文本查询搜索文件
+- 支持多模态搜索
+- 显示搜索结果和相似度分数
+
+**输出示例**：
+```
+============================================================
+文本搜索: 老虎
+============================================================
+查询: 老虎
+结果数: 15
+
+搜索结果:
+  [1] 相似度: 0.9543
+      文件名: tiger.jpg
+      文件路径: /data/animals/tiger.jpg
+      模态: image
+
+  [2] 相似度: 0.9234
+      文件名: wildlife_video.mp4
+      文件路径: /data/videos/wildlife.mp4
+      模态: video
+      时间戳: 10.5-15.2秒
+```
+
+#### 图像搜索
+
+**命令**：
+```bash
+python src/cli.py search image /path/to/image.jpg [--top-k 20]
+```
+
+**功能**：
+- 使用图像文件搜索相似文件
+- 支持图搜图和图搜视频
+- 显示图像相似度分数
+
+**输出示例**：
+```
+============================================================
+图像搜索: /path/to/image.jpg
+============================================================
+图像: image.jpg
+结果数: 10
+
+搜索结果:
+  [1] 相似度: 0.9123
+      文件名: similar_image.jpg
+      文件路径: /data/images/similar_image.jpg
+      模态: image
+```
+
+#### 音频搜索
+
+**命令**：
+```bash
+python src/cli.py search audio /path/to/audio.wav [--top-k 20]
+```
+
+**功能**：
+- 使用音频文件搜索相似文件
+- 支持音频找音频和音频找视频
+- 显示音频相似度分数
+
+**输出示例**：
+```
+============================================================
+音频搜索: /path/to/audio.wav
+============================================================
+音频: audio.wav
+结果数: 5
+
+搜索结果:
+  [1] 相似度: 0.8765
+      文件名: similar_audio.wav
+      文件路径: /data/audio/similar_audio.wav
+      模态: audio
+```
+
+### 2.12.7 任务管理命令
+
+#### 任务统计
+
+**命令**：
+```bash
+python src/cli.py task stats
+```
+
+**功能**：
+- 显示任务总体统计信息
+- 显示各类型任务统计
+- 显示资源使用情况
+
+**输出示例**：
+```
+============================================================
+任务统计
+============================================================
+
+总体统计:
+  - 总任务数: 100
+  - 待处理: 20
+  - 运行中: 5
+  - 已完成: 70
+  - 失败: 3
+  - 已取消: 2
+
+按类型统计:
+  - image_preprocess:
+      总数: 30
+      完成: 25
+      失败: 2
+
+并发数: 4
+
+资源使用:
+  - CPU: 45.2%
+  - 内存: 62.8%
+  - GPU: 78.5%
+```
+
+#### 列出任务
+
+**命令**：
+```bash
+python src/cli.py task list [--status pending] [--type image_preprocess] [--limit 20]
+```
+
+**功能**：
+- 列出所有任务
+- 支持按状态和类型过滤
+- 支持分页显示
+
+**输出示例**：
+```
+============================================================
+任务列表
+============================================================
+任务总数: 50
+
+任务列表:
+  [1] 任务ID: task-1234...
+      类型: image_preprocess
+      状态: processing
+      优先级: 1
+      进度: 75.0%
+      当前步骤: 向量化处理
+      创建时间: 2026-01-28 10:00:00
+```
+
+#### 获取任务详情
+
+**命令**：
+```bash
+python src/cli.py task get <task_id>
+```
+
+**功能**：
+- 显示任务详细信息
+- 显示任务进度和状态
+- 显示任务错误信息（如果有）
+
+**输出示例**：
+```
+============================================================
+任务详情: task-1234
+============================================================
+任务ID: task-1234
+类型: image_preprocess
+状态: processing
+优先级: 1
+进度: 75.0%
+创建时间: 2026-01-28 10:00:00
+开始时间: 2026-01-28 10:01:00
+当前步骤: 向量化处理
+步骤进度: 50.0%
+
+任务数据:
+  - file_path: /path/to/image.jpg
+```
+
+#### 取消任务
+
+**命令**：
+```bash
+python src/cli.py task cancel <task_id>
+```
+
+**功能**：
+- 取消指定任务
+- 显示取消结果
+- 支持取消运行中的任务
+
+**输出示例**：
+```
+============================================================
+取消任务: task-1234
+============================================================
+成功: true
+消息: 任务已取消
+```
+
+#### 更新任务优先级
+
+**命令**：
+```bash
+python src/cli.py task priority <task_id> <priority>
+```
+
+**功能**：
+- 更新任务优先级（0-11）
+- 支持动态调整任务优先级
+- 显示更新结果
+
+**输出示例**：
+```
+============================================================
+更新任务优先级: task-1234
+============================================================
+成功: true
+消息: 任务优先级已更新
+新优先级: 3
+```
+
+#### 取消所有任务
+
+**命令**：
+```bash
+python src/cli.py task cancel-all [--cancel-running]
+```
+
+**功能**：
+- 取消所有待处理任务
+- 可选同时取消正在运行的任务
+- 显示取消统计信息
+
+**输出示例**：
+```
+============================================================
+取消所有任务
+============================================================
+成功: true
+消息: 批量取消任务完成
+
+取消统计:
+  - 已取消: 45
+  - 失败: 5
+  - 总计: 50
+```
+
+#### 按类型取消任务
+
+**命令**：
+```bash
+python src/cli.py task cancel-by-type <task_type> [--cancel-running]
+```
+
+**功能**：
+- 按任务类型批量取消任务
+- 可选同时取消正在运行的任务
+- 显示按类型的取消统计
+
+**输出示例**：
+```
+============================================================
+取消image_preprocess类型任务
+============================================================
+成功: true
+消息: 批量取消任务完成
+
+取消统计:
+  - 任务类型: image_preprocess
+  - 已取消: 30
+  - 失败: 2
+  - 总计: 32
+```
+
+### 2.12.8 文件索引命令
+
+#### 索引单个文件
+
+**命令**：
+```bash
+python src/cli.py index file /path/to/file.jpg
+```
+
+**功能**：
+- 将单个文件添加到索引队列
+- 返回任务ID用于跟踪进度
+- 支持所有文件类型
+
+**输出示例**：
+```
+============================================================
+索引文件: /path/to/file.jpg
+============================================================
+任务ID: task-1234
+状态: true
+消息: 文件已添加到索引队列
+
+您可以使用以下命令查看任务进度:
+  python src/cli.py task get task-1234
+```
+
+#### 索引目录
+
+**命令**：
+```bash
+python src/cli.py index directory /path/to/directory [--no-recursive]
+```
+
+**功能**：
+- 递归或非递归索引目录
+- 显示扫描统计信息
+- 返回任务ID用于跟踪进度
+
+**输出示例**：
+```
+============================================================
+索引目录: /path/to/directory
+============================================================
+任务ID: task-5678
+状态: true
+消息: 目录索引任务已创建
+
+扫描统计:
+  - 总文件数: 150
+  - 图像文件: 80
+  - 视频文件: 50
+  - 音频文件: 20
+  - 其他文件: 0
+
+您可以使用以下命令查看任务进度:
+  python src/cli.py task get task-5678
+```
+
+#### 重新索引所有文件
+
+**命令**：
+```bash
+python src/cli.py index reindex-all
+```
+
+**功能**：
+- 重新索引所有已注册文件
+- 跳过已索引的文件
+- 返回任务ID用于跟踪进度
+
+**输出示例**：
+```
+============================================================
+重新索引所有文件
+============================================================
+任务ID: task-9012
+状态: true
+消息: 重新索引任务已创建
+
+您可以使用以下命令查看任务进度:
+  python src/cli.py task get task-9012
+```
+
+#### 获取索引状态
+
+**命令**：
+```bash
+python src/cli.py index status
+```
+
+**功能**：
+- 显示索引统计信息
+- 显示各模态文件数量
+- 显示当前索引任务进度
+- 显示最后索引时间
+
+**输出示例**：
+```
+============================================================
+索引状态
+============================================================
+状态: true
+
+索引统计:
+  - 总文件数: 500
+  - 已索引: 450
+  - 待处理: 50
+  - 处理中: 10
+  - 失败: 5
+
+模态分布:
+  - image: 300
+  - video: 120
+  - audio: 30
+
+最后索引时间: 2026-01-28 10:30:00
+
+当前索引任务:
+  - task-1234 (image_preprocess) - 进度: 75.0% - 状态: processing
+  - task-5678 (video_preprocess) - 进度: 30.0% - 状态: processing
+```
+
+### 2.12.9 CLI高级功能
+
+#### 自定义API URL
+
+**命令**：
+```bash
+python src/cli.py --url http://localhost:8080 search text "搜索文本"
+```
+
+**功能**：
+- 支持自定义API服务器URL
+- 用于连接远程API服务器
+- 便于测试不同环境
+
+#### JSON输出格式
+
+**命令**：
+```bash
+python src/cli.py --format json search text "搜索文本"
+```
+
+**功能**：
+- 支持JSON格式输出
+- 便于脚本解析
+- 支持自动化集成
+
+#### 批处理操作
+
+**命令**：
+```bash
+# 批量索引多个文件
+for file in /path/to/images/*.jpg; do
+    python src/cli.py index file "$file"
+done
+
+# 批量取消所有图像预处理任务
+python src/cli.py task cancel-by-type image_preprocess
+```
+
+**功能**：
+- 支持shell脚本集成
+- 支持批处理操作
+- 支持自动化流程
+
+### 2.12.10 CLI使用示例
+
+#### 完整工作流程示例
+
+```bash
+# 1. 健康检查
+python src/cli.py health
+
+# 2. 查看系统信息
+python src/cli.py info
+
+# 3. 索引测试数据目录
+python src/cli.py index directory /data/testdata
+
+# 4. 查看索引状态
+python src/cli.py index status
+
+# 5. 执行文本搜索
+python src/cli.py search text "老虎"
+
+# 6. 执行图像搜索
+python src/cli.py search image /data/testdata/tiger.jpg
+
+# 7. 执行音频搜索
+python src/cli.py search audio /data/testdata/roar.wav
+
+# 8. 查看任务统计
+python src/cli.py task stats
+
+# 9. 取消所有任务
+python src/cli.py task cancel-all
+
+# 10. 查看向量统计
+python src/cli.py vector-stats
+```
+
+#### 自动化脚本示例
+
+```bash
+#!/bin/bash
+# 自动化索引脚本
+
+# 索引新文件
+echo "开始索引新文件..."
+python src/cli.py index directory /data/new_files
+
+# 等待索引完成
+sleep 5
+
+# 查看索引状态
+python src/cli.py index status
+
+# 执行测试搜索
+echo "执行测试搜索..."
+python src/cli.py search text "测试"
+
+echo "索引完成!"
+```
+
+### 2.12.11 CLI性能要求
+
+根据需求文档的验收标准：
+
+1. **响应时间**：所有CLI命令应在2秒内返回结果
+2. **错误处理**：所有错误都有友好的错误提示
+3. **帮助信息**：所有命令都有清晰的帮助说明
+4. **进度跟踪**：长时间操作提供任务ID用于跟踪进度
+5. **批量操作**：支持批处理和自动化脚本
+
+### 2.12.12 CLI与API的关系
+
+**CLI作为API的封装**：
+- CLI工具封装了所有API端点
+- 提供更友好的命令行界面
+- 支持自动化脚本和批处理
+
+**依赖关系**：
+- CLI依赖API服务器运行
+- 使用HTTP协议与API通信
+- 错误处理与API保持一致
+
+**使用场景**：
+- 开发测试：快速测试API功能
+- 调试问题：诊断系统问题
+- 自动化：集成到CI/CD流程
+- 运维管理：批量操作和监控
 
 ---
 
@@ -5514,11 +6990,17 @@ webui:
 ```yaml
 search:
   top_k: 20                         # 返回结果数
-  min_score_threshold: 0.7          # 最小相似度阈值
+  similarity_threshold: 0.3         # 最小相似度阈值（关键：使用正确的余弦距离转换后，推荐0.3）
   enable_reranking: true            # 是否启用重排序
   rerank_top_k: 10                  # 重排序结果数
   max_results: 100                  # 最大结果数
 ```
+
+**⚠️ 重要提示**：
+- `similarity_threshold` 必须设置为 **0.3**（不是0.7）
+- 这是因为使用正确的余弦距离转换公式 `1.0 - distance` 后，距离0.7对应相似度0.3
+- 如果使用错误的欧氏距离公式 `1/(1+distance)`，则需要将阈值设置为0.7
+- **强烈建议使用正确的余弦距离转换公式，并将阈值设置为0.3**
 
 **资源监控配置**：
 
@@ -6187,17 +7669,7 @@ class BaseWorker:
 
 ## 7.1 演进路线图
 
-本文档聚焦于**本地多进程单机应用**架构设计。关于未来向容器化、微服务集群演进的详细设计，请参考专用文档：
-
-**[service_evolution.md](./service_evolution.md)**
-
-该文档包含以下内容：
-- 演进阶段规划（容器化、微服务集群）
-- 容器化架构设计（Docker Compose）
-- 微服务集群设计（Kubernetes）
-- 服务拆分策略
-- 服务间通信设计（gRPC）
-- 部署与运维
+本文档聚焦于**本地多进程单机应用**架构设计。关于未来向容器化、微服务集群演进的详细设计，请参考专用文档。
 
 ## 7.2 演进原则
 
@@ -6585,7 +8057,7 @@ async def test_high_concurrency():
 
 ## C. 更新日志
 
-### v2.0 (2026-01-24)
+### v1.0 (2026-01-24)
 
 **主要更新**：
 - 重新组织设计文档结构

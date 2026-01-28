@@ -81,6 +81,24 @@ python scripts/setup_models.py check || {
 # 创建日志目录
 mkdir -p logs
 
+# 启动多进程主程序
+print_info "启动多进程主程序..."
+MAIN_PID=""
+python src/main_multiprocess.py > logs/main.log 2>&1 &
+MAIN_PID=$!
+
+# 等待主程序启动
+print_info "等待主程序启动..."
+sleep 5
+
+# 检查主程序是否成功启动
+if ! kill -0 $MAIN_PID 2>/dev/null; then
+    print_error "主程序启动失败，查看日志: tail -f logs/main.log"
+    exit 1
+fi
+
+print_success "主程序已启动 (PID: $MAIN_PID)"
+
 # 启动API服务
 print_info "启动API服务..."
 API_PID=""
@@ -144,14 +162,16 @@ print_info ""
 print_info "========================================"
 print_info "进程信息"
 print_info "========================================"
-print_info "API服务 PID: $API_PID"
+print_info "主程序 PID:  $MAIN_PID"
+print_info "API服务 PID:  $API_PID"
 if [ -n "$WEBUI_PID" ]; then
     print_info "WebUI PID:   $WEBUI_PID"
 fi
 print_info ""
 print_info "日志文件："
-print_info "  - API日志:  logs/api.log"
-print_info "  - WebUI日志: logs/webui.log"
+print_info "  - 主程序日志: logs/main.log"
+print_info "  - API日志:    logs/api.log"
+print_info "  - WebUI日志:  logs/webui.log"
 print_info "========================================"
 print_info ""
 
@@ -159,6 +179,12 @@ print_info ""
 cleanup() {
     print_info ""
     print_info "正在停止服务..."
+    
+    if [ -n "$MAIN_PID" ] && kill -0 $MAIN_PID 2>/dev/null; then
+        print_info "停止主程序 (PID: $MAIN_PID)..."
+        kill $MAIN_PID 2>/dev/null || true
+        wait $MAIN_PID 2>/dev/null || true
+    fi
     
     if [ -n "$API_PID" ] && kill -0 $API_PID 2>/dev/null; then
         print_info "停止API服务 (PID: $API_PID)..."

@@ -10,7 +10,7 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 导入媒体处理通用工具
-from src.services.media.media_utils import MediaInfoHelper, calculate_file_hash
+from services.media.media_utils import MediaInfoHelper, calculate_file_hash
 
 
 class ImagePreprocessor:

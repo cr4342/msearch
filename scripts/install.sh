@@ -263,7 +263,7 @@ detect_hardware() {
 
 # 根据硬件配置生成优化配置
 generate_optimized_config() {
-    print_info "根据硬件配置生成优化配置..."
+    print_info "根据硬件配置生成优化配置..." >&2
     
     # 解析命令行参数
     FORCE_DEVICE=""
@@ -287,63 +287,63 @@ generate_optimized_config() {
     # 确定设备类型
     if [ -n "$FORCE_DEVICE" ]; then
         DEVICE_TYPE="$FORCE_DEVICE"
-        print_info "  强制使用设备: $DEVICE_TYPE"
+        print_info "  强制使用设备: $DEVICE_TYPE" >&2
     else
         if [ "$DETECTED_GPU_MEMORY" -gt 0 ]; then
             DEVICE_TYPE="cuda"
-            print_info "  检测到GPU，使用CUDA加速"
+            print_info "  检测到GPU，使用CUDA加速" >&2
         elif [ "$DETECTED_CPU_ARCH" = "arm64" ]; then
             DEVICE_TYPE="mps"
-            print_info "  检测到Apple Silicon，使用MPS加速"
+            print_info "  检测到Apple Silicon，使用MPS加速" >&2
         else
             DEVICE_TYPE="cpu"
-            print_info "  使用CPU模式"
+            print_info "  使用CPU模式" >&2
         fi
     fi
     
     # 确定模型规格
     if [ -n "$FORCE_MODEL" ]; then
         MODEL_SPEC="$FORCE_MODEL"
-        print_info "  强制使用模型: $MODEL_SPEC"
+        print_info "  强制使用模型: $MODEL_SPEC" >&2
     else
         # 根据硬件配置自动选择模型
         if [ "$DEVICE_TYPE" = "cuda" ]; then
             if [ "$DETECTED_GPU_MEMORY" -ge 32000 ]; then
                 # 32GB+ 显存，使用超高精度模型
                 MODEL_SPEC="tomoro_colqwen3"
-                print_info "  检测到超高配置GPU (32GB+显存)"
-                print_info "  推荐模型: tomoro_colqwen3 (超高精度, 4096维)"
+                print_info "  检测到超高配置GPU (32GB+显存)" >&2
+                print_info "  推荐模型: tomoro_colqwen3 (超高精度, 4096维)" >&2
             elif [ "$DETECTED_GPU_MEMORY" -ge 16000 ]; then
                 # 16-32GB 显存，使用高性能模型
                 MODEL_SPEC="colqwen3_turbo"
-                print_info "  检测到高配置GPU (16-32GB显存)"
-                print_info "  推荐模型: colqwen3_turbo (高性能, 512维)"
+                print_info "  检测到高配置GPU (16-32GB显存)" >&2
+                print_info "  推荐模型: colqwen3_turbo (高性能, 512维)" >&2
             elif [ "$DETECTED_GPU_MEMORY" -ge 8000 ]; then
                 # 8-16GB 显存，使用高精度模型
                 MODEL_SPEC="chinese_clip_large"
-                print_info "  检测到中高配置GPU (8-16GB显存)"
-                print_info "  推荐模型: chinese_clip_large (高精度, 768维)"
+                print_info "  检测到中高配置GPU (8-16GB显存)" >&2
+                print_info "  推荐模型: chinese_clip_large (高精度, 768维)" >&2
             elif [ "$DETECTED_GPU_MEMORY" -ge 4000 ]; then
                 # 4-8GB 显存，使用标准模型
                 MODEL_SPEC="chinese_clip_base"
-                print_info "  检测到中配置GPU (4-8GB显存)"
-                print_info "  推荐模型: chinese_clip_base (标准, 512维)"
+                print_info "  检测到中配置GPU (4-8GB显存)" >&2
+                print_info "  推荐模型: chinese_clip_base (标准, 512维)" >&2
             else
                 # 4GB以下显存，使用轻量模型
                 MODEL_SPEC="chinese_clip_base"
-                print_info "  检测到低配置GPU (4GB以下显存)"
-                print_info "  推荐模型: chinese_clip_base (轻量, 512维)"
+                print_info "  检测到低配置GPU (4GB以下显存)" >&2
+                print_info "  推荐模型: chinese_clip_base (轻量, 512维)" >&2
             fi
         elif [ "$DEVICE_TYPE" = "mps" ]; then
             # Apple Silicon，使用标准模型
             MODEL_SPEC="chinese_clip_large"
-            print_info "  检测到Apple Silicon GPU"
-            print_info "  推荐模型: chinese_clip_large (Apple优化, 768维)"
+            print_info "  检测到Apple Silicon GPU" >&2
+            print_info "  推荐模型: chinese_clip_large (Apple优化, 768维)" >&2
         else
             # CPU模式，使用轻量模型
             MODEL_SPEC="chinese_clip_base"
-            print_info "  CPU模式"
-            print_info "  推荐模型: chinese_clip_base (轻量, 512维)"
+            print_info "  CPU模式" >&2
+            print_info "  推荐模型: chinese_clip_base (轻量, 512维)" >&2
         fi
     fi
     
@@ -408,30 +408,30 @@ generate_optimized_config() {
     fi
     
     # 输出配置信息
-    echo ""
-    echo "========================================"
-    echo "  优化配置生成完成"
-    echo "========================================"
-    echo ""
-    echo "设备配置:"
-    echo "  设备类型: $DEVICE_TYPE"
-    echo "  GPU显存: ${DETECTED_GPU_MEMORY}MB"
-    echo ""
-    echo "模型配置:"
-    echo "  模型规格: $MODEL_SPEC"
-    echo "  模型名称: $MODEL_NAME"
-    echo "  模型路径: $MODEL_PATH"
-    echo "  向量维度: ${EMBEDDING_DIM}维"
-    echo "  批处理大小: $BATCH_SIZE"
-    echo "  精度: $PRECISION"
-    echo "  输入分辨率: ${INPUT_RESOLUTION}px"
-    echo ""
-    echo "性能配置:"
-    echo "  最大工作线程: $MAX_WORKERS"
-    echo "  CPU核心数: $DETECTED_CPU_CORES"
-    echo "  可用内存: ${DETECTED_AVAILABLE_MEM_GB}GB"
-    echo ""
-    echo "========================================"
+    echo "" >&2
+    echo "========================================" >&2
+    echo "  优化配置生成完成" >&2
+    echo "========================================" >&2
+    echo "" >&2
+    echo "设备配置:" >&2
+    echo "  设备类型: $DEVICE_TYPE" >&2
+    echo "  GPU显存: ${DETECTED_GPU_MEMORY}MB" >&2
+    echo "" >&2
+    echo "模型配置:" >&2
+    echo "  模型规格: $MODEL_SPEC" >&2
+    echo "  模型名称: $MODEL_NAME" >&2
+    echo "  模型路径: $MODEL_PATH" >&2
+    echo "  向量维度: ${EMBEDDING_DIM}维" >&2
+    echo "  批处理大小: $BATCH_SIZE" >&2
+    echo "  精度: $PRECISION" >&2
+    echo "  输入分辨率: ${INPUT_RESOLUTION}px" >&2
+    echo "" >&2
+    echo "性能配置:" >&2
+    echo "  最大工作线程: $MAX_WORKERS" >&2
+    echo "  CPU核心数: $DETECTED_CPU_CORES" >&2
+    echo "  可用内存: ${DETECTED_AVAILABLE_MEM_GB}GB" >&2
+    echo "" >&2
+    echo "========================================" >&2
     
     # 保存配置到环境变量
     export OPTIMIZED_DEVICE_TYPE="$DEVICE_TYPE"
@@ -443,6 +443,17 @@ generate_optimized_config() {
     export OPTIMIZED_PRECISION="$PRECISION"
     export OPTIMIZED_INPUT_RESOLUTION="$INPUT_RESOLUTION"
     export OPTIMIZED_MAX_WORKERS="$MAX_WORKERS"
+    
+    # 输出所有配置值供主函数使用
+    echo "DEVICE_TYPE=$DEVICE_TYPE"
+    echo "MODEL_SPEC=$MODEL_SPEC"
+    echo "MODEL_NAME=$MODEL_NAME"
+    echo "MODEL_PATH=$MODEL_PATH"
+    echo "EMBEDDING_DIM=$EMBEDDING_DIM"
+    echo "BATCH_SIZE=$BATCH_SIZE"
+    echo "PRECISION=$PRECISION"
+    echo "INPUT_RESOLUTION=$INPUT_RESOLUTION"
+    echo "MAX_WORKERS=$MAX_WORKERS"
     
     # 返回设备类型和模型规格
     echo "$DEVICE_TYPE|$MODEL_SPEC"
@@ -551,6 +562,7 @@ update_config() {
     
     local device=$1
     local model=$2
+    local max_workers=$3
     
     if [ ! -f "config/config.yml" ]; then
         print_warning "  配置文件不存在，跳过更新"
@@ -643,8 +655,10 @@ config['models']['audio_model'] = {
 if 'task_manager' not in config:
     config['task_manager'] = {}
 
-config['task_manager']['max_concurrent_tasks'] = $OPTIMIZED_MAX_WORKERS
-config['task_manager']['base_concurrent_tasks'] = $OPTIMIZED_MAX_WORKERS
+import os
+max_workers = int(os.environ.get('OPTIMIZED_MAX_WORKERS', '8'))
+config['task_manager']['max_concurrent_tasks'] = max_workers
+config['task_manager']['base_concurrent_tasks'] = max_workers
 
 # 更新索引配置
 if 'indexing' not in config:
@@ -668,6 +682,62 @@ EOF
         print_success "  配置文件更新完成"
     else
         print_warning "  配置文件更新失败，请手动检查"
+    fi
+}
+
+# 初始化数据库
+init_database() {
+    print_info "初始化数据库..."
+    
+    # 检查Python是否可用
+    if ! command -v python3 &> /dev/null; then
+        print_error "Python3未安装，无法初始化数据库"
+        return 1
+    fi
+    
+    # 使用Python脚本初始化数据库
+    python3 << EOF
+import sys
+sys.path.insert(0, '.')
+
+try:
+    from src.core.config.config_manager import ConfigManager
+    from src.core.database.database_manager import DatabaseManager
+    from src.core.vector.vector_store import VectorStore
+    
+    print("正在初始化数据库...")
+    
+    # 加载配置
+    config_manager = ConfigManager()
+    config = config_manager.get_all()
+    
+    # 初始化元数据数据库
+    db_config = config.get('database', {})
+    db_path = db_config.get('metadata_db_path', 'data/database/sqlite/msearch.db')
+    db_manager = DatabaseManager(db_path)
+    db_manager.initialize()
+    print("✓ 元数据数据库初始化完成")
+    
+    # 初始化向量数据库
+    vector_db_path = db_config.get('vector_db_path', 'data/database/lancedb')
+    vector_store = VectorStore({'db_path': vector_db_path})
+    vector_store.initialize()
+    print("✓ 向量数据库初始化完成")
+    
+    print("数据库初始化成功")
+    
+except Exception as e:
+    print(f"数据库初始化失败: {e}")
+    import traceback
+    traceback.print_exc()
+    sys.exit(1)
+EOF
+    
+    if [ $? -eq 0 ]; then
+        print_success "数据库初始化完成"
+    else
+        print_error "数据库初始化失败"
+        return 1
     fi
 }
 
@@ -982,24 +1052,27 @@ show_completion_info() {
     echo "   export TRANSFORMERS_OFFLINE=1"
     echo "   export HF_DATASETS_OFFLINE=1"
     echo "   export HF_HUB_OFFLINE=1"
-    echo "   python src/main.py"
+    echo "   python src/main_multiprocess.py"
     echo ""
-    echo "3. 启动API服务:"
+    echo "3. 启动完整服务（主程序 + API + WebUI）:"
+    echo "   bash scripts/run.sh"
+    echo ""
+    echo "4. 启动API服务:"
     echo "   python src/api_server.py"
     echo ""
-    echo "4. 启动WebUI:"
+    echo "5. 启动WebUI:"
     echo "   bash scripts/run_webui.sh"
     echo ""
-    echo "5. 索引测试数据:"
+    echo "6. 索引测试数据:"
     echo "   python src/cli.py index testdata"
     echo ""
-    echo "6. 搜索测试:"
+    echo "7. 搜索测试:"
     echo "   python src/cli.py search '测试查询'"
     echo ""
-    echo "7. 运行测试:"
+    echo "8. 运行测试:"
     echo "   python3 -m pytest tests/unit/ -v"
     echo ""
-    echo "8. 退出虚拟环境:"
+    echo "9. 退出虚拟环境:"
     echo "   deactivate"
     echo ""
     echo "========================================"
@@ -1123,11 +1196,24 @@ main() {
     
     # 根据硬件配置生成优化配置
     OPTIMIZED_CONFIG=$(generate_optimized_config)
-    OPTIMIZED_DEVICE=$(echo "$OPTIMIZED_CONFIG" | cut -d'|' -f1)
-    OPTIMIZED_MODEL=$(echo "$OPTIMIZED_CONFIG" | cut -d'|' -f2)
+    OPTIMIZED_DEVICE=$(echo "$OPTIMIZED_CONFIG" | tail -1 | cut -d'|' -f1)
+    OPTIMIZED_MODEL=$(echo "$OPTIMIZED_CONFIG" | tail -1 | cut -d'|' -f2)
+    
+    # 从配置输出中提取其他变量
+    OPTIMIZED_DEVICE_TYPE=$(echo "$OPTIMIZED_CONFIG" | grep "DEVICE_TYPE=" | cut -d'=' -f2)
+    OPTIMIZED_MODEL_NAME=$(echo "$OPTIMIZED_CONFIG" | grep "MODEL_NAME=" | cut -d'=' -f2)
+    OPTIMIZED_MODEL_PATH=$(echo "$OPTIMIZED_CONFIG" | grep "MODEL_PATH=" | cut -d'=' -f2)
+    OPTIMIZED_EMBEDDING_DIM=$(echo "$OPTIMIZED_CONFIG" | grep "EMBEDDING_DIM=" | cut -d'=' -f2)
+    OPTIMIZED_BATCH_SIZE=$(echo "$OPTIMIZED_CONFIG" | grep "BATCH_SIZE=" | cut -d'=' -f2)
+    OPTIMIZED_PRECISION=$(echo "$OPTIMIZED_CONFIG" | grep "PRECISION=" | cut -d'=' -f2)
+    OPTIMIZED_INPUT_RESOLUTION=$(echo "$OPTIMIZED_CONFIG" | grep "INPUT_RESOLUTION=" | cut -d'=' -f2)
+    OPTIMIZED_MAX_WORKERS=$(echo "$OPTIMIZED_CONFIG" | grep "MAX_WORKERS=" | cut -d'=' -f2)
     
     # 更新配置文件（应用优化配置）
-    update_config "$OPTIMIZED_DEVICE" "$OPTIMIZED_MODEL"
+    update_config "$OPTIMIZED_DEVICE" "$OPTIMIZED_MODEL" "$OPTIMIZED_MAX_WORKERS"
+    
+    # 初始化数据库
+    init_database
     
     # 下载模型（可选）
     download_models

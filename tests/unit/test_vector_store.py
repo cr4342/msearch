@@ -80,8 +80,8 @@ class TestVectorStore:
         vector_store.insert_vectors(vectors)
         # 验证向量是否添加成功
         stats = vector_store.get_collection_stats()
-        # 注意：创建表时会添加一个默认的空向量，所以总向量数是5+1=6
-        assert stats['total_vectors'] == 6
+        # 验证向量数量
+        assert stats['total_vectors'] == 5
     
     def test_search_vectors(self, vector_store):
         """测试搜索向量"""

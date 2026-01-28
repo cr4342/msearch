@@ -157,7 +157,7 @@ task_manager:
     thumbnail_generate: 4
     video_process: 2
     video_slice: 2
-  max_concurrent_tasks: 16
+  max_concurrent_tasks: 8
   max_retries: 3
   min_concurrent_tasks: 4
   retry_delay: 30

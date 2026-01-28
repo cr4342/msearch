@@ -4,15 +4,6 @@
 
 msearch 是一款单机可运行的跨平台多模态桌面检索软件，专为视频剪辑师设计，实现素材无需整理、无需标签的智能检索。系统采用Python原生集成AI模型的方式，支持文本、图像、视频、音频四种模态的精准检索，通过实时监控和增量处理，为视频剪辑师提供高效、安全的多媒体内容检索体验。
 
-### 多进程架构
-
-msearch采用多进程架构设计，将计算密集型任务与主应用解耦，提升系统稳定性和资源利用率。架构包括：
-- 主进程：提供API服务和协调功能
-- 文件监控进程：监控文件系统变化
-- 向量化工作进程：执行AI模型推理
-- 任务工作进程：处理非推理类任务
-- 进程间通信：采用SQLite队列 + 本地Unix Socket方案，移除Redis依赖
-
 ### 核心特性
 
 - **智能检索**: 无需手动整理、无需添加标签即可实现智能检索
@@ -45,20 +36,20 @@ msearch采用多进程架构设计，将计算密集型任务与主应用解耦�
   - **统一接口**：所有模型使用相同的加载和推理接口
   - **离线支持**：完全支持离线模式，自动处理模型依赖
   - **支持模型系列**：
-    - [配置驱动模型]（低配置，CPU/4GB内存，512维）
-    - [配置驱动模型]（中配置，CPU/GPU/8GB内存，512维）
-    - [配置驱动模型]（高配置，GPU/16GB+内存，2048维）
-    - [配置驱动模型]（高配置，GPU/16GB+内存，512维）
-    - [配置驱动模型]（超高配置，GPU/32GB+内存，4096维）    - [配置驱动模型]（音频模型，512维）
+    - chinese-clip-vit-base-patch16（低配置，CPU/4GB内存，512维）
+    - chinese-clip-vit-large-patch14-336px（中配置，CPU/GPU/8GB内存，512维）
+    - SauerkrautLM-ColQwen3-1.7b-Turbo-v0.1（高配置，GPU/16GB+内存，2048维）
+    - colqwen2.5-v0.2（高配置，GPU/16GB+内存，512维）
+    - tomoro-colqwen3-embed-4b（超高配置，GPU/32GB+内存，4096维）
   - **模型切换**：只需修改配置文件，无需修改代码
-- **图像/视频向量化**: [配置驱动模型]系列（统一多模态模型）
-  - 统一模型: 多种[配置驱动模型]（基于Infinity框架）
+- **图像/视频向量化**: CLIP系列模型（统一多模态模型）
+  - 统一模型: 多种CLIP变体（基于Infinity框架）
   - 可选模型:
-    - [配置驱动模型]（基础模型，快速）
-    - [配置驱动模型]（高精度模型）
-    - [配置驱动模型]（高性能模型）
-    - [配置驱动模型]（高精度模型）
-    - [配置驱动模型]（超高精度模型）
+    - chinese-clip-vit-base-patch16（基础模型，快速）
+    - chinese-clip-vit-large-patch14-336px（高精度模型）
+    - SauerkrautLM-ColQwen3-1.7b-Turbo-v0.1（高性能模型）
+    - colqwen2.5-v0.2（高精度模型）
+    - tomoro-colqwen3-embed-4b（超高精度模型）
   - 硬件要求: 适用于各种硬件配置（CPU/GPU），约4GB显存（GPU）或8GB内存（CPU）
   - 批处理大小: 8-16（根据硬件配置自适应）
   - 特点: 高性能多模态嵌入模型，支持文本-图像、图像-图像、文本-视频检索，无需抽帧
@@ -81,49 +72,9 @@ msearch采用多进程架构设计，将计算密集型任务与主应用解耦�
 
 ## 架构设计
 
-### 多进程架构
+### 分层架构
 
-项目采用多进程架构设计，将计算密集型任务与主应用解耦，提升系统稳定性和资源利用率。
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                    主进程 (Main Process)                     │
-│  - main.py: 主进程协调器                                 │
-│  - api_server.py: API服务器 (FastAPI)                     │
-│  - WebUI服务 (Gradio)                                     │
-│  - Task Manager: 任务调度器                               │
-│  - Config Manager: 配置管理器                             │
-└─────────────────────────────────────────────────────────────────┘
-                                       │
-         ┌─────────────────────────────┼─────────────────────────────┐
-         │                             │                             │
-         ▼                             ▼                             ▼
-┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐
-│ File Monitor        │    │ Embedding Worker    │    │ Task Worker         │
-│ Process (1个)        │    │ Process (1-N个)      │    │ Process (1-N个)      │
-├─────────────────────┤    ├─────────────────────┤    ├─────────────────────┤
-│ • file_monitor_     │    │ • embedding_worker_ │    │ • task_worker_      │
-│   process.py        │    │   process.py        │    │   process.py        │
-│ • 文件系统监控       │    │ • 模型加载/卸载      │    │ • 媒体预处理        │
-│ • 目录扫描          │    │ • 向量推理          │    │ • 数据转换          │
-│ • 事件通知          │    │ • 批处理优化        │    │ • 文件格式处理      │
-│ • 增量更新          │    │ • GPU/CPU 管理      │    │ • 缩略图生成        │
-└─────────────────────┘    └─────────────────────┘    └─────────────────────┘
-         │                             │                             │
-         └─────────────────────────────┼─────────────────────────────┘
-                                       │
-                                       ▼
-                    ┌───────────────────────────────────┐
-                    │         Redis (本地)               │
-                    │  ┌─────────────┐ ┌───────────────┐ │
-                    │  │ Task Queue  │ │ Status Cache  │ │
-                    │  └─────────────┘ └───────────────┘ │
-                    └───────────────────────────────────┘
-```
-
-### 分层架构 (在各进程中)
-
-在每个进程中，仍保持原有的分层架构：
+项目采用六层架构设计，从上到下依次为：
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
@@ -134,8 +85,6 @@ msearch采用多进程架构设计，将计算密集型任务与主应用解耦�
 │      - search_panel.py: 搜索面板                         │
 │      - result_panel.py: 结果面板                         │
 │      - settings_panel.py: 设置面板                       │
-│      - task_manager_panel.py: 任务管理器面板               │
-│      - data_manager_panel.py: 数据管理面板                 │
 │  - dialogs/: UI对话框                                    │
 │      - progress_dialog.py: 进度对话框                     │
 ├─────────────────────────────────────────────────────────────────┤
@@ -163,11 +112,12 @@ msearch采用多进程架构设计，将计算密集型任务与主应用解耦�
 │      - embedding_engine.py: 向量化引擎（统一使用Infinity）                    │
 │  - task/: 任务管理                                        │
 │      - task_manager.py: 任务管理器                        │
+│      - task_scheduler.py: 任务调度器                      │
+│      - task_executor.py: 任务执行器                      │
+│      - task_group_manager.py: 任务组管理器                │
+│      - priority_calculator.py: 优先级计算器              │
+│      - resource_manager.py: 资源管理器                    │
 │      - task_monitor.py: 任务监控器                        │
-│  - ipc/: 进程间通信                                      │
-│      - shared_memory.py: 共享内存管理器                   │
-│      - redis_ipc.py: Redis进程间通信管理器               │
-│      - process_manager.py: 多进程管理器                   │
 │  - hardware/: 硬件检测                                    │
 │      - hardware_detector.py: 硬件检测器                  │
 │  - logging/: 日志配置                                      │
@@ -200,11 +150,12 @@ msearch采用多进程架构设计，将计算密集型任务与主应用解耦�
 - **VectorStore**: 专注于LanceDB向量数据库操作（统一向量表设计），通过modality字段区分不同模态
 - **EmbeddingEngine**: 统一管理AI模型调用（使用Infinity，统一接口），实现模型推理的错误处理和重试机制
 - **TaskManager**: 任务进度跟踪和状态管理，支持任务优先级、依赖关系、并发控制和资源限制
+- **TaskScheduler**: 任务调度器，负责任务优先级计算、任务队列管理、动态优先级调整和任务排序选择
+- **TaskExecutor**: 任务执行器，负责任务执行、错误处理和重试、进度更新和任务状态管理
+- **TaskGroupManager**: 任务组管理器，负责文件级任务组管理、任务流水线锁管理、文件级任务组织和任务组进度跟踪
+- **PriorityCalculator**: 优先级计算器，负责计算任务优先级，包括基础优先级、文件优先级、类型优先级和等待时间补偿
+- **ResourceManager**: 资源管理器，负责资源监控、OOM状态检测、资源预警和资源使用数据提供
 - **TaskMonitor**: 任务监控器，负责任务进度跟踪、任务统计、任务历史记录和性能指标计算
-- **DataManager**: 数据管理器，负责索引管理和数据统计功能，提供索引状态监控和数据健康度检查
-- **IPCManager**: 进程间通信管理器，负责多进程间的通信、任务分发和状态同步，基于Redis实现
-- **SharedMemoryManager**: 共享内存管理器，负责大文件数据的跨进程高效传输，避免序列化开销
-- **ProcessManager**: 多进程管理器，负责子进程的生命周期管理、监控和自动重启
 - **HardwareDetector**: 硬件配置检测和模型推荐，根据GPU、CPU和内存配置自动选择最优模型
 - **LoggingConfig**: 日志配置管理器，负责配置日志级别、格式、轮转策略和处理器
 - **FileMonitor**: 实时监控文件变化（基于watchdog），支持防抖延迟和递归监控
@@ -284,6 +235,9 @@ msearch/
 │   │   ├── test_search_engine.py
 │   │   ├── test_noise_filter.py  # 噪音过滤器测试
 │   │   ├── test_timeline.py      # 时间轴生成器测试
+│   │   ├── test_file_priority.py # 文件优先级测试
+│   │   ├── test_vector_store.py  # 向量存储测试
+│   │   ├── test_task_manager.py  # 任务管理器测试
 │   │   └── test_model_integration.py  # 模型集成测试
 │   ├── integration/        # 集成测试
 │   │   ├── it_search_flow.py    # 搜索流程集成测试
@@ -306,15 +260,23 @@ msearch/
 │       └── coverage.xml
 ├── scripts/                # 脚本文件
 │   ├── install.sh          # Linux安装脚本
-│   └── setup_models.py     # 模型设置脚本
+│   ├── setup_models.py     # 模型设置脚本
+│   ├── run.sh              # 运行脚本
+│   ├── run_api.sh          # API服务启动脚本
+│   ├── run_webui.sh        # WebUI启动脚本
+│   └── run_offline.sh      # 离线模式启动脚本
 ├── webui/                  # Web界面
-│   └── index.html          # WebUI主界面
+│   ├── index.html          # WebUI主界面
+│   ├── styles.css          # WebUI样式
+│   └── app.js              # WebUI脚本
 ├── testdata/               # 测试数据
 │   ├── audio/              # 测试音频
 │   └── faces/              # 测试人脸图片
 └── src/                    # 源代码目录
     ├── main.py             # 主程序入口（使用依赖注入）
     ├── api_server.py       # API服务器（使用依赖注入）
+    ├── cli.py              # CLI入口
+    ├── main_multiprocess.py # 多进程架构入口
     ├── api/                # API层
     │   └── __init__.py
     ├── core/               # 核心模块
@@ -327,17 +289,41 @@ msearch/
     │   ├── embedding/      # 向量化引擎
     │   │   └── embedding_engine.py  # 向量化引擎（统一使用Infinity）
     │   ├── task/           # 任务管理
-    │   │   └── task_manager.py
+    │   │   ├── task.py
+    │   │   ├── task_types.py
+    │   │   ├── task_manager.py
+    │   │   ├── task_scheduler.py
+    │   │   ├── task_executor.py
+    │   │   ├── task_group_manager.py
+    │   │   ├── priority_calculator.py
+    │   │   ├── resource_manager.py
+    │   │   ├── task_monitor.py
+    │   │   ├── task_queue.py
+    │   │   ├── concurrency_manager.py
+    │   │   ├── central_task_manager.py
+    │   │   ├── pipeline_lock_manager.py
+    │   │   ├── group_manager.py
+    │   │   └── video_segment_manager.py
     │   ├── hardware/       # 硬件检测
     │   │   └── hardware_detector.py
     │   ├── logging/        # 日志配置
     │   │   └── logging_config.py
+    │   ├── models/         # 模型管理
+    │   │   └── model_manager.py
+    │   ├── utils/          # 工具类
+    │   │   └── helpers.py
     │   ├── file_monitor.py # 文件监控器
     │   ├── media_processor.py # 媒体处理器
     │   ├── search_engine.py # 搜索引擎（使用依赖注入）
     │   ├── noise_filter.py # 噪音过滤器
     │   ├── timeline.py     # 时间轴生成器
     │   └── exceptions.py   # 异常定义
+    ├── ipc/                # 进程间通信
+    │   ├── process_manager.py
+    │   ├── redis_ipc.py
+    │   ├── shared_memory.py
+    │   ├── sqlite_ipc.py
+    │   └── unix_socket_ipc.py
     ├── services/           # 服务层
     │   ├── cache/          # 缓存服务
     │   │   └── preprocessing_cache.py  # 预处理缓存管理器
@@ -359,8 +345,15 @@ msearch/
     │   │   └── settings_panel.py
     │   └── dialogs/        # UI对话框
     │       └── progress_dialog.py
-    └── utils/              # 工具类
-        └── __init__.py
+    ├── utils/              # 工具类
+    │   ├── error_handling.py
+    │   ├── exceptions.py
+    │   ├── file_utils.py
+    │   ├── helpers.py
+    │   └── retry.py
+    └── webui/              # WebUI服务
+        ├── app.py
+        └── index.html
 ```
 
 ## 工作流程
@@ -383,15 +376,16 @@ msearch/
     │       ↓
     │       ├─→ [任务6: video_slice] 视频切片（>6秒，用于时间定位）
     │       │       ↓
-    │       │       └─→ [任务7: video_embed] 视频向量化（直接处理，无需抽帧） → 向量存储
-    │       └─→ [任务7: video_embed] 短视频向量化（≤6秒，直接处理，无需抽帧） → 向量存储
+    │       │       └─→ [任务7: file_embed_video] 视频向量化（直接处理，无需抽帧） → 向量存储
+    │       └─→ [任务7: file_embed_video] 短视频向量化（≤6秒，直接处理，无需抽帧） → 向量存储
     ├─→ [任务8: audio_process] 音频价值判断
     │       ↓
     │       ├─→ [任务9: audio_preprocess] 音频预处理（≥5秒） → CLAP分类 → 向量化 → 向量存储
     │       └─→ [任务12: audio_skip] 跳过低价值音频（<5秒）
-    ├─→ [任务10: text_embed] 文本向量化 → 向量存储
-    ├─→ [任务11: thumbnail_generate] 缩略图生成
-    └─→ [任务12: preview_generate] 预览生成
+    ├─→ [任务10: file_embed_text] 文本向量化 → 向量存储
+    ├─→ [task11: file_embed_image] 图像向量化 → 向量存储
+    ├─→ [任务12: thumbnail_generate] 缩略图生成
+    └─→ [task13: preview_generate] 预览生成
 ```
 
 **架构优势**:
@@ -412,9 +406,9 @@ msearch/
 | 1 | file_embed_text | 文本向量化（高优先级，MVP核心） | 依赖file_scan |
 | 1 | file_embed_image | 图像向量化（高优先级，MVP核心，已提前） | 依赖file_scan |
 | 2 | file_scan | 文件扫描（中高优先级） | 无依赖 |
-| 3 | video_slice | 视频切片（中等优先级，仅用于时间定位） | 依赖video_process |
-| 3 | file_embed_video | 视频向量化（中等优先级，直接处理，无需抽帧） | 依赖video_process或video_slice |
-| 4 | audio_segment | 音频分段（中低优先级） | 依赖file_scan或video_process |
+| 3 | video_slice | 视频切片（中等优先级，仅用于时间定位） | 依赖video_preprocess |
+| 3 | file_embed_video | 视频向量化（中等优先级，直接处理，无需抽帧） | 依赖video_preprocess或video_slice |
+| 4 | audio_segment | 音频分段（中低优先级） | 依赖file_scan或video_preprocess |
 | 4 | file_embed_audio | 音频向量化（中低优先级） | 依赖audio_segment |
 | 5 | search | 向量搜索（低优先级） | 依赖file_embed_image, file_embed_text |
 | 5 | search_multimodal | 多模态向量检索（低优先级） | 依赖file_embed_image, file_embed_text |
@@ -432,6 +426,39 @@ msearch/
 - P5: 向量搜索
 - P6: 结果排序和过滤
 - P7: UI辅助功能
+
+### 任务优先级计算公式
+
+系统采用加权优先级计算公式，确保任务按正确的顺序执行：
+
+```
+final_priority = base_priority * 1000 + file_priority * 100 + type_priority * 10 + wait_compensation
+```
+
+**优先级计算组件说明**：
+
+| 组件 | 权重 | 说明 | 范围 | 作用 |
+|------|------|------|------|------|
+| base_priority | 1000 | 基础优先级，基于任务类型的重要性 | 0-9 | 决定任务的基本执行顺序 |
+| file_priority | 100 | 文件级优先级，基于文件的重要性 | 1-10 | 确保重要文件的任务优先执行 |
+| type_priority | 10 | 任务类型优先级，基于任务类型的处理顺序 | 0-9 | 确保同一文件的核心任务优先于辅助任务 |
+| wait_compensation | 1 | 等待时间补偿因子，基于任务的等待时间 | 0-999 | 确保长时间等待的任务能够获得更高优先级 |
+
+**任务类型优先级映射**：
+
+| 任务类型 | 基础优先级 | 类型优先级 | 说明 |
+|---------|-----------|-----------|------|
+| file_scan | 3 | 3 | 文件扫描 |
+| image_preprocess | 1 | 4 | 图像预处理 |
+| video_preprocess | 1 | 4 | 视频预处理 |
+| audio_preprocess | 1 | 4 | 音频预处理 |
+| file_embed_image | 1 | 1 | 图像向量化（高优先级） |
+| file_embed_video | 3 | 2 | 视频向量化 |
+| file_embed_audio | 4 | 3 | 音频向量化 |
+| file_embed_text | 1 | 1 | 文本向量化（高优先级） |
+| video_slice | 3 | 2 | 视频切片 |
+| thumbnail_generate | 2 | 5 | 缩略图生成 |
+| preview_generate | 2 | 6 | 预览生成 |
 
 ### 检索流程
 ```
@@ -451,9 +478,9 @@ HTTP请求 → FastAPI路由 → API处理器 → 业务逻辑 → 统一数据�
 
 ### 硬件自适应图像/视频向量化模型
 
-系统采用统一的[配置驱动模型]进行图像/视频向量化，该模型基于Infinity框架，支持文本、图像、视频的跨模态检索。
+系统采用统一的CLIP系列模型进行图像/视频向量化，该模型基于Infinity框架，支持文本、图像、视频的跨模态检索。
 
-**重要版本要求**: [配置驱动模型]支持PyTorch 2.0+版本，请确保环境配置正确。
+**重要版本要求**: CLIP模型支持PyTorch 2.0+版本，请确保环境配置正确。
 
 **架构优势**:
 - **统一工作流程**: 文本、图像、视频使用相同的向量化接口，无需区分处理逻辑
@@ -463,7 +490,7 @@ HTTP请求 → FastAPI路由 → API处理器 → 业务逻辑 → 统一数据�
 - **提升性能**: 直接处理视频，避免中间帧提取的性能开销
 - **统一接口**: 使用Infinity框架，所有模型使用相同的加载方式
 
-#### **[配置驱动模型]**（基础[配置驱动模型]）
+#### chinese-clip-vit-base-patch16（基础模型）
 - **应用场景**: 各种硬件配置（CPU/GPU）
 - **向量维度**: 512维
 - **硬件要求**: 适用于各种硬件配置（约4GB显存（GPU）或8GB内存（CPU））
@@ -476,9 +503,9 @@ HTTP请求 → FastAPI路由 → API处理器 → 业务逻辑 → 统一数据�
   - 统一的模型加载方式，简化代码
 - **架构优势**: 统一文本/图像/视频接口，简化开发流程
 
-#### **[配置驱动模型]**（高精度[配置驱动模型]）
+#### chinese-clip-vit-large-patch14-336px（高精度模型）
 - **应用场景**: 高精度检索场景（GPU）
-- **向量维度**: 1024维
+- **向量维度**: 512维
 - **硬件要求**: 适用于GPU配置（约8GB显存）
 - **批处理大小**: 4-8（根据硬件配置自适应）
 - **特点**:
@@ -486,7 +513,7 @@ HTTP请求 → FastAPI路由 → API处理器 → 业务逻辑 → 统一数据�
   - 支持多种检索任务：文本到图像、图像到图像、文本到视频
   - 无需抽帧，直接处理视频
 
-#### **[配置驱动模型]**（高性能[配置驱动模型]）
+#### SauerkrautLM-ColQwen3-1.7b-Turbo-v0.1（高性能模型）
 - **应用场景**: 高性能检索场景（GPU）
 - **向量维度**: 2048维
 - **硬件要求**: 适用于GPU配置（约16GB显存）
@@ -496,7 +523,7 @@ HTTP请求 → FastAPI路由 → API处理器 → 业务逻辑 → 统一数据�
   - 支持多种检索任务：文本到图像、图像到图像、文本到视频
   - 无需抽帧，直接处理视频
 
-#### **[配置驱动模型]**（高精度模型）
+#### colqwen2.5-v0.2（高精度模型）
 - **应用场景**: 高精度检索场景（GPU）
 - **向量维度**: 512维
 - **硬件要求**: 适用于GPU配置（约16GB显存）
@@ -506,7 +533,7 @@ HTTP请求 → FastAPI路由 → API处理器 → 业务逻辑 → 统一数据�
   - 支持多种检索任务：文本到图像、图像到图像、文本到视频
   - 无需抽帧，直接处理视频
 
-#### **[配置驱动模型]**（超高精度模型）
+#### tomoro-colqwen3-embed-4b（超高精度模型）
 - **应用场景**: 超高精度检索场景（GPU）
 - **向量维度**: 4096维
 - **硬件要求**: 适用于GPU配置（约32GB显存）
@@ -527,7 +554,7 @@ CLAP统一处理所有音频类型，简化了音频处理流程，在音频-文
 - **音频内容智能分类**: 精准区分音乐、语音、噪音
 
 **音频分类实现**:
-- 使用[配置驱动模型]对音频进行分类
+- 使用CLAP模型对音频进行分类
 - 支持类型: MUSIC、SPEECH、MIXED、SILENCE、UNKNOWN
 - 基于音频特征进行分类（零交叉率、频谱质心、MFCC特征）
 
@@ -545,10 +572,10 @@ CLAP统一处理所有音频类型，简化了音频处理流程，在音频-文
 
 ### 视频预处理策略
 
-**架构优化**: [配置驱动模型]采用Infinity框架，支持直接处理视频，无需抽帧，配合动态批处理和FlashAttention加速。
+**架构优化**: CLIP模型采用Infinity框架，支持直接处理视频，无需抽帧，配合动态批处理和FlashAttention加速。
 
 - **短视频优化**（≤6秒）：
-  - **chinese-clip-vit-base-patch16处理**: 直接对整个视频进行向量化，无需抽帧
+  - **CLIP处理**: 直接对整个视频进行向量化，无需抽帧
   - **性能优化**: 使用Infinity框架，动态批处理和FlashAttention加速
   - 性能提升：处理速度提升3-5倍
   - 简化流程：消除了帧提取、帧管理、帧向量化等复杂逻辑
@@ -556,7 +583,7 @@ CLAP统一处理所有音频类型，简化了音频处理流程，在音频-文
 - **长视频处理**（>6秒）：
   - **场景分割**: 使用FFmpeg场景检测将视频分割为片段（用于时间定位）
   - **切片限制**: 最大切片时长5秒
-  - **chinese-clip-vit-base-patch16处理**: 直接对视频片段进行向量化，无需抽帧
+  - **CLIP处理**: 直接对视频片段进行向量化，无需抽帧
   - **性能优化**: 使用Infinity框架，动态批处理和FlashAttention加速
   - 分辨率优化：短边超过960像素时自动调整
   - 格式转换：转换为H.264 MP4格式（仅用于索引）
@@ -577,7 +604,7 @@ CLAP统一处理所有音频类型，简化了音频处理流程，在音频-文
 - **格式转换**: 转换为RGB格式
 - **缩略图生成**: 基于文件哈希生成缩略图，避免重复生成
 
-**统一处理**: 图像和视频使用相同的预处理流程，配合[配置驱动模型]，无需区分处理逻辑。
+**统一处理**: 图像和视频使用相同的预处理流程，配合CLIP模型，无需区分处理逻辑。
 
 ### 音频预处理策略
 
@@ -590,8 +617,8 @@ CLAP统一处理所有音频类型，简化了音频处理流程，在音频-文
 - **内容分类**: 使用CLAP区分音乐和语音
   - 基于音频特征进行分类（零交叉率、频谱质心、MFCC特征）
   - 支持类型: MUSIC、SPEECH、MIXED、SILENCE、UNKNOWN
-- **音乐处理**: 使用[配置驱动模型]生成向量嵌入
-- **语音处理**: 使用[配置驱动模型]进行转录
+- **音乐处理**: 使用CLAP生成向量嵌入
+- **语音处理**: 使用CLAP进行转录
 
 ### 时序定位优化策略
 
@@ -877,25 +904,6 @@ MainWindow（主窗口）
   - 模型设置：模型选择、批处理大小、设备选择
   - 配置导入/导出：支持配置文件的导入和导出
 
-#### 任务管理器面板（TaskManagerPanel）
-
-- **功能**: 显示任务进度和历史记录
-- **特性**:
-  - 当前任务：实时显示正在运行的任务
-  - 任务历史：显示已完成和失败的任务记录
-  - 统计信息：总任务数、进行中、已完成、失败统计
-  - 任务详情：显示任务类型、状态、进度、时间信息
-  - 刷新功能：定时刷新任务状态
-
-#### 数据管理面板（DataManagerPanel）
-
-- **功能**: 提供索引管理和数据统计功能
-- **特性**:
-  - 索引管理：显示索引状态、索引进度、索引文件数量统计
-  - 数据统计：显示已处理文件总数、各类型文件统计、存储使用情况
-  - 索引操作：支持重新索引、清理索引、导出索引报告
-  - 数据概览：显示数据库状态、向量存储状态、索引健康度
-
 #### 进度对话框（ProgressDialog）
 
 - **功能**: 显示长时间操作的进度
@@ -979,7 +987,7 @@ MainWindow（主窗口）
 
 ### 环境要求
 - Python 3.8+
-- PyTorch >= 2.0.0（**重要**: [配置驱动模型]支持PyTorch 2.0+版本）
+- PyTorch >= 2.0.0（**重要**: CLIP模型支持PyTorch 2.0+版本）
 - 支持CUDA的GPU（推荐，用于加速AI推理）
 - 至少8GB内存（推荐16GB+）
 - 至少10GB可用存储空间
@@ -1004,10 +1012,19 @@ pip install -r requirements/optional.txt
 
 ### 启动应用
 ```bash
-# 启动完整应用
-python src/main.py
+# 启动完整应用（推荐）
+bash scripts/run.sh
 
 # 仅启动API服务
+bash scripts/run_api.sh
+
+# 启动WebUI
+bash scripts/run_webui.sh
+
+# 启动离线模式
+bash scripts/run_offline.sh
+
+# 直接启动API服务
 python src/api_server.py
 
 # 启动API服务（指定配置文件）
@@ -1057,6 +1074,15 @@ pytest tests/unit/test_noise_filter.py -v -s
 
 # 运行时间轴生成器测试
 pytest tests/unit/test_timeline.py -v -s
+
+# 运行文件优先级测试
+pytest tests/unit/test_file_priority.py -v -s
+
+# 运行向量存储测试
+pytest tests/unit/test_vector_store.py -v -s
+
+# 运行任务管理器测试
+pytest tests/unit/test_task_manager.py -v -s
 ```
 
 ### 设置模型
@@ -1256,7 +1282,7 @@ python3 scripts/verify_offline_mode.py
 ```python
 # 错误：使用HuggingFace模型ID
 engine_args = EngineArgs(
-    model_name_or_path="[配置驱动模型]"  # ❌ 会尝试连接HuggingFace
+    model_name_or_path="chinese-clip-vit-base-patch16"  # ❌ 会尝试连接HuggingFace
 )
 
 # 正确：使用本地绝对路径
@@ -1302,45 +1328,55 @@ python scripts/setup_models.py
 - [x] 测试策略文档（docs/testing-strategy.md）
 - [x] 代码与设计偏差分析（docs/code_design_deviation_analysis.md）
 - [x] 代码重构总结（docs/code_refactoring_summary.md）
-- [x] 核心模块实现（22个核心文件，约7100行代码）
+- [x] 核心模块实现（112个Python文件，约31317行代码）
   - [x] ConfigManager（配置管理器，路径已修复为config/config.yml）
-  - [x] DatabaseManager（数据库管理器，978行）
-  - [x] VectorStore（向量存储，365行）
-  - [x] EmbeddingEngine（向量化引擎，统一使用Infinity，约400行）
+  - [x] DatabaseManager（数据库管理器）
+  - [x] VectorStore（向量存储）
+  - [x] EmbeddingEngine（向量化引擎，统一使用Infinity）
     - [x] chinese-clip-vit-base-patch16模型集成（统一多模态模型，支持文本、图像、视频统一处理）
-- [x] chinese-clip-vit-large-patch14-336px模型集成（高精度多模态模型）
-- [x] SauerkrautLM-ColQwen3-1.7b-Turbo-v0.1模型集成（高性能多模态模型）
-- [x] colqwen2.5-v0.2模型集成（高精度多模态模型）
-- [x] tomoro-colqwen3-embed-4b模型集成（超高精度多模态模型）
-    - [x] [配置驱动模型]集成（统一音频处理）
-    - [x] Infinity框架（高性能推理）
-    - [x] 硬件自适应模型选择（统一多模态模型）
-    - [x] 音频向量化（embed_audio_from_path）
-  - [x] TaskManager（任务管理器，795行）
-  - [x] TaskMonitor（任务监控器，新增功能模块）
-  - [x] DataManager（数据管理器，新增功能模块）
+  - [x] chinese-clip-vit-large-patch14-336px模型集成（高精度多模态模型）
+  - [x] SauerkrautLM-ColQwen3-1.7b-Turbo-v0.1模型集成（高性能多模态模型）
+  - [x] colqwen2.5-v0.2模型集成（高精度多模态模型）
+  - [x] tomoro-colqwen3-embed-4b模型集成（超高精度多模态模型）
+  - [x] CLAP集成（统一音频处理）
+  - [x] Infinity框架（高性能推理）
+  - [x] 硬件自适应模型选择（统一多模态模型）
+  - [x] 音频向量化（embed_audio_from_path）
+  - [x] TaskManager（任务管理器）
+  - [x] TaskScheduler（任务调度器）
+  - [x] TaskExecutor（任务执行器）
+  - [x] TaskGroupManager（任务组管理器）
+  - [x] PriorityCalculator（优先级计算器）
+  - [x] ResourceManager（资源管理器）
+  - [x] TaskMonitor（任务监控器）
   - [x] SearchEngine（搜索引擎，使用依赖注入）
     - [x] 文本搜索（search）
     - [x] 图像搜索（image_search）
     - [x] 音频搜索（audio_search）
-  - [x] HardwareDetector（硬件检测器，592行）
-  - [x] FileMonitor（文件监控器，397行）
-  - [x] MediaProcessor（媒体处理器，570行）
+  - [x] HardwareDetector（硬件检测器）
+  - [x] FileMonitor（文件监控器）
+  - [x] MediaProcessor（媒体处理器）
     - [x] CLAP音频分类（_classify_audio_type）
-  - [x] LoggingConfig（日志配置管理器，448行）
-  - [x] NoiseFilterManager（噪音过滤器管理器，450行）
+  - [x] LoggingConfig（日志配置管理器）
+  - [x] NoiseFilterManager（噪音过滤器管理器）
     - [x] ImageNoiseFilter（图像噪音过滤器）
     - [x] VideoNoiseFilter（视频噪音过滤器）
     - [x] AudioNoiseFilter（音频噪音过滤器）
     - [x] TextNoiseFilter（文本噪音过滤器）
-  - [x] VideoTimelineGenerator（视频时间轴生成器，400行）
+  - [x] VideoTimelineGenerator（视频时间轴生成器）
     - [x] VideoTimelineItem（视频时间轴条目）
     - [x] VideoTimelineResult（视频时间轴结果）
   - [x] Exceptions（异常定义）
-- [x] 服务层实现（1544行代码）
-  - [x] PreprocessingCache（预处理缓存管理器，395行）
-  - [x] FileMonitor（文件监控服务，347行）
-  - [x] MediaProcessor（媒体处理服务，797行）
+  - [x] IPC模块（进程间通信）
+    - [x] ProcessManager（进程管理器）
+    - [x] RedisIPC（Redis进程间通信）
+    - [x] SharedMemory（共享内存管理）
+    - [x] SQLiteIPC（SQLite进程间通信）
+    - [x] UnixSocketIPC（Unix Socket进程间通信）
+- [x] 服务层实现
+  - [x] PreprocessingCache（预处理缓存管理器）
+  - [x] FileMonitor（文件监控服务）
+  - [x] MediaProcessor（媒体处理服务）
 - [x] 主程序入口（main.py，使用依赖注入）
 - [x] API服务层（api_server.py，使用依赖注入）
   - [x] RESTful API接口
@@ -1354,29 +1390,35 @@ python scripts/setup_models.py
   - [x] VECTOR_TIMESTAMP_MAP表
   - [x] 向量元数据管理（包含时间戳信息）
   - [x] 时间戳查询接口
-- [x] PySide6桌面UI（约2000行代码）
+- [x] PySide6桌面UI
   - [x] MainWindow（主窗口，使用依赖注入）
   - [x] UILauncher（UI启动器）
   - [x] SearchPanel（搜索面板组件）
   - [x] ResultPanel（结果面板组件）
   - [x] SettingsPanel（设置面板组件）
-  - [x] TaskManagerPanel（任务管理器面板组件，新增功能）
-  - [x] DataManagerPanel（数据管理面板组件，新增功能）
   - [x] ProgressDialog（进度对话框）
 - [x] 部署脚本
   - [x] install.sh（Linux安装脚本）
   - [x] setup_models.py（模型设置脚本）
+  - [x] run.sh（运行脚本）
+  - [x] run_api.sh（API服务启动脚本）
+  - [x] run_webui.sh（WebUI启动脚本）
+  - [x] run_offline.sh（离线模式启动脚本）
 - [x] 单元测试框架
   - [x] pytest配置
   - [x] conftest.py配置
   - [x] 测试夹具工厂
   - [x] 覆盖率报告配置
+  - [x] pytest-asyncio配置
   - [x] 模型集成测试（test_model_integration.py，7个测试全部通过）
   - [x] 数据库管理器测试（test_database_manager.py，12个测试全部通过）
-  - [x] 搜索引擎测试（test_search_engine.py，12个测试全部通过）
+  - [x] 搜索引擎测试（test_search_engine.py，8个测试全部通过）
   - [x] 配置管理器测试（test_config.py，33个测试全部通过）
   - [x] 噪音过滤器测试（test_noise_filter.py，27个测试全部通过）
   - [x] 时间轴生成器测试（test_timeline.py，22个测试全部通过）
+  - [x] 文件优先级测试（test_file_priority.py，4个测试全部通过）
+  - [x] 向量存储测试（test_vector_store.py，10个测试全部通过）
+  - [x] 任务管理器测试（test_task_manager.py，4个测试全部通过）
 - [x] 集成测试
   - [x] it_search_flow.py（搜索流程集成测试）
   - [x] it_indexing_flow.py（索引流程集成测试）
@@ -1385,19 +1427,25 @@ python scripts/setup_models.py
 - [x] 性能基准测试
   - [x] test_embedding_benchmark.py（向量化性能基准测试）
 - [x] 代码质量保证
-  - [x] 所有42个Python文件语法检查通过
+  - [x] 所有112个Python文件语法检查通过
   - [x] 没有错误代码或空代码
-  - [x] 符合PEP 8代码规范（除必要的路径修改导入）
-  - [x] 所有113个核心单元测试通过
+  - [x] 符合PEP 8代码规范
+  - [x] 所有117个核心单元测试通过
   - [x] 文搜图功能提前到MVP阶段（P1优先级）
-- [x] 代码重构（2026-01-19）
+- [x] 代码重构（2026-01-28）
   - [x] 修复配置文件路径不一致问题
   - [x] 重构向量化引擎，统一使用Infinity
   - [x] 重构核心模块，使用依赖注入
   - [x] 分离依赖管理文件
+  - [x] 修复优先级计算公式与设计文档一致
+  - [x] 添加FILE_EMBED_TEXT任务类型
+  - [x] 修复时间戳类型处理问题
+  - [x] 修复TaskScheduler属性名称问题
+  - [x] 修复状态检查问题
+  - [x] 添加pytest-asyncio配置
 
 ### 进行中
-- [ ] 单元测试完善（113个核心测试已完成，部分边缘测试待补充）
+- [ ] 单元测试完善（117个核心测试已完成，部分边缘测试待补充）
 - [ ] 集成测试完善（基础集成测试已完成，扩展测试待补充）
 - [ ] 端到端测试完善（基础端到端测试已完成，扩展测试待补充）
 - [ ] 性能优化和调优
@@ -1416,9 +1464,8 @@ python scripts/setup_models.py
 - 明确任务优先级和依赖关系
 - 统一测试目录结构，规范测试文件命名
 - **统一图像/视频向量化工作流程**: 消除抽帧逻辑，简化视频预处理
-- **模块化设计**: 核心模块按功能分类到子目录（config/, database/, vector/, embedding/, task/, ipc/, hardware/, logging/）
+- **模块化设计**: 核心模块按功能分类到子目录（config/, database/, vector/, embedding/, task/, ipc/, hardware/, logging/, models/, utils/）
 - **依赖注入架构**: 使用依赖注入替代直接导入，提高模块独立性和可测试性
-- **多进程模块化**: 将进程间通信、共享内存、进程管理等功能模块化设计
 
 ### 性能优化
 - 短视频快速处理（≤6秒），性能提升3-5倍
@@ -1428,8 +1475,6 @@ python scripts/setup_models.py
 - 预处理缓存机制，提升重复处理效率
 - **Infinity优化**: Python-native模式，动态批处理和FlashAttention加速
 - **低价值噪音过滤**: 智能过滤低价值内容，提高系统效率和检索质量
-- **多进程架构**: 计算密集型任务与主应用解耦，提升系统并发处理能力和稳定性
-- **进程间通信优化**: 使用Redis实现高效的任务分发和状态同步机制
 
 ### 设计优化
 - 音频分类与模型选择映射清晰
@@ -1439,19 +1484,19 @@ python scripts/setup_models.py
 - 时间定位机制完善，支持精确查询
 - 预处理缓存目录结构清晰，便于管理
 - 硬件自适应模型选择更加灵活（支持2个级别：低配和高配）
-- **统一向量化接口**: 图像和视频使用相同的向量化接口，配合[配置驱动模型]优化
+- **统一向量化接口**: 图像和视频使用相同的向量化接口，配合CLIP模型优化
 - **MVP优先级优化**: 文搜图功能提前到P1优先级，与文本向量化并列
 - **Infinity集成**: 使用Infinity框架，高性能推理
-- **统一模型**: 使用[配置驱动模型]统一多模态模型，简化架构
+- **统一模型**: 使用CLIP系列统一多模态模型，简化架构
 - **文件监控服务完善**: 实现了文件创建、修改、删除、移动事件的处理逻辑
 - **低价值噪音过滤**: 智能过滤低价值内容，提高系统效率和检索质量
 - **视频时间轴展示**: 支持视频检索结果的时间轴可视化展示
 - **依赖注入重构**: 核心模块使用依赖注入，提高模块独立性和可测试性
-- **多进程架构设计**: 将计算密集型任务与主应用解耦，提升系统稳定性和可扩展性
-- **进程间通信机制**: 基于Redis实现可靠的进程间通信，支持任务分发和状态同步
+- **任务管理优化**: 完善的任务调度、执行、监控和管理机制
+- **优先级计算优化**: 实现精确的优先级计算公式，确保任务按正确顺序执行
 
 ### 开发量降低
-- **消除抽帧逻辑**: [配置驱动模型]模型直接支持视频输入，无需抽帧
+- **消除抽帧逻辑**: CLIP模型直接支持视频输入，无需抽帧
 - **统一代码路径**: 图像和视频使用相同的处理流程，减少代码分支
 - **简化维护**: 统一的代码路径，减少bug和维护成本
 - **减少测试复杂度**: 统一的向量化流程，减少测试用例数量
@@ -1459,10 +1504,10 @@ python scripts/setup_models.py
 - **依赖注入**: 使用依赖注入替代直接导入，提高模块独立性和可测试性
 
 ### 代码质量保证
-- **无错误代码**: 所有42个Python文件语法检查通过
+- **无错误代码**: 所有112个Python文件语法检查通过
 - **无空代码**: 所有TODO标记都有明确的实现说明或返回值
-- **符合PEP 8**: 代码风格符合Python编码规范（除必要的路径修改导入）
-- **测试覆盖**: 113个核心单元测试全部通过，覆盖核心功能
+- **符合PEP 8**: 代码风格符合Python编码规范
+- **测试覆盖**: 117个核心单元测试全部通过，覆盖核心功能
 - **文档完整**: 完善的需求文档、设计文档、测试策略文档
 - **Infinity集成**: 使用Infinity框架，高性能推理
 - **依赖注入**: 核心模块使用依赖注入，提高模块独立性和可测试性
@@ -1473,7 +1518,8 @@ python scripts/setup_models.py
 - 覆盖率报告自动生成
 - 测试数据按业务域和版本组织
 - 模型集成测试覆盖所有新模型
-- 已实现测试：test_config.py、test_database_manager.py、test_search_engine.py、test_model_integration.py、test_noise_filter.py、test_timeline.py
+- pytest-asyncio配置支持异步测试
+- 已实现测试：test_config.py、test_database_manager.py、test_search_engine.py、test_model_integration.py、test_noise_filter.py、test_timeline.py、test_file_priority.py、test_vector_store.py、test_task_manager.py
 - 集成测试：it_search_flow.py、it_indexing_flow.py
 - 端到端测试：e2e_full_workflow.py
 - 性能基准测试：test_embedding_benchmark.py
@@ -1488,38 +1534,33 @@ python scripts/setup_models.py
 - **LoggingConfig**: 日志配置管理器，负责配置日志级别、格式、轮转策略和处理器，提供统一的日志管理接口
 - **NoiseFilterManager**: 低价值噪音过滤管理器，支持图像、视频、音频、文本的智能过滤
 - **VideoTimelineGenerator**: 视频时间轴生成器，支持时间轴结果生成和管理
+- **TaskScheduler**: 任务调度器，负责任务优先级计算、任务队列管理、动态优先级调整和任务排序选择
+- **TaskExecutor**: 任务执行器，负责任务执行、错误处理和重试、进度更新和任务状态管理
+- **TaskGroupManager**: 任务组管理器，负责文件级任务组管理、任务流水线锁管理、文件级任务组织和任务组进度跟踪
+- **PriorityCalculator**: 优先级计算器，负责计算任务优先级，包括基础优先级、文件优先级、类型优先级和等待时间补偿
+- **ResourceManager**: 资源管理器，负责资源监控、OOM状态检测、资源预警和资源使用数据提供
 - **TaskMonitor**: 任务监控器，负责任务进度跟踪、任务统计、任务历史记录和性能指标计算
-- **TaskManagerPanel**: 任务管理器面板组件，提供任务进度和历史记录的图形界面展示
-- **DataManager**: 数据管理模块，负责索引管理和数据统计功能
-- **IPCManager**: 进程间通信管理器，提供基于Redis的多进程通信机制，支持任务分发、状态同步和心跳检测
-- **SharedMemoryManager**: 共享内存管理器，用于大文件数据的跨进程高效传输，减少序列化开销
-- **ProcessManager**: 多进程管理器，负责协调主进程与工作进程的生命周期管理
-- **FileMonitorProcess**: 文件监控进程，独立监控文件系统变化并通知主进程
-- **EmbeddingWorkerProcess**: 向量化工作进程，专门负责AI模型推理任务
-- **TaskWorkerProcess**: 任务工作进程，处理非推理类任务（媒体预处理、文件转换等）
+- **IPC模块**: 进程间通信模块，提供多种IPC机制（Redis、SQLite、Unix Socket、共享内存）
 - **PySide6 UI**: 跨平台桌面应用，提供完整的用户交互界面
   - MainWindow: 主窗口（使用依赖注入）
   - UILauncher: UI启动器
   - SearchPanel: 搜索面板组件
   - ResultPanel: 结果面板组件
   - SettingsPanel: 设置面板组件
-  - TaskManagerPanel: 任务管理器面板组件（新增）
-  - DataManagerPanel: 数据管理面板组件（新增）
   - ProgressDialog: 进度对话框
 
 ### 部署优化
 - **安装脚本**: 自动化安装过程，检查Python版本、创建虚拟环境、安装依赖
 - **模型设置脚本**: 自动化模型下载和管理，支持模型状态检查和清除
 - **依赖分离**: 依赖文件分离为base/dev/test/optional，便于灵活安装
-- **多进程启动**: 提供统一的多进程架构启动和管理脚本（msearchctl）
-- **Redis集成**: 自动配置和启动Redis服务以支持进程间通信
+- **多脚本支持**: 提供多种启动脚本（run.sh、run_api.sh、run_webui.sh、run_offline.sh）
 
 ---
 
 *最后更新: 2026-01-28*
-*架构: 多进程架构（主进程、文件监控进程、向量化工作进程、任务工作进程，通过Redis通信）*
+*架构: 六层架构（UI层、API层、服务层、核心组件层、数据层、工具层）*
 *状态: 核心模块、服务层、API服务层、时间定位机制、预处理缓存、噪音过滤、视频时间轴、PySide6 UI、部署脚本已完成，单元测试、集成测试、端到端测试、性能基准测试已实现，所有核心测试通过，代码重构完成*
-*代码规模: 104个Python文件，核心模块约7100行代码，服务层约1544行代码，主程序约400行（重构后），API服务器约300行（重构后），PySide6 UI约2000行，多进程架构模块约1200行，总计约28565行代码*
-*测试覆盖: 113个核心单元测试全部通过（test_config.py: 33个, test_database_manager.py: 12个, test_search_engine.py: 12个, test_model_integration.py: 7个, test_noise_filter.py: 27个, test_timeline.py: 22个）*
-*优化: 短视频优化、音频价值判断、文件去重、任务优先级管理、CLAP音频向量化、预处理缓存机制、配置管理合并优化、[配置驱动模型]集成、CLAP音频分类、架构简化减少开发量、统一向量化工作流程、Infinity框架、动态批处理和FlashAttention加速、模块化设计、代码质量保证、MVP优先级优化、文搜图提前到P1、LoggingConfig日志配置管理器、文件监控服务完善、低价值噪音过滤、视频时间轴展示、PySide6桌面UI完成、部署脚本完成、集成测试完成、端到端测试完成、性能基准测试完成、依赖注入重构完成、配置路径修复完成、向量化引擎简化完成、依赖管理分离完成、TaskMonitor任务监控器、TaskManagerPanel任务管理器面板、DataManager数据管理器、DataManagerPanel数据管理面板、IPCManager进程间通信管理器、SharedMemoryManager共享内存管理器、ProcessManager多进程管理器、FileMonitorProcess文件监控进程、EmbeddingWorkerProcess向量化工作进程、TaskWorkerProcess任务工作进程、多进程架构优化*
+*代码规模: 112个Python文件，核心模块约31317行代码，服务层约1544行代码，主程序约400行（重构后），API服务器约300行（重构后），PySide6 UI约2000行，IPC模块约1200行，总计约36561行代码*
+*测试覆盖: 117个核心单元测试全部通过（test_config.py: 33个, test_database_manager.py: 12个, test_search_engine.py: 8个, test_model_integration.py: 7个, test_noise_filter.py: 27个, test_timeline.py: 22个, test_file_priority.py: 4个, test_vector_store.py: 10个, test_task_manager.py: 4个）*
+*优化: 短视频优化、音频价值判断、文件去重、任务优先级管理、CLAP音频向量化、预处理缓存机制、配置管理合并优化、CLIP模型集成、CLAP音频分类、架构简化减少开发量、统一向量化工作流程、Infinity框架、动态批处理和FlashAttention加速、模块化设计、代码质量保证、MVP优先级优化、文搜图提前到P1、LoggingConfig日志配置管理器、文件监控服务完善、低价值噪音过滤、视频时间轴展示、PySide6桌面UI完成、部署脚本完成、集成测试完成、端到端测试完成、性能基准测试完成、依赖注入重构完成、配置路径修复完成、向量化引擎简化完成、依赖管理分离完成、TaskScheduler任务调度器、TaskExecutor任务执行器、TaskGroupManager任务组管理器、PriorityCalculator优先级计算器、ResourceManager资源管理器、TaskMonitor任务监控器、IPC模块进程间通信、pytest-asyncio异步测试支持、优先级计算公式优化、FILE_EMBED_TEXT任务类型添加、时间戳类型处理修复、状态检查修复*
 *设计要求达成率: 约98%（核心功能、UI、测试、部署全部完成，代码重构完成）*

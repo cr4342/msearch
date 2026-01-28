@@ -18,56 +18,35 @@ class PriorityCalculator:
     """优先级计算器"""
     
     def __init__(self):
-        # 基础优先级映射（根据设计文档）
+        # 基础优先级映射（根据设计文档和IFLOW.md）
         self.base_priority_map = {
-            # 高优先级：核心处理任务
-            'file_preprocessing': 1,
+            'file_scan': 3,
             'image_preprocess': 1,
             'video_preprocess': 1,
             'audio_preprocess': 1,
             'file_embed_image': 1,
-            'file_embed_video': 1,
-            'file_embed_audio': 1,
-            
-            # 中优先级：常规任务
-            'file_scan': 3,
-            'video_slice': 4,
-            'audio_segment': 4,
-            
-            # 低优先级：辅助任务
-            'thumbnail_generate': 6,
-            'preview_generate': 7,
-            'search': 8,
-            'search_multimodal': 8,
-            'rank_results': 9,
-            'filter_results': 9,
-            
-            # 默认优先级
+            'file_embed_video': 3,
+            'file_embed_audio': 4,
+            'file_embed_text': 1,
+            'video_slice': 3,
+            'thumbnail_generate': 2,
+            'preview_generate': 2,
             'default': 5
         }
         
-        # 类型优先级映射（根据设计文档）
+        # 类型优先级映射（根据设计文档和IFLOW.md）
         self.type_priority_map = {
-            # 核心任务类型优先级
-            'file_preprocessing': 1,
-            'image_preprocess': 1,
-            'video_preprocess': 1,
-            'audio_preprocess': 1,
+            'file_scan': 3,
+            'image_preprocess': 4,
+            'video_preprocess': 4,
+            'audio_preprocess': 4,
             'file_embed_image': 1,
-            'file_embed_video': 1,
-            'file_embed_audio': 1,
-            
-            # 其他任务类型优先级
-            'file_scan': 5,
-            'video_slice': 3,
-            'audio_segment': 3,
-            'thumbnail_generate': 7,
-            'preview_generate': 8,
-            'search': 9,
-            'search_multimodal': 9,
-            'rank_results': 9,
-            'filter_results': 9,
-            
+            'file_embed_video': 2,
+            'file_embed_audio': 3,
+            'file_embed_text': 1,
+            'video_slice': 2,
+            'thumbnail_generate': 5,
+            'preview_generate': 6,
             'default': 5
         }
         
@@ -101,9 +80,14 @@ class PriorityCalculator:
             wait_compensation = 0
             if task.created_at:
                 if isinstance(task.created_at, datetime):
+                    # 如果是datetime对象，计算时间差
                     wait_time = (datetime.now() - task.created_at).total_seconds()
-                else:
+                elif isinstance(task.created_at, (int, float)):
+                    # 如果是时间戳（float/int），转换为datetime再计算
                     wait_time = time.time() - task.created_at
+                else:
+                    # 其他情况，使用当前时间
+                    wait_time = 0
                 
                 # 计算等待时间补偿（每1分钟增加1点，最多增加999点）
                 wait_intervals = int(wait_time / self.wait_compensation_interval)

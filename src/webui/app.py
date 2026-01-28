@@ -16,14 +16,15 @@ from concurrent.futures import ThreadPoolExecutor
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root / 'src'))
+sys.path.insert(0, str(project_root))
 
-from src.core.config.config_manager import ConfigManager
-from src.core.vector.vector_store import VectorStore
-from src.core.embedding.embedding_engine import EmbeddingEngine
-from src.core.database.database_manager import DatabaseManager
-from src.core.task.task_manager import TaskManager
-from src.services.file.file_scanner import FileScanner
-from src.services.file.file_indexer import FileIndexer
+from core.config.config_manager import ConfigManager
+from core.vector.vector_store import VectorStore
+from core.embedding.embedding_engine import EmbeddingEngine
+from core.database.database_manager import DatabaseManager
+from core.task.central_task_manager import CentralTaskManager
+from services.file.file_scanner import FileScanner
+from services.file.file_indexer import FileIndexer
 
 logger = logging.getLogger(__name__)
 
@@ -113,8 +114,8 @@ class MSearchWebUI:
         logger.info("✓ 数据库管理器初始化完成")
         
         # 任务管理器
-        device = self.config_manager.get('models.available_models.chinese_clip_large.device', 'cpu')
-        self.task_manager = TaskManager(self.config, device)
+        device = self.config_manager.get('models.device', 'cpu')
+        self.task_manager = CentralTaskManager(self.config, device)
         self.task_manager.initialize()
         logger.info("✓ 任务管理器初始化完成")
         
@@ -488,21 +489,35 @@ class MSearchWebUI:
             output += "任务统计信息\n"
             output += "="*60 + "\n\n"
             
-            # 任务统计
-            task_stats = stats.get('task_stats', {})
-            output += "[任务统计]\n"
-            output += f"  总任务数: {task_stats.get('total', 0)}\n"
-            output += f"  待处理: {task_stats.get('pending', 0)}\n"
-            output += f"  运行中: {task_stats.get('running', 0)}\n"
-            output += f"  已完成: {task_stats.get('completed', 0)}\n"
-            output += f"  失败: {task_stats.get('failed', 0)}\n"
-            output += f"  已取消: {task_stats.get('cancelled', 0)}\n"
+            # 从CentralTaskManager获取统计信息
+            output += "[任务队列]\n"
+            output += f"  队列大小: {stats.get('queue_size', 0)}\n"
+            output += f"  运行中任务: {stats.get('running_count', 0)}\n"
             output += "\n"
             
-            # 并发信息
-            output += "[并发信息]\n"
-            output += f"  当前并发数: {stats.get('concurrency', 0)}\n"
+            # 资源状态
+            resource_state = stats.get('resource_state', 'unknown')
+            output += "[资源状态]\n"
+            output += f"  状态: {resource_state}\n"
             output += "\n"
+            
+            # 统计信息
+            task_stats = stats.get('task_stats', {})
+            if task_stats:
+                output += "[任务统计]\n"
+                output += f"  总任务数: {task_stats.get('total', 0)}\n"
+                output += f"  待处理: {task_stats.get('pending', 0)}\n"
+                output += f"  运行中: {task_stats.get('running', 0)}\n"
+                output += f"  已完成: {task_stats.get('completed', 0)}\n"
+                output += f"  失败: {task_stats.get('failed', 0)}\n"
+                output += f"  已取消: {task_stats.get('cancelled', 0)}\n"
+                output += "\n"
+            
+            # 并发信息
+            if 'concurrency' in stats:
+                output += "[并发信息]\n"
+                output += f"  当前并发数: {stats.get('concurrency', 0)}\n"
+                output += "\n"
             
             # 任务组统计
             task_groups = stats.get('task_groups', {})

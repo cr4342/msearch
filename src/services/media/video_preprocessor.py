@@ -10,13 +10,13 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 导入媒体处理通用工具
-from src.services.media.media_utils import MediaInfoHelper, calculate_file_hash
+from services.media.media_utils import MediaInfoHelper, calculate_file_hash
 
 # 导入数据层组件
-from src.data.extractors.metadata_extractor import MetadataExtractor
-from src.data.extractors.frame_extractor import FrameExtractor
-from src.data.extractors.audio_extractor import AudioExtractor
-from src.data.extractors.scene_detector import SceneDetector
+from data.extractors.metadata_extractor import MetadataExtractor
+from data.extractors.frame_extractor import FrameExtractor
+from data.extractors.audio_extractor import AudioExtractor
+from data.extractors.scene_detector import SceneDetector
 
 
 class VideoPreprocessor:

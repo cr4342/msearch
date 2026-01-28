@@ -11,13 +11,15 @@ from pathlib import Path
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
+src_root = project_root / "src"
+sys.path.insert(0, str(src_root))
 sys.path.insert(0, str(project_root))
 
-from src.core.config.config_manager import ConfigManager
-from src.core.database.database_manager import DatabaseManager
-from src.core.vector.vector_store import VectorStore
-from src.core.embedding.embedding_engine import EmbeddingEngine
-from src.services.media.media_processor import MediaProcessor
+from core.config.config_manager import ConfigManager
+from core.database.database_manager import DatabaseManager
+from core.vector.vector_store import VectorStore
+from core.embedding.embedding_engine import EmbeddingEngine
+from services.media.media_processor import MediaProcessor
 
 # 设置日志
 logging.basicConfig(
@@ -52,18 +54,19 @@ async def index_files(directory: str):
     logger.info("初始化组件...")
     
     # 数据库管理器
-    db_path = config.get('database.sqlite.path', 'data/database/sqlite/msearch.db')
+    db_path = config.get('database', {}).get('metadata_db_path', 'data/database/sqlite/msearch.db')
     database_manager = DatabaseManager(db_path)
     database_manager.initialize()
     logger.info("✓ 数据库管理器初始化完成")
     
     # 向量存储
+    vector_db_path = config.get('database', {}).get('vector_db_path', 'data/database/lancedb')
     vector_store_config = {
-        'data_dir': config.get('database.lancedb.data_dir', 'data/database/lancedb'),
-        'collection_name': config.get('database.lancedb.collection_name', 'unified_vectors'),
-        'index_type': config.get('database.lancedb.index_type', 'ivf_pq'),
-        'num_partitions': config.get('database.lancedb.num_partitions', 128),
-        'vector_dimension': config.get('database.lancedb.vector_dimension', 512)
+        'data_dir': vector_db_path,
+        'collection_name': 'unified_vectors',
+        'index_type': 'ivf_pq',
+        'num_partitions': 128,
+        'vector_dimension': 512
     }
     vector_store = VectorStore(vector_store_config)
     vector_store.initialize()
@@ -131,16 +134,17 @@ async def index_files(directory: str):
                 # 存储到向量数据库
                 if embedding:
                     file_id = metadata.get('file_id', f"file_{i}")
-                    vector_store.add_vector(
-                        vector_id=f"{file_id}_vector",
-                        vector=embedding,
-                        file_id=file_id,
-                        file_path=str(file_path),
-                        file_name=file_path.name,
-                        file_type=media_type,
-                        modality=media_type,
-                        metadata=metadata
-                    )
+                    vector_data = {
+                        'id': f"{file_id}_vector",
+                        'vector': embedding,
+                        'file_id': file_id,
+                        'file_path': str(file_path),
+                        'file_name': file_path.name,
+                        'file_type': media_type,
+                        'modality': media_type,
+                        'metadata': metadata
+                    }
+                    vector_store.add_vector(vector_data)
                     logger.info(f"  ✓ 向量存储完成")
             else:
                 logger.warning(f"  ✗ 文件处理失败: {result.get('error')}")

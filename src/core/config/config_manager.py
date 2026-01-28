@@ -8,7 +8,7 @@
 import os
 import yaml
 import logging
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, List
 from pathlib import Path
 
 logger = logging.getLogger(__name__)
@@ -25,7 +25,14 @@ class ConfigManager:
             config_path: 配置文件路径
         """
         self.config_path = config_path or self._get_default_config_path()
-        self.config = self._load_config()
+        self.config = {}
+        self.defaults = {
+            "system.log_level": "INFO",
+            "system.log_dir": "logs",
+            "task_scheduler.max_workers": 4,
+            "search.top_k": 20,
+        }
+        self.load()
         
     def _get_default_config_path(self) -> str:
         """获取默认配置文件路径"""
@@ -38,6 +45,16 @@ class ConfigManager:
         config_path = project_root / 'config' / 'config.yml'
         
         return str(config_path)
+    
+    def load(self) -> Dict[str, Any]:
+        """
+        加载配置文件
+        
+        Returns:
+            配置字典
+        """
+        self.config = self._load_config()
+        return self.config
     
     def _load_config(self) -> Dict[str, Any]:
         """加载配置文件"""
@@ -201,6 +218,60 @@ class ConfigManager:
     def get_webui_config(self) -> Dict[str, Any]:
         """获取WebUI配置"""
         return self.config.get('webui', {})
+    
+    def set(self, key: str, value: Any) -> None:
+        """
+        设置配置值
+        
+        Args:
+            key: 配置键，支持点分隔符
+            value: 配置值
+        """
+        keys = key.split('.')
+        config = self.config
+        
+        for k in keys[:-1]:
+            if k not in config:
+                config[k] = {}
+            config = config[k]
+        
+        config[keys[-1]] = value
+        logger.info(f"配置已更新: {key} = {value}")
+    
+    def validate(self) -> List[str]:
+        """
+        验证配置的完整性和正确性
+        
+        Returns:
+            错误信息列表，如果为空表示验证通过
+        """
+        errors = []
+        
+        # 检查必需的配置项
+        required_keys = ['models', 'database', 'file_scanner']
+        for key in required_keys:
+            if key not in self.config:
+                errors.append(f"缺少必需的配置项: {key}")
+        
+        # 检查模型配置
+        models_config = self.config.get('models', {})
+        if 'active_models' not in models_config:
+            errors.append("models.active_models 未配置")
+        
+        if 'available_models' not in models_config:
+            errors.append("models.available_models 未配置")
+        
+        # 检查数据库配置
+        database_config = self.config.get('database', {})
+        if 'lancedb' not in database_config:
+            errors.append("database.lancedb 未配置")
+        
+        # 检查文件扫描器配置
+        file_scanner_config = self.config.get('file_scanner', {})
+        if 'supported_extensions' not in file_scanner_config:
+            errors.append("file_scanner.supported_extensions 未配置")
+        
+        return errors
     
     def reload(self) -> None:
         """重新加载配置"""

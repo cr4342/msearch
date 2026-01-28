@@ -17,7 +17,7 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from core.task import CentralTaskManager, Task
-from core.config.config import ConfigManager
+from core.config.config_manager import ConfigManager
 from ipc import MainProcessIPC
 from services.media.video_slicer import VideoSlicer
 

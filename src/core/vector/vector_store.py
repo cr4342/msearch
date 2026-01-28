@@ -83,6 +83,9 @@ class VectorStore:
                             "vector": np.zeros(self.vector_dimension, dtype=np.float32),
                             "modality": "temp",
                             "file_id": "",
+                            "file_path": "",
+                            "file_type": "",
+                            "file_name": "",
                             "segment_id": "",
                             "start_time": 0.0,
                             "end_time": 0.0,
@@ -146,16 +149,33 @@ class VectorStore:
             # 准备数据
             data = []
             for vec in vectors:
+                # 处理metadata字段
+                metadata = vec.get('metadata', {})
+                if isinstance(metadata, dict):
+                    # 从metadata中提取file_path和file_type
+                    file_path = vec.get('file_path', metadata.get('file_path', ''))
+                    file_type = vec.get('file_type', metadata.get('file_type', ''))
+                    file_name = vec.get('file_name', metadata.get('file_name', ''))
+                    metadata_json = json.dumps(metadata)
+                else:
+                    file_path = vec.get('file_path', '')
+                    file_type = vec.get('file_type', '')
+                    file_name = vec.get('file_name', '')
+                    metadata_json = json.dumps({})
+                
                 data.append({
                     "id": vec.get('id', str(uuid.uuid4())),
                     "vector": np.array(vec['vector'], dtype=np.float32),
                     "modality": vec.get('modality', 'unknown'),
                     "file_id": vec.get('file_id', ''),
+                    "file_path": file_path,
+                    "file_type": file_type,
+                    "file_name": file_name,
                     "segment_id": vec.get('segment_id', ''),
                     "start_time": vec.get('start_time', 0.0),
                     "end_time": vec.get('end_time', 0.0),
                     "is_full_video": vec.get('is_full_video', False),
-                    "metadata": json.dumps(vec.get('metadata', {})),
+                    "metadata": metadata_json,
                     "created_at": vec.get('created_at', datetime.now().timestamp())
                 })
             
@@ -230,8 +250,12 @@ class VectorStore:
             # 如果设置了相似度阈值，我们需要先获取足够多的结果，然后过滤
             actual_limit = limit if similarity_threshold is None else max(limit * 2, 100)  # 获取更多结果用于过滤
             
-            # 执行搜索
-            results = self.table.search(query_vector).limit(actual_limit).to_pandas()
+            # 执行搜索（使用余弦相似度）
+            # LanceDB支持metric参数: "cosine", "l2", "dot"
+            results = self.table.search(query_vector, vector_column_name="vector")\
+                .metric("cosine")\
+                .limit(actual_limit)\
+                .to_pandas()
             
             # 应用过滤条件
             if filter:
@@ -247,6 +271,16 @@ class VectorStore:
             
             # 按相似度排序
             result_dicts = sorted(result_dicts, key=lambda x: x['similarity'], reverse=True)
+            
+            # 去重：根据file_path去重，保留相似度最高的
+            seen_files = set()
+            unique_results = []
+            for r in result_dicts:
+                file_path = r.get('file_path', '')
+                if file_path and file_path not in seen_files:
+                    seen_files.add(file_path)
+                    unique_results.append(r)
+            result_dicts = unique_results
             
             # 如果设置了相似度阈值，过滤结果
             if similarity_threshold is not None:
@@ -489,8 +523,22 @@ class VectorStore:
             if row['id'] == 'temp_init_vector' or row['modality'] == 'temp':
                 continue
                 
-            # 计算相似度 (distance转换为similarity)
-            similarity = 1.0 / (1.0 + float(row['_distance'])) if '_distance' in row else 0.0
+            # 计算相似度 (cosine distance转换为cosine similarity)
+            # LanceDB的余弦距离 = 1 - cosine_similarity
+            # 所以 cosine_similarity = 1 - cosine_distance
+            if '_distance' in row:
+                cosine_distance = float(row['_distance'])
+                # 将余弦距离转换为余弦相似度
+                # 余弦距离范围是[0, 2]，其中0表示完全相同，2表示完全相反
+                # 余弦相似度范围是[-1, 1]，其中1表示完全相同，-1表示完全相反
+                # 我们将其归一化到[0, 1]范围
+                cosine_similarity = 1.0 - cosine_distance
+                # 归一化到[0, 1]范围 (将[-1, 1]映射到[0, 1])
+                similarity = (cosine_similarity + 1.0) / 2.0
+                # 确保相似度在[0, 1]范围内
+                similarity = max(0.0, min(1.0, similarity))
+            else:
+                similarity = 0.0
             
             # 获取文件名和路径（metadata可能是字符串或字典）
             metadata_dict = {}
@@ -526,7 +574,7 @@ class VectorStore:
             # 添加相似度分数（如果有）
             if '_distance' in row:
                 result['_distance'] = float(row['_distance'])
-                result['_score'] = 1.0 - float(row['_distance'])
+                result['_score'] = similarity  # 使用计算好的相似度
             
             result_list.append(result)
         

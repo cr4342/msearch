@@ -26,6 +26,7 @@ class TaskType(Enum):
     FILE_EMBED_IMAGE = "file_embed_image"
     FILE_EMBED_VIDEO = "file_embed_video"
     FILE_EMBED_AUDIO = "file_embed_audio"
+    FILE_EMBED_TEXT = "file_embed_text"
     
     # 辅助任务
     THUMBNAIL_GENERATE = "thumbnail_generate"
