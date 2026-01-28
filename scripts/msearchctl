@@ -1,0 +1,217 @@
+#!/usr/bin/env python3
+"""
+msearch控制脚本 (msearchctl)
+用于启动、停止和管理msearch多进程服务
+"""
+
+import subprocess
+import sys
+import os
+import signal
+import time
+import argparse
+from pathlib import Path
+
+
+class MSearchController:
+    """msearch控制器"""
+    
+    def __init__(self):
+        self.project_root = Path(__file__).parent.parent
+        self.pid_file = self.project_root / 'data' / 'pids' / 'msearch.pid'
+        
+        # 确保PID目录存在
+        self.pid_file.parent.mkdir(parents=True, exist_ok=True)
+    
+    def start(self, config_path: str = None, api_host: str = '0.0.0.0', api_port: int = 8000):
+        """启动msearch服务"""
+        print("正在启动msearch服务...")
+        
+        # 检查PID文件，避免重复启动
+        if self.pid_file.exists():
+            pid = self.pid_file.read_text().strip()
+            if self._is_process_running(pid):
+                print(f"msearch服务已在运行 (PID: {pid})")
+                return False
+        
+        # 启动Redis
+        print("启动Redis...")
+        try:
+            # 检查Redis是否已运行
+            result = subprocess.run(['pgrep', 'redis-server'], capture_output=True, text=True)
+            if result.returncode != 0:
+                # 如果没有运行，启动Redis
+                subprocess.Popen(['redis-server', '--daemonize', 'yes'])
+                time.sleep(2)  # 等待Redis启动
+                
+                # 验证Redis是否成功启动
+                result = subprocess.run(['redis-cli', 'ping'], capture_output=True, text=True, timeout=5)
+                if result.stdout.strip() != 'PONG':
+                    print("错误: Redis启动失败")
+                    return False
+        except Exception as e:
+            print(f"错误: Redis启动失败 - {e}")
+            return False
+        
+        # 启动主进程协调器
+        print("启动主进程协调器...")
+        main_cmd = [sys.executable, str(self.project_root / 'src' / 'main.py')]
+        if config_path:
+            main_cmd.extend(['--config', config_path])
+        
+        main_process = subprocess.Popen(main_cmd)
+        
+        # 等待主进程启动其子进程
+        time.sleep(3)
+        
+        # 启动API服务器
+        print("启动API服务器...")
+        api_cmd = [sys.executable, str(self.project_root / 'src' / 'api_server.py'), 
+                  '--host', api_host, '--port', str(api_port)]
+        if config_path:
+            api_cmd.extend(['--config', config_path])
+        
+        api_process = subprocess.Popen(api_cmd)
+        
+        # 记录PID
+        with self.pid_file.open('w') as f:
+            f.write(f"{os.getpid()}\n{main_process.pid}\n{api_process.pid}\n")
+        
+        print(f"msearch服务已启动")
+        print(f"API服务: http://{api_host}:{api_port}")
+        print(f"主进程PID: {main_process.pid}")
+        print(f"API进程PID: {api_process.pid}")
+        
+        return True
+    
+    def stop(self):
+        """停止msearch服务"""
+        print("正在停止msearch服务...")
+        
+        if not self.pid_file.exists():
+            print("msearch服务未运行或PID文件不存在")
+            return False
+        
+        pids = self.pid_file.read_text().strip().split('\n')
+        stopped = 0
+        
+        for pid_str in pids:
+            if pid_str.strip():
+                pid = int(pid_str.strip())
+                if self._is_process_running(pid):
+                    try:
+                        print(f"停止进程 {pid}...")
+                        os.kill(pid, signal.SIGTERM)
+                        
+                        # 等待进程结束
+                        for _ in range(20):  # 最多等待10秒
+                            if not self._is_process_running(pid):
+                                break
+                            time.sleep(0.5)
+                        
+                        # 如果进程仍未停止，强制杀死
+                        if self._is_process_running(pid):
+                            print(f"进程 {pid} 未响应SIGTERM，强制杀死...")
+                            os.kill(pid, signal.SIGKILL)
+                        
+                        stopped += 1
+                    except ProcessLookupError:
+                        print(f"进程 {pid} 不存在")
+                    except Exception as e:
+                        print(f"停止进程 {pid} 时出错: {e}")
+        
+        # 停止Redis
+        try:
+            result = subprocess.run(['pgrep', 'redis-server'], capture_output=True, text=True)
+            if result.returncode == 0:
+                pids = result.stdout.strip().split('\n')
+                for pid in pids:
+                    if pid.strip():
+                        print(f"停止Redis进程 {pid}...")
+                        os.kill(int(pid), signal.SIGTERM)
+        except:
+            pass  # 忽略Redis停止错误
+        
+        # 删除PID文件
+        try:
+            self.pid_file.unlink()
+        except:
+            pass
+        
+        print(f"已停止 {stopped} 个msearch相关进程")
+        return True
+    
+    def restart(self, config_path: str = None, api_host: str = '0.0.0.0', api_port: int = 8000):
+        """重启msearch服务"""
+        self.stop()
+        time.sleep(2)
+        return self.start(config_path, api_host, api_port)
+    
+    def status(self):
+        """检查msearch服务状态"""
+        print("检查msearch服务状态...")
+        
+        # 检查PID文件
+        if self.pid_file.exists():
+            pids = self.pid_file.read_text().strip().split('\n')
+            running_count = 0
+            
+            for pid_str in pids:
+                if pid_str.strip():
+                    pid = int(pid_str.strip())
+                    if self._is_process_running(pid):
+                        print(f"进程 {pid} 正在运行")
+                        running_count += 1
+                    else:
+                        print(f"进程 {pid} 未运行")
+            
+            print(f"服务状态: {running_count}/{len([p for p in pids if p.strip()])} 个进程正在运行")
+        else:
+            print("服务未运行或PID文件不存在")
+        
+        # 检查Redis
+        try:
+            result = subprocess.run(['pgrep', 'redis-server'], capture_output=True, text=True)
+            if result.returncode == 0:
+                print("Redis服务正在运行")
+            else:
+                print("Redis服务未运行")
+        except:
+            print("无法检查Redis状态")
+        
+        return True
+    
+    def _is_process_running(self, pid: int) -> bool:
+        """检查进程是否在运行"""
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+
+def main():
+    """主函数"""
+    parser = argparse.ArgumentParser(description='msearch控制脚本')
+    parser.add_argument('action', choices=['start', 'stop', 'restart', 'status'], 
+                       help='执行的操作: start, stop, restart, status')
+    parser.add_argument('--config', type=str, help='配置文件路径')
+    parser.add_argument('--host', type=str, default='0.0.0.0', help='API服务器主机地址')
+    parser.add_argument('--port', type=int, default=8000, help='API服务器端口')
+    
+    args = parser.parse_args()
+    
+    controller = MSearchController()
+    
+    if args.action == 'start':
+        controller.start(args.config, args.host, args.port)
+    elif args.action == 'stop':
+        controller.stop()
+    elif args.action == 'restart':
+        controller.restart(args.config, args.host, args.port)
+    elif args.action == 'status':
+        controller.status()
+
+
+if __name__ == '__main__':
+    main()

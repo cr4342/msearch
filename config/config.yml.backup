@@ -1,0 +1,164 @@
+database:
+  metadata_db_path: data/database/sqlite/msearch.db
+  vector_db_path: data/database/lancedb
+file_monitor:
+  debounce_interval: 1000
+  enabled: true
+  ignore_patterns:
+  - .*
+  - '*.tmp'
+  - '*.temp'
+  - __pycache__
+  recursive: true
+  watch_directories:
+  - /data/project/msearch/testdata
+indexing:
+  auto_index_new_files: true
+  max_files_per_batch: 100
+  monitor_interval: 60
+  thumbnail_size: 256
+  video_frame_sample_rate: 1
+  video_segment_duration: 5
+logging:
+  console_output: true
+  keep_logs: 7
+  level: INFO
+  log_file: logs/msearch.log
+  rotation: daily
+  rotation_size: 10MB
+models:
+  active_models:
+  - chinese_clip_base
+  - audio_model
+  audio_model:
+    batch_size: 8
+    device: cpu
+    model_name: laion/clap-htsat-unfused
+    model_path: data/models/clap-htsat-unfused
+    precision: float32
+    sample_rate: 44100
+    vector_dim: 512
+  available_models:
+    audio_model:
+      batch_size: 8
+      compile: false
+      description: CLAP音频模型，支持文本-音频检索
+      device: cpu
+      dtype: float32
+      embedding_dim: 512
+      engine: torch
+      local_path: data/models/clap-htsat-unfused
+      model_id: audio
+      model_name: laion/clap-htsat-unfused
+      pooling_method: mean
+      trust_remote_code: true
+    chinese_clip_base:
+      batch_size: 16
+      compile: false
+      device: cpu
+      dtype: float32
+      embedding_dim: 512
+      engine: torch
+      local_path: data/models/chinese-clip-vit-base-patch16
+      model_id: chinese_clip_base
+      model_name: OFA-Sys/chinese-clip-vit-base-patch16
+      pooling_method: mean
+      trust_remote_code: true
+    chinese_clip_large:
+      batch_size: 8
+      compile: false
+      description: 中文CLIP中量级模型，适合生产环境，平衡精度与速度
+      device: cpu
+      dtype: float32
+      embedding_dim: 768
+      engine: torch
+      local_path: data/models/chinese-clip-vit-large-patch14-336px
+      model_id: chinese_clip_large
+      model_name: OFA-Sys/chinese-clip-vit-large-patch14-336px
+      pooling_method: mean
+      trust_remote_code: true
+    colqwen3_turbo:
+      batch_size: 4
+      compile: false
+      description: ColQwen3高性能模型，适合高配置环境
+      device: cpu
+      dtype: float32
+      embedding_dim: 512
+      engine: torch
+      local_path: data/models/SauerkrautLM-ColQwen3-1.7b-Turbo-v0.1
+      model_id: colqwen3_turbo
+      model_name: VAGOsolutions/SauerkrautLM-ColQwen3-1.7b-Turbo-v0.1
+      pooling_method: mean
+      trust_remote_code: true
+    tomoro_colqwen3:
+      batch_size: 2
+      compile: false
+      description: Tomoro超高精度模型，适合超高配置环境
+      device: cpu
+      dtype: float32
+      embedding_dim: 512
+      engine: torch
+      local_path: data/models/tomoro-colqwen3-embed-4b
+      model_id: tomoro_colqwen3
+      model_name: TomoroAI/tomoro-colqwen3-embed-4b
+      pooling_method: mean
+      trust_remote_code: true
+  image_video_model:
+    batch_size: 16
+    device: cpu
+    embedding_dim: 512
+    input_resolution: 512
+    model_name: OFA-Sys/chinese-clip-vit-base-patch16
+    model_path: data/models/chinese-clip-vit-base-patch16
+    precision: float32
+  infinity_config:
+    compile: false
+    dtype: float32
+    embedding_dtype: float32
+    engine: torch
+    trust_remote_code: true
+  local_files_only: true
+  model_cache_dir: data/models
+  offline_mode: true
+  performance:
+    enable_dynamic_batching: true
+    enable_model_warmup: true
+    max_concurrent_requests: 10
+    request_timeout: 30
+search:
+  max_distance: 0.5
+  re_rank: true
+  re_rank_top_k: 50
+  similarity_threshold: 0.7
+  top_k: 20
+task_manager:
+  base_concurrent_tasks: 8
+  concurrency_mode: dynamic
+  dynamic_concurrency_interval: 5.0
+  dynamic_concurrency_step: 2
+  dynamic_concurrency_target_cpu: 60.0
+  dynamic_concurrency_target_gpu: 80.0
+  dynamic_concurrency_target_memory: 70.0
+  file_priority:
+    default_file_priority: 5
+    enabled: true
+    max_file_priority: 10
+    priority_inheritance: true
+    priority_multiplier: 100
+  max_concurrent_by_type:
+    audio_extract: 2
+    audio_preprocess: 2
+    file_embed_audio: 2
+    file_embed_image: 4
+    file_embed_video: 2
+    file_scan: 2
+    image_preprocess: 4
+    preview_generate: 4
+    thumbnail_generate: 4
+    video_process: 2
+    video_slice: 2
+  max_concurrent_tasks: 16
+  max_retries: 3
+  min_concurrent_tasks: 4
+  retry_delay: 30
+  task_queue_size: 1000

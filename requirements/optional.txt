@@ -1,0 +1,12 @@
+# msearch 多模态检索系统 - 可选依赖
+# 这是msearch系统的可选功能依赖
+
+# 包含核心依赖
+-r base.txt
+
+# GUI (可选)
+PySide6>=6.0.0
+
+# 可选的媒体处理工具
+imageio>=2.31.0
+imageio-ffmpeg>=0.4.9

@@ -1,0 +1,19 @@
+# msearch 多模态检索系统 - 依赖管理入口
+# 
+# 本文件指向核心依赖文件，用于简化安装流程
+#
+# 依赖分离说明：
+# - base.txt: 核心依赖（运行msearch所需的最小依赖集）
+# - dev.txt: 开发依赖（包含base.txt + 开发工具）
+# - test.txt: 测试依赖（包含base.txt + 测试工具）
+# - optional.txt: 可选依赖（包含base.txt + GUI等可选功能）
+#
+# 安装方式：
+# - 核心依赖: pip install -r requirements.txt
+# - 开发依赖: pip install -r requirements/dev.txt
+# - 测试依赖: pip install -r requirements/test.txt
+# - 可选依赖: pip install -r requirements/optional.txt
+# - 所有依赖: pip install -r requirements/dev.txt -r requirements/test.txt -r requirements/optional.txt
+
+# 指向核心依赖
+-r requirements/base.txt

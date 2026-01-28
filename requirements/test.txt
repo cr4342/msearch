@@ -1,0 +1,19 @@
+# msearch 多模态检索系统 - 测试依赖
+# 这是测试msearch系统所需的依赖
+
+# 包含核心依赖
+-r base.txt
+
+# 测试框架
+pytest>=7.4.0
+pytest-asyncio>=0.21.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+pytest-xdist>=3.5.0
+
+# 测试工具
+faker>=20.0.0
+responses>=0.24.0
+
+# 覆盖率工具
+coverage>=7.3.0

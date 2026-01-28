@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>msearch - 多模态检索系统</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <nav class="navbar">
+        <div class="navbar-brand">msearch</div>
+        <div class="navbar-menu">
+            <a href="#" class="nav-link active" data-page="search">搜索</a>
+            <a href="#" class="nav-link" data-page="tasks">任务</a>
+            <a href="#" class="nav-link" data-page="files">文件</a>
+            <a href="#" class="nav-link" data-page="system">系统</a>
+        </div>
+    </nav>
+
+    <main class="container">
+        <!-- 搜索页面 -->
+        <section id="page-search" class="page active">
+            <div class="search-container">
+                <h1>多模态检索</h1>
+                <div class="search-box">
+                    <select id="search-type">
+                        <option value="text">文本搜索</option>
+                        <option value="image">图像搜索</option>
+                        <option value="audio">音频搜索</option>
+                    </select>
+                    <input type="text" id="search-input" placeholder="输入搜索内容...">
+                    <button id="search-btn">搜索</button>
+                </div>
+                <div class="results-container">
+                    <div id="search-results" class="results-grid"></div>
+                </div>
+            </div>
+        </section>
+
+        <!-- 任务管理页面 -->
+        <section id="page-tasks" class="page">
+            <h2>任务管理</h2>
+            <div id="task-list" class="task-list"></div>
+        </section>
+
+        <!-- 文件管理页面 -->
+        <section id="page-files" class="page">
+            <h2>文件管理</h2>
+            <div id="file-list" class="file-list"></div>
+        </section>
+
+        <!-- 系统状态页面 -->
+        <section id="page-system" class="page">
+            <h2>系统状态</h2>
+            <div id="system-info" class="system-info"></div>
+        </section>
+    </main>
+
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+        <p>加载中...</p>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
