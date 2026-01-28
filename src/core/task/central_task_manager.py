@@ -15,7 +15,7 @@ from .task import Task
 from .task_queue import TaskQueue
 from .task_executor import OptimizedTaskExecutor
 from .priority_calculator import PriorityCalculator
-from .group_manager import OptimizedGroupManager
+from .task_group_manager import TaskGroupManager
 from .resource_manager import OptimizedResourceManager
 from .task_monitor import OptimizedTaskMonitor
 from .pipeline_lock_manager import PipelineLockManager
@@ -46,7 +46,7 @@ class CentralTaskManager:
         self.task_queue = TaskQueue()
         self.task_executor = OptimizedTaskExecutor()
         self.priority_calculator = PriorityCalculator()
-        self.group_manager = OptimizedGroupManager()
+        self.group_manager = TaskGroupManager()
         self.resource_manager = OptimizedResourceManager(self.task_config)
         self.task_monitor = OptimizedTaskMonitor()
         self.pipeline_lock_manager = PipelineLockManager()

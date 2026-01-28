@@ -15,7 +15,7 @@ from .task import Task
 from .task_queue import TaskQueue
 from .task_executor import OptimizedTaskExecutor
 from .priority_calculator import PriorityCalculator
-from .group_manager import OptimizedGroupManager
+from .task_group_manager import TaskGroupManager
 from .resource_manager import OptimizedResourceManager
 from .task_monitor import OptimizedTaskMonitor
 from .concurrency_manager import OptimizedConcurrencyManager, ConcurrencyConfig
@@ -51,7 +51,7 @@ class TaskManager:
             'gpu_memory_pause_threshold': 95.0
         })
         self.task_monitor = OptimizedTaskMonitor()
-        self.group_manager = OptimizedGroupManager()
+        self.group_manager = TaskGroupManager()
         self.priority_calculator = PriorityCalculator()
         
         # 并发管理器

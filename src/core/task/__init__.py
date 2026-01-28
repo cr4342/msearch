@@ -5,6 +5,7 @@
 
 from .task import Task
 from .task_types import TaskType, TaskStatus
+from .task_types import TaskType, TaskStatus
 from .task_queue import TaskQueue
 from .task_executor import OptimizedTaskExecutor
 from .priority_calculator import PriorityCalculator

@@ -23,12 +23,12 @@ class OptimizedResourceManager:
         Args:
             config: 配置字典
         """
-        # 简化的OOM阈值配置（两级）
-        self.memory_warning_threshold = config.get('memory_warning_threshold', 80.0)  # 警告级
-        self.memory_pause_threshold = config.get('memory_pause_threshold', 95.0)      # 暂停级
+        # 简化的OOM阈值配置（两级，根据设计文档）
+        self.memory_warning_threshold = config.get('memory_warning_threshold', 85.0)  # 警告级（85%）
+        self.memory_pause_threshold = config.get('memory_pause_threshold', 95.0)      # 暂停级（95%）
         
-        # GPU内存阈值
-        self.gpu_memory_warning_threshold = config.get('gpu_memory_warning_threshold', 80.0)
+        # GPU内存阈值（根据设计文档）
+        self.gpu_memory_warning_threshold = config.get('gpu_memory_warning_threshold', 85.0)
         self.gpu_memory_pause_threshold = config.get('gpu_memory_pause_threshold', 95.0)
         
         # 当前状态

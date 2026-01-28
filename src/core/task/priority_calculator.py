@@ -18,92 +18,109 @@ class PriorityCalculator:
     """优先级计算器"""
     
     def __init__(self):
-        # 基础优先级映射
+        # 基础优先级映射（根据设计文档）
         self.base_priority_map = {
             # 高优先级：核心处理任务
-            'file_preprocessing': 10,
-            'image_preprocess': 9,
-            'video_preprocess': 9,
-            'audio_preprocess': 9,
-            'file_embed_image': 8,
-            'file_embed_video': 8,
-            'file_embed_audio': 8,
+            'file_preprocessing': 1,
+            'image_preprocess': 1,
+            'video_preprocess': 1,
+            'audio_preprocess': 1,
+            'file_embed_image': 1,
+            'file_embed_video': 1,
+            'file_embed_audio': 1,
             
             # 中优先级：常规任务
-            'file_scan': 7,
-            'video_slice': 6,
-            'audio_segment': 6,
+            'file_scan': 3,
+            'video_slice': 4,
+            'audio_segment': 4,
             
             # 低优先级：辅助任务
-            'thumbnail_generate': 5,
-            'preview_generate': 4,
-            'search': 3,
-            'search_multimodal': 3,
-            'rank_results': 2,
-            'filter_results': 2,
+            'thumbnail_generate': 6,
+            'preview_generate': 7,
+            'search': 8,
+            'search_multimodal': 8,
+            'rank_results': 9,
+            'filter_results': 9,
             
             # 默认优先级
             'default': 5
         }
         
-        # 等待时间补偿参数
-        self.wait_compensation_interval = 300  # 5分钟（秒）
-        self.max_wait_compensation = 100  # 最大等待补偿值
+        # 类型优先级映射（根据设计文档）
+        self.type_priority_map = {
+            # 核心任务类型优先级
+            'file_preprocessing': 1,
+            'image_preprocess': 1,
+            'video_preprocess': 1,
+            'audio_preprocess': 1,
+            'file_embed_image': 1,
+            'file_embed_video': 1,
+            'file_embed_audio': 1,
+            
+            # 其他任务类型优先级
+            'file_scan': 5,
+            'video_slice': 3,
+            'audio_segment': 3,
+            'thumbnail_generate': 7,
+            'preview_generate': 8,
+            'search': 9,
+            'search_multimodal': 9,
+            'rank_results': 9,
+            'filter_results': 9,
+            
+            'default': 5
+        }
+        
+        # 等待时间补偿参数（根据设计文档）
+        self.wait_compensation_interval = 60  # 1分钟（秒）
+        self.max_wait_compensation = 999  # 最大等待补偿值
         self.wait_compensation_step = 1   # 每个间隔增加的补偿值
     
-    def calculate_priority(self, task: Task, wait_time_compensation: bool = True, 
-                          pipeline_continuity: bool = True) -> int:
+    def calculate_priority(self, task: Task, file_info: Dict = None, file_priority: int = 5) -> int:
         """
-        计算任务优先级
+        计算任务优先级（根据设计文档公式）
         
         Args:
             task: 任务对象
-            wait_time_compensation: 是否启用等待时间补偿
-            pipeline_continuity: 是否启用流水线连续性奖励
+            file_info: 文件信息字典
+            file_priority: 文件级优先级（1-10）
             
         Returns:
             计算后的优先级（数值越小优先级越高）
+        
+        公式：final_priority = base_priority * 1000 + file_priority * 100 + type_priority * 10 + wait_compensation
         """
         try:
-            # 基础优先级
+            # 基础优先级（0-9）
             base_priority = self.base_priority_map.get(task.task_type, self.base_priority_map['default'])
             
-            # 文件级优先级（如果存在）
-            file_priority = getattr(task, 'file_priority', 0) or 0
+            # 类型优先级（0-9）
+            type_priority = self.type_priority_map.get(task.task_type, self.type_priority_map['default'])
             
-            # 等待时间补偿
+            # 等待时间补偿（0-999）
             wait_compensation = 0
-            if wait_time_compensation and task.created_at:
+            if task.created_at:
                 if isinstance(task.created_at, datetime):
                     wait_time = (datetime.now() - task.created_at).total_seconds()
                 else:
                     wait_time = time.time() - task.created_at
                 
-                # 计算等待时间补偿（每5分钟增加1点，最多增加100点）
+                # 计算等待时间补偿（每1分钟增加1点，最多增加999点）
                 wait_intervals = int(wait_time / self.wait_compensation_interval)
                 wait_compensation = min(self.max_wait_compensation, 
                                       wait_intervals * self.wait_compensation_step)
             
-            # 流水线连续性奖励（如果属于同一文件的流水线任务）
-            continuity_bonus = 0
-            if pipeline_continuity and task.file_id:
-                continuity_bonus = self._calculate_continuity_bonus(task)
-            
-            # 计算最终优先级
-            # 使用公式：base_priority * 1000 + (文件优先级 * 100) + (等待补偿) + (连续性奖励)
+            # 计算最终优先级（根据设计文档公式）
             final_priority = (
-                base_priority * 1000 +
-                file_priority * 100 +
-                (999 - wait_compensation) +  # 补偿值越高优先级越高（数值越小）
-                continuity_bonus
+                base_priority * 1000 +      # 基础优先级权重：1000
+                file_priority * 100 +       # 文件级优先级权重：100
+                type_priority * 10 +        # 类型优先级权重：10
+                wait_compensation           # 等待时间补偿权重：1
             )
             
-            # 确保优先级不为负
-            final_priority = max(0, final_priority)
-            
             logger.debug(f"任务 {task.id} 优先级计算: 基础={base_priority}, "
-                        f"文件优先级={file_priority}, 等待补偿={wait_compensation}, "
-                        f"连续性奖励={continuity_bonus}, 最终={final_priority}")
+                        f"文件优先级={file_priority}, 类型优先级={type_priority}, "
+                        f"等待补偿={wait_compensation}, 最终={final_priority}")
             
             return final_priority
             
