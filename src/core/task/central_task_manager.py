@@ -46,7 +46,7 @@ class CentralTaskManager:
         self.task_queue = TaskQueue()
         self.task_executor = OptimizedTaskExecutor()
         self.priority_calculator = PriorityCalculator()
-        self.group_manager = TaskGroupManager()
+        self.group_manager = TaskGroupManager(self.task_config)
         self.resource_manager = OptimizedResourceManager(self.task_config)
         self.task_monitor = OptimizedTaskMonitor()
         self.pipeline_lock_manager = PipelineLockManager()

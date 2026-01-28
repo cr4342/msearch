@@ -26,7 +26,8 @@ from typing import Dict, List, Optional, Any, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 
-from .task_types import Task, TaskType, TaskStatus
+from .task import Task
+from .task_types import TaskType, TaskStatus
 
 
 logger = logging.getLogger(__name__)

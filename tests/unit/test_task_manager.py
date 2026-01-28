@@ -9,7 +9,8 @@ from unittest.mock import Mock, AsyncMock
 import sys
 sys.path.insert(0, '/data/project/msearch/src')
 
-from src.core.task.task_types import Task, TaskStatus, TaskType
+from src.core.task.task import Task
+from src.core.task.task_types import TaskStatus, TaskType
 from src.core.task.task_manager import TaskManager
 from src.core.task.task_scheduler import TaskScheduler
 from src.core.task.task_executor import OptimizedTaskExecutor
@@ -80,21 +81,45 @@ async def test_task_creation(task_manager):
 @pytest.mark.asyncio
 async def test_task_priority_calculation():
     """测试任务优先级计算"""
-    scheduler = TaskScheduler({})
+    from src.core.task.priority_calculator import PriorityCalculator
+    from src.core.task.task import Task
+    
+    calculator = PriorityCalculator()
+    
+    # 创建测试任务
+    task = Task(
+        task_type="image_preprocess",
+        task_data={"file_path": "/test/image.jpg"},
+        file_id="file_001",
+        file_path="/test/image.jpg",
+        priority=5
+    )
     
     # 测试基础优先级计算
-    priority = scheduler.calculate_priority(
-        task_type=TaskType.IMAGE_PREPROCESS,
-        file_priority=5
-    )
+    priority = calculator.calculate_priority(task, file_priority=5)
     
     # 验证优先级是数值
     assert isinstance(priority, int)
     assert priority > 0
     
     # 测试不同任务类型的优先级
-    priority_image = scheduler.calculate_priority(TaskType.IMAGE_PREPROCESS, 5)
-    priority_thumbnail = scheduler.calculate_priority(TaskType.THUMBNAIL_GENERATE, 5)
+    task_image = Task(
+        task_type="image_preprocess",
+        task_data={"file_path": "/test/image.jpg"},
+        file_id="file_001",
+        file_path="/test/image.jpg",
+        priority=5
+    )
+    task_thumbnail = Task(
+        task_type="thumbnail_generate",
+        task_data={"file_path": "/test/image.jpg"},
+        file_id="file_001",
+        file_path="/test/image.jpg",
+        priority=5
+    )
+    
+    priority_image = calculator.calculate_priority(task_image, file_priority=5)
+    priority_thumbnail = calculator.calculate_priority(task_thumbnail, file_priority=5)
     
     # 图像预处理应该比缩略图生成优先级高（数值更小）
     assert priority_image < priority_thumbnail
@@ -137,23 +162,21 @@ async def test_resource_manager():
     """测试资源管理器"""
     config = {
         'memory_warning_threshold': 85.0,
-        'memory_pause_threshold': 95.0
+        'memory_pause_threshold': 95.0,
+        'gpu_memory_warning_threshold': 85.0,
+        'gpu_memory_pause_threshold': 95.0
     }
     resource_manager = OptimizedResourceManager(config)
     
     try:
-        # 获取当前内存使用
-        memory_usage = resource_manager.get_memory_usage()
-        assert isinstance(memory_usage, dict)
-        assert 'percent' in memory_usage
-        
-        # 获取资源统计
-        stats = resource_manager.get_resource_usage()
-        assert "memory" in stats
+        # 获取当前资源使用
+        resource_usage = resource_manager.get_resource_usage()
+        assert isinstance(resource_usage, dict)
+        assert 'memory_percent' in resource_usage
         
         # 检查OOM状态
-        oom_state = resource_manager.check_oom_status()
-        assert oom_state in ["normal", "warning", "critical"]
+        oom_state = resource_manager.get_current_state()
+        assert oom_state in ["normal", "warning", "pause"]
         
     finally:
         resource_manager.cleanup()
@@ -168,8 +191,9 @@ async def test_task_scheduler_queue():
     try:
         # 创建测试任务
         task = Task(
-            id="test_task_001",
-            type=TaskType.IMAGE_PREPROCESS,
+            id="task_001",
+            task_type="image_preprocess",
+            task_data={"file_path": "/test/image.jpg"},
             file_id="file_001",
             file_path="/test/image.jpg",
             priority=100
@@ -205,18 +229,18 @@ async def test_task_executor():
         executor.register_handler("image_preprocess", mock_handler)
         
         # 创建测试任务
-        from src.core.task.task import Task as OldTask
-        task = OldTask(
+        task = Task(
             id="test_task_002",
             task_type="image_preprocess",
             task_data={"file_path": "/test/image.jpg"},
+            file_id="file_001",
+            file_path="/test/image.jpg",
             priority=100
         )
         
         # 执行任务
         result = executor.execute_task(task)
-        assert result is not None
-        assert result["status"] == "success"
+        assert result is True  # execute_task返回bool
         
     finally:
         executor.shutdown()

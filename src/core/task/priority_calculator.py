@@ -5,7 +5,7 @@
 
 import time
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict
 import logging
 
 from .task import Task

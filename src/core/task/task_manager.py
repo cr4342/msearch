@@ -51,7 +51,7 @@ class TaskManager:
             'gpu_memory_pause_threshold': 95.0
         })
         self.task_monitor = OptimizedTaskMonitor()
-        self.group_manager = TaskGroupManager()
+        self.group_manager = TaskGroupManager(self.task_config)
         self.priority_calculator = PriorityCalculator()
         
         # 并发管理器
