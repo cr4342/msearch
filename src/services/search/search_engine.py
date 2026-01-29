@@ -103,7 +103,7 @@ class SearchEngine:
             query_vector = await self.embedding_engine.embed_text(query)
             
             # 2. 向量搜索
-            search_results = self.vector_store.search_vectors(query_vector, k=k, modalities=modalities)
+            search_results = self.vector_store.search(query_vector, limit=k)
             
             # 3. 结果排序和过滤
             ranked_results = self._rank_results(search_results)
@@ -155,7 +155,7 @@ class SearchEngine:
             query_vector = await self.embedding_engine.embed_image(image_path)
             
             # 2. 向量搜索
-            search_results = self.vector_store.search_vectors(query_vector, k=k, modalities=modalities)
+            search_results = self.vector_store.search(query_vector, limit=k)
             
             # 3. 结果排序和过滤
             ranked_results = self._rank_results(search_results)
@@ -207,7 +207,7 @@ class SearchEngine:
             query_vector = await self.embedding_engine.embed_audio(audio_path)
             
             # 2. 向量搜索
-            search_results = self.vector_store.search_vectors(query_vector, k=k, modalities=modalities)
+            search_results = self.vector_store.search(query_vector, limit=k)
             
             # 3. 结果排序和过滤
             ranked_results = self._rank_results(search_results)
@@ -299,11 +299,23 @@ class SearchEngine:
                 except Exception as e:
                     logger.warning(f"获取缩略图路径失败: {e}")
             
+            # 从modality推断file_type
+            file_type = result.get('file_type')
+            if not file_type:
+                modality = result.get('modality', 'unknown')
+                file_type_map = {
+                    'image': 'image',
+                    'video': 'video',
+                    'audio': 'audio',
+                    'text': 'text'
+                }
+                file_type = file_type_map.get(modality, 'unknown')
+            
             formatted.append({
                 'file_id': result.get('file_id'),
                 'file_path': result.get('file_path'),
                 'file_name': result.get('file_name'),
-                'file_type': result.get('file_type'),
+                'file_type': file_type,
                 'modality': result.get('modality'),
                 'score': result.get('score', 0),
                 'thumbnail_path': thumbnail_path,

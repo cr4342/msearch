@@ -81,10 +81,10 @@ python scripts/setup_models.py check || {
 # 创建日志目录
 mkdir -p logs
 
-# 启动多进程主程序
-print_info "启动多进程主程序..."
+# 启动主程序
+print_info "启动主程序..."
 MAIN_PID=""
-python src/main_multiprocess.py > logs/main.log 2>&1 &
+python src/main.py > logs/main.log 2>&1 &
 MAIN_PID=$!
 
 # 等待主程序启动

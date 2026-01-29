@@ -215,6 +215,30 @@ class TaskGroupManager:
             logger.debug(f"Task {task.id} added to group {file_id}")
             return True
     
+    def add_task_to_group_sync(self, file_id: str, task: Task) -> bool:
+        """
+        同步版本：添加任务到任务组
+        
+        Args:
+            file_id: 文件ID
+            task: 要添加的任务
+        
+        Returns:
+            是否成功添加
+        """
+        if file_id not in self.task_groups:
+            # 自动创建任务组
+            self.task_groups[file_id] = TaskGroup(
+                file_id=file_id,
+                file_path=task.file_path
+            )
+        
+        group = self.task_groups[file_id]
+        group.add_task(task)
+        
+        logger.debug(f"Task {task.id} added to group {file_id} (sync)")
+        return True
+    
     async def get_group(self, file_id: str) -> Optional[TaskGroup]:
         """获取任务组"""
         async with self._lock:

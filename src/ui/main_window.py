@@ -21,7 +21,7 @@ from PySide6.QtGui import QIcon, QPixmap, QImage, QAction
 
 # 导入UI组件
 from src.ui.components.search_panel import SearchPanel
-from src.ui.components.result_panel import ResultPanel
+from src.ui.components.result_panel_updated import ResultPanel
 from src.ui.components.task_manager_panel import TaskManagerPanel
 
 try:
@@ -340,14 +340,45 @@ class MainWindow(QMainWindow):
         return toolbar
     
     def create_search_panel(self) -> QWidget:
-        """创建搜索面板"""
+        """创建左侧面板（搜索面板 + 过滤面板 + 统计面板）"""
+        # 创建左侧面板容器
+        left_panel = QWidget()
+        left_panel.setFixedWidth(380)
+        left_panel.setStyleSheet("""
+            QWidget {
+                background-color: #F2F3F5;
+                border-radius: 12px;
+            }
+        """)
+        
+        layout = QVBoxLayout(left_panel)
+        layout.setContentsMargins(20, 20, 20, 20)
+        layout.setSpacing(20)
+        
+        # 搜索面板
+        from src.ui.components.search_panel import SearchPanel
         self.search_panel = SearchPanel()
         
         # 连接搜索信号
-        self.search_panel.search_requested.connect(self.on_search_requested)
+        self.search_panel.search_triggered.connect(self._on_search_requested)
         self.search_panel.file_search_requested.connect(self.on_file_search_requested)
         
-        return self.search_panel
+        layout.addWidget(self.search_panel)
+        
+        # 过滤面板
+        from src.ui.components.filter_panel import FilterPanel
+        self.filter_panel = FilterPanel()
+        self.filter_panel.filter_changed.connect(self._on_filter_changed)
+        layout.addWidget(self.filter_panel)
+        
+        # 统计面板
+        from src.ui.components.stats_panel import StatsPanel
+        self.stats_panel = StatsPanel()
+        layout.addWidget(self.stats_panel)
+        
+        layout.addStretch()
+        
+        return left_panel
     
     def create_result_panel(self) -> QWidget:
         """创建结果面板"""
@@ -519,6 +550,13 @@ class MainWindow(QMainWindow):
             search_thread.start()
         except Exception as e:
             self.on_search_failed(str(e))
+    
+    def _on_filter_changed(self, filters: dict):
+        """过滤条件变化处理函数"""
+        self.update_status(f"应用过滤条件...")
+        # 这里应该重新执行搜索并应用过滤条件
+        # 暂时只显示消息
+        print(f"过滤条件: {filters}")
     
     def on_search_clicked(self):
         """兼容旧的搜索按钮点击事件"""

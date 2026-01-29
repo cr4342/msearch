@@ -7,7 +7,7 @@
 from typing import List, Dict, Any, Optional
 import logging
 
-from core.task.video_segment_manager import VideoSegmentManager, VideoSegmentConfig
+from src.core.task.video_segment_manager import VideoSegmentManager, VideoSegmentConfig
 
 logger = logging.getLogger(__name__)
 

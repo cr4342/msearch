@@ -10,10 +10,10 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # 导入独立的媒体处理器
-from services.media.image_preprocessor import ImagePreprocessor
-from services.media.video_preprocessor import VideoPreprocessor
-from services.media.audio_preprocessor import AudioPreprocessor
-from services.media.media_utils import MediaInfoHelper, calculate_file_hash, check_duplicate_file
+from src.services.media.image_preprocessor import ImagePreprocessor
+from src.services.media.video_preprocessor import VideoPreprocessor
+from src.services.media.audio_preprocessor import AudioPreprocessor
+from src.services.media.media_utils import MediaInfoHelper, calculate_file_hash, check_duplicate_file
 
 
 class MediaProcessor:

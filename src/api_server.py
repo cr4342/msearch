@@ -1,6 +1,6 @@
 """
-API服务器 - 多进程架构中的主进程服务
-提供RESTful API接口并与子进程协作
+API服务器 - 单进程架构
+提供RESTful API接口，使用线程池处理并发任务
 """
 
 import os
@@ -79,6 +79,24 @@ class TaskManager(ABC):
         pass
 
 
+class SearchEngine(ABC):
+    """搜索引擎接口"""
+    @abstractmethod
+    async def search(self, query: str, k: int = 10, modalities: Optional[List[str]] = None, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        pass
+
+
+class FileIndexer(ABC):
+    """文件索引器接口"""
+    @abstractmethod
+    def index_file(self, file_path: str, submit_task: bool = True) -> Optional[Dict[str, Any]]:
+        pass
+    
+    @abstractmethod
+    def index_directory(self, directory: str, recursive: bool = True) -> List[Dict[str, Any]]:
+        pass
+
+
 class APIServer:
     """API服务器 - 使用依赖注入，适配多进程架构"""
 
@@ -88,7 +106,9 @@ class APIServer:
         database_manager: DatabaseManager,
         vector_store: VectorStore,
         embedding_engine: EmbeddingEngine,
-        task_manager: TaskManager
+        task_manager: TaskManager,
+        search_engine: SearchEngine,
+        file_indexer: FileIndexer
     ):
         """
         初始化API服务器（使用依赖注入）
@@ -99,12 +119,16 @@ class APIServer:
             vector_store: 向量存储
             embedding_engine: 向量化引擎
             task_manager: 任务管理器
+            search_engine: 搜索引擎
+            file_indexer: 文件索引器
         """
         self.config = config
         self.database_manager = database_manager
         self.vector_store = vector_store
         self.embedding_engine = embedding_engine
         self.task_manager = task_manager
+        self.search_engine = search_engine
+        self.file_indexer = file_indexer
         
         # 创建FastAPI应用
         self.app = FastAPI(
@@ -147,6 +171,16 @@ class APIServer:
                 }
             }
         
+        # 添加启动事件
+        @self.app.on_event("startup")
+        async def startup_event():
+            """启动事件：执行初始文件扫描和索引"""
+            self.logger.info("API服务器启动事件：开始执行初始文件扫描和索引")
+            
+            # 异步执行初始扫描，避免阻塞启动
+            import asyncio
+            asyncio.create_task(self._perform_initial_scan())
+        
         # 初始化日志
         self._init_logging()
         
@@ -155,6 +189,124 @@ class APIServer:
         
         self.logger = logging.getLogger('api_server')
         self.logger.info("API服务器初始化完成（多进程架构）")
+    
+    async def _perform_initial_scan(self):
+        """执行初始文件扫描和索引"""
+        try:
+            import os
+            import fnmatch
+            
+            self.logger.info("开始执行初始文件扫描...")
+            
+            # 获取监视目录配置
+            file_monitor_config = self.config.get('file_monitor', {})
+            watch_directories = file_monitor_config.get('watch_directories', [])
+            
+            if not watch_directories:
+                self.logger.warning("未配置监视目录，跳过初始扫描")
+                return
+            
+            self.logger.info(f"监视目录: {watch_directories}")
+            
+            # 扫描所有监视目录
+            total_files = 0
+            indexed_files = 0
+            
+            for watch_dir in watch_directories:
+                if not os.path.exists(watch_dir):
+                    self.logger.warning(f"监视目录不存在: {watch_dir}")
+                    continue
+                
+                self.logger.info(f"扫描目录: {watch_dir}")
+                
+                # 扫描目录中的文件
+                
+                supported_extensions = file_monitor_config.get('supported_extensions', [
+                    '.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp',
+                    '.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv',
+                    '.mp3', '.wav', '.aac', '.flac', '.ogg', '.m4a'
+                ])
+                
+                for root, dirs, files in os.walk(watch_dir):
+                    # 跳过忽略的目录
+                    ignore_patterns = file_monitor_config.get('ignore_patterns', [])
+                    dirs[:] = [d for d in dirs if not any(fnmatch.fnmatch(d, pattern) for pattern in ignore_patterns)]
+                    
+                    for filename in files:
+                        file_path = os.path.join(root, filename)
+                        file_ext = os.path.splitext(filename)[1].lower()
+                        
+                        if file_ext in supported_extensions:
+                            total_files += 1
+                            
+                            try:
+                                # 索引文件
+                                self.logger.info(f"索引文件: {file_path}")
+                                result = self.file_indexer.index_file(file_path, submit_task=False)
+                                
+                                if result is not None:
+                                    indexed_files += 1
+                                    self.logger.info(f"✓ 索引成功: {file_path}")
+                                    
+                                    # 直接执行向量化
+                                    try:
+                                        self.logger.info(f"开始向量化: {file_path}")
+                                        
+                                        # 根据文件类型选择向量化方法
+                                        file_ext = os.path.splitext(filename)[1].lower()
+                                        
+                                        if file_ext in ['.jpg', '.jpeg', '.png', '.bmp', '.gif', '.webp']:
+                                            # 图像向量化
+                                            vector = await self.embedding_engine.embed_image(file_path)
+                                            modality = 'image'
+                                        elif file_ext in ['.mp4', '.avi', '.mov', '.mkv', '.wmv', '.flv']:
+                                            # 视频向量化
+                                            vector = await self.embedding_engine.embed_video_segment(file_path)
+                                            modality = 'video'
+                                        elif file_ext in ['.mp3', '.wav', '.aac', '.flac', '.ogg', '.m4a']:
+                                            # 音频向量化
+                                            vector = await self.embedding_engine.embed_audio(file_path)
+                                            modality = 'audio'
+                                        else:
+                                            # 未知类型，跳过
+                                            self.logger.warning(f"未知文件类型: {file_path}")
+                                            continue
+                                        
+                                        # 将向量存储到数据库
+                                        vector_data = {
+                                            'id': result.id,
+                                            'vector': vector,
+                                            'file_id': result.id,
+                                            'file_path': file_path,
+                                            'file_name': filename,
+                                            'modality': modality,
+                                            'metadata': result.to_dict(),
+                                            'segment_id': 'full',
+                                            'start_time': 0.0,
+                                            'end_time': 0.0,
+                                            'is_full_video': True,
+                                            'created_at': result.created_at
+                                        }
+                                        self.vector_store.add_vector(vector_data)
+                                        
+                                        self.logger.info(f"✓ 向量化成功: {file_path}")
+                                        
+                                    except Exception as embed_error:
+                                        self.logger.error(f"向量化失败 {file_path}: {embed_error}")
+                                        import traceback
+                                        traceback.print_exc()
+                                else:
+                                    self.logger.warning(f"✗ 索引失败: {file_path}")
+                                    
+                            except Exception as e:
+                                self.logger.error(f"索引文件失败 {file_path}: {e}")
+            
+            self.logger.info(f"初始扫描完成: 总文件数={total_files}, 索引文件数={indexed_files}")
+            
+        except Exception as e:
+            self.logger.error(f"初始扫描失败: {e}")
+            import traceback
+            traceback.print_exc()
 
     def _init_logging(self) -> None:
         """初始化日志"""
@@ -396,20 +548,17 @@ class APIServer:
                 raise HTTPException(status_code=500, detail=str(e))
 
         async def get_subprocess_status():
-            """获取子进程状态"""
-            # 在多进程架构中，通过IPC获取子进程状态
+            """获取线程池状态"""
+            # 在单进程架构中，获取线程池状态
             try:
-                from src.ipc.redis_ipc import MainProcessIPC
-                ipc_client = MainProcessIPC()
-                if ipc_client.connect():
-                    processes = ipc_client.get_all_processes()
-                    ipc_client.disconnect()
-                    return processes
+                if hasattr(self, 'thread_pool_manager') and self.thread_pool_manager:
+                    return self.thread_pool_manager.get_statistics()
                 else:
-                    return {}
+                    # 如果没有thread_pool_manager，返回空状态
+                    return {"status": "no_thread_pool_manager"}
             except Exception as e:
-                self.logger.error(f"获取子进程状态失败: {e}")
-                return {}
+                self.logger.error(f"获取线程池状态失败: {e}")
+                return {"error": str(e)}
 
         print("路由注册完成")
 
@@ -429,16 +578,22 @@ async def create_api_server(config_path: Optional[str] = None) -> APIServer:
     from src.core.database.database_manager import DatabaseManager as DatabaseManagerImpl
     from src.core.vector.vector_store import VectorStore as VectorStoreImpl
     from src.core.embedding.embedding_engine import EmbeddingEngine as EmbeddingEngineImpl
-    from src.core.task.task_manager import TaskManager as TaskManagerImpl
+    from src.core.task.central_task_manager import CentralTaskManager as TaskManagerImpl
+    from src.core.task.task_scheduler import TaskScheduler
+    from src.core.task.task_executor import OptimizedTaskExecutor
+    from src.core.task.task_monitor import OptimizedTaskMonitor
+    from src.core.task.group_manager import OptimizedGroupManager
+    from src.services.search.search_engine import SearchEngine as SearchEngineImpl
+    from src.services.file.file_indexer import FileIndexer as FileIndexerImpl
     
     # 创建配置管理器
     if config_path:
-        config = ConfigManagerImpl(config_file=config_path)
+        config = ConfigManagerImpl(config_path=config_path)
     else:
         config = ConfigManagerImpl()
     
     # 创建数据库管理器
-    db_path = config.get('database.sqlite.path', 'data/database/sqlite/msearch.db')
+    db_path = config.config.get('database', {}).get('metadata_db_path', 'data/database/sqlite/msearch.db')
     database_manager = DatabaseManagerImpl(db_path)
     
     # 创建向量存储
@@ -448,9 +603,41 @@ async def create_api_server(config_path: Optional[str] = None) -> APIServer:
     embedding_engine = EmbeddingEngineImpl(config.config)
     await embedding_engine.initialize()
     
+    # 获取设备配置
+    device = config.config.get('device', 'cpu')
+    
+    # 创建任务管理器的依赖组件
+    task_scheduler = TaskScheduler(config.config)
+    task_executor = OptimizedTaskExecutor()
+    task_monitor = OptimizedTaskMonitor()
+    task_group_manager = OptimizedGroupManager()
+    
     # 创建任务管理器
-    task_manager = TaskManagerImpl(config.config)
-    task_manager.initialize()
+    task_manager = TaskManagerImpl(
+        config=config.config,
+        task_scheduler=task_scheduler,
+        task_executor=task_executor,
+        task_monitor=task_monitor,
+        task_group_manager=task_group_manager,
+        device=device
+    )
+    task_manager.start()
+    
+    # 创建搜索引擎
+    search_engine = SearchEngineImpl(
+        embedding_engine=embedding_engine,
+        vector_store=vector_store
+    )
+    search_engine.initialize()
+    
+    # 创建文件索引器
+    file_indexer = FileIndexerImpl(
+        config=config.config,
+        task_manager=task_manager
+    )
+    # 将依赖传递给file_indexer
+    file_indexer.vector_store = vector_store
+    file_indexer.embedding_engine = embedding_engine
     
     # 创建API服务器实例
     api_server = APIServer(
@@ -458,7 +645,9 @@ async def create_api_server(config_path: Optional[str] = None) -> APIServer:
         database_manager=database_manager,
         vector_store=vector_store,
         embedding_engine=embedding_engine,
-        task_manager=task_manager
+        task_manager=task_manager,
+        search_engine=search_engine,
+        file_indexer=file_indexer
     )
     
     return api_server

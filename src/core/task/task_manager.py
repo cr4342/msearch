@@ -421,7 +421,9 @@ class TaskManager:
         Returns:
             任务列表
         """
-        return self.task_monitor.get_all_tasks(status=status, task_type=task_type)
+        tasks_dict = self.task_monitor.get_all_tasks(status=status, task_type=task_type)
+        # 将Task对象转换为字典列表
+        return [task.to_dict() for task in tasks_dict.values()]
     
     def get_statistics(self) -> Dict[str, Any]:
         """

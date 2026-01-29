@@ -48,7 +48,7 @@ from dataclasses import dataclass, field
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 
-from core.models.model_manager import (
+from src.core.models.model_manager import (
     ModelManager,
     ModelConfig,
     EmbeddingService,

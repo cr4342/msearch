@@ -68,29 +68,45 @@ class APIHandlers:
             start_time = time.time()
             
             # 使用搜索引擎进行文本搜索
-            results = await self.search_engine.search(
+            search_response = await self.search_engine.search(
                 query=request.query,
-                modality="text",
-                top_k=request.top_k,
-                threshold=request.threshold
+                k=request.top_k,
+                modalities=["image", "video", "audio", "text"]
             )
             
             search_time = time.time() - start_time
             
+            # 获取结果列表
+            results = search_response.get('results', [])
+            
             # 转换结果格式
             search_results = []
             for result in results:
+                # 从modality推断file_type
+                modality = result.get('modality', 'unknown')
+                file_type_map = {
+                    'image': 'image',
+                    'video': 'video',
+                    'audio': 'audio',
+                    'text': 'text'
+                }
+                file_type = file_type_map.get(modality, 'unknown')
+                
                 search_results.append(SearchResultItem(
-                    file_uuid=result.get('file_uuid', ''),
+                    file_uuid=result.get('file_id', ''),
                     file_path=result.get('file_path', ''),
                     file_name=result.get('file_name', ''),
-                    file_type=result.get('file_type', ''),
-                    score=result.get('score', 0.0),
+                    file_type=file_type,
+                    score=result.get('similarity', 0.0),
                     modality=ModalityType.TEXT,
                     thumbnail_path=result.get('thumbnail_path'),
                     preview_path=result.get('preview_path'),
                     metadata=result.get('metadata'),
-                    timestamp_info=result.get('timestamp_info')
+                    timestamp_info={
+                        'start_time': result.get('start_time', 0.0),
+                        'end_time': result.get('end_time', 0.0),
+                        'is_full_video': result.get('is_full_video', False)
+                    } if result.get('start_time') is not None else None
                 ))
             
             return SearchResponse(
@@ -111,17 +127,16 @@ class APIHandlers:
             start_time = time.time()
             
             # 使用搜索引擎进行图像搜索
-            results = await self.search_engine.search(
-                query=request.query_image,
-                modality="image",
-                top_k=request.top_k,
-                threshold=request.threshold
+            response = await self.search_engine.image_search(
+                image_path=request.query_image,
+                k=request.top_k
             )
             
             search_time = time.time() - start_time
             
             # 转换结果格式
             search_results = []
+            results = response.get('results', [])
             for result in results:
                 search_results.append(SearchResultItem(
                     file_uuid=result.get('file_uuid', ''),
@@ -156,11 +171,9 @@ class APIHandlers:
             # 使用搜索引擎进行视频搜索
             results = await self.search_engine.search(
                 query=request.query_video,
-                modality="video",
-                top_k=request.top_k,
-                threshold=request.threshold,
-                start_time=request.start_time,
-                end_time=request.end_time
+                modalities=["video"],
+                k=request.top_k,
+                filters={"start_time": request.start_time, "end_time": request.end_time}
             )
             
             search_time = time.time() - start_time
@@ -199,17 +212,16 @@ class APIHandlers:
             start_time = time.time()
             
             # 使用搜索引擎进行音频搜索
-            results = await self.search_engine.search(
-                query=request.query_audio,
-                modality="audio",
-                top_k=request.top_k,
-                threshold=request.threshold
+            response = await self.search_engine.audio_search(
+                audio_path=request.query_audio,
+                k=request.top_k
             )
             
             search_time = time.time() - start_time
             
             # 转换结果格式
             search_results = []
+            results = response.get('results', [])
             for result in results:
                 search_results.append(SearchResultItem(
                     file_uuid=result.get('file_uuid', ''),

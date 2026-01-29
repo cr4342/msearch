@@ -26,7 +26,7 @@ __all__ = [
     'PriorityCalculator',
     'TaskGroupManager',
     'OptimizedResourceManager',
-    'OptimizedTaskMonitor',
+    'OptimizedMonitor',
     'PipelineLockManager',
     'OptimizedConcurrencyManager',
     'ConcurrencyConfig',

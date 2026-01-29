@@ -67,23 +67,29 @@ async function performTextSearch() {
     showLoading(true);
     
     try {
-        const response = await fetch('/api/v1/search', {
+        // 根据搜索类型选择不同的 API 端点
+        let endpoint = '/api/v1/search/text';
+        let requestBody = {
+            query: query,
+            top_k: 20,
+            threshold: 0.0
+        };
+        
+        const response = await fetch(endpoint, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                query: query,
-                modality: state.searchType,
-                top_k: 20
-            })
+            body: JSON.stringify(requestBody)
         });
         
         const data = await response.json();
         
-        if (data.success) {
+        if (data.results && data.results.length > 0) {
             state.searchResults = data.results;
             renderSearchResults(data.results);
         } else {
-            showToast('搜索失败: ' + data.error, 'error');
+            state.searchResults = [];
+            renderSearchResults([]);
+            showToast('未找到相关结果', 'info');
         }
     } catch (error) {
         console.error('搜索失败:', error);

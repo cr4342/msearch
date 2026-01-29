@@ -1,30 +1,44 @@
 """
-msearch主程序入口 - 多进程架构主进程
-负责协调各个子进程并提供API服务
+msearch主程序入口 - 单进程架构
+使用线程池处理并发任务，提供API服务和文件监控
 """
-import time
-import signal
+
 import sys
-from pathlib import Path
+import signal
 import logging
+from pathlib import Path
+from typing import Dict, Any
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent
 sys.path.insert(0, str(project_root))
 
-from src.ipc.process_manager import ProcessManager, ProcessConfig, ProcessType, create_default_process_manager
-from src.ipc.redis_ipc import MainProcessIPC
-from src.services.file.file_monitor_process import file_monitor_process
-from src.services.embedding.embedding_worker_process import embedding_worker_process
-from src.services.task.task_worker_process import task_worker_process
+from src.core.config.config_manager import ConfigManager
+from src.core.task.thread_pool_manager import ThreadPoolManager
+from src.core.task.sqlite_task_queue import SQLiteTaskQueue
+from src.api_server import create_api_server
+from src.services.file.file_monitor import FileMonitor, create_file_monitor
 
-class MainProcessCoordinator:
-    """主进程协调器"""
+logger = logging.getLogger(__name__)
+
+
+class MSearchApplication:
+    """msearch主应用程序 - 单进程架构"""
     
-    def __init__(self, config: dict):
-        self.config = config
-        self.process_manager = create_default_process_manager()
-        self.ipc_client = MainProcessIPC()
+    def __init__(self, config_path: str = "config/config.yml"):
+        """
+        初始化应用程序
+        
+        Args:
+            config_path: 配置文件路径
+        """
+        self.config_path = config_path
+        self.config = None
+        self.config_manager = None
+        self.thread_pool_manager = None
+        self.task_queue = None
+        self.api_server = None
+        self.file_monitor = None
         self.shutdown_requested = False
         
         # 设置信号处理器
@@ -33,174 +47,154 @@ class MainProcessCoordinator:
     
     def _signal_handler(self, signum, frame):
         """信号处理器"""
-        print(f"\n接收到信号 {signum}，正在关闭主进程...")
+        logger.info(f"接收到信号 {signum}，正在关闭应用程序...")
         self.shutdown_requested = True
         self.shutdown()
         sys.exit(0)
     
-    def setup_processes(self):
-        """设置进程配置"""
-        # 文件监控进程配置
-        file_monitor_config = self.config.get("file_monitor", {
-            "watched_dirs": ["/data/project/msearch/testdata"],
-            "supported_extensions": [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv", ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"],
-            "recursive": True,
-            "scan_interval": 300
-        })
+    def initialize(self) -> bool:
+        """
+        初始化应用程序
         
-        self.process_manager.register_process_config(
-            "file_monitor",
-            ProcessConfig(
-                process_type=ProcessType.FILE_MONITOR,
-                target_func=file_monitor_process,
-                args=(file_monitor_config,),
-                num_instances=1,
-                auto_restart=True
+        Returns:
+            bool: 初始化是否成功
+        """
+        try:
+            # 1. 加载配置
+            logger.info("加载配置...")
+            self.config_manager = ConfigManager(self.config_path)
+            self.config = self.config_manager.config
+            logger.info("配置加载成功")
+            
+            # 2. 初始化线程池管理器
+            logger.info("初始化线程池管理器...")
+            thread_pools_config = self.config.get('thread_pools', {
+                'embedding': {'min_workers': 1, 'max_workers': 4, 'queue_size': 100, 'task_timeout': 300},
+                'io': {'min_workers': 4, 'max_workers': 8, 'queue_size': 200, 'task_timeout': 60},
+                'task': {'min_workers': 4, 'max_workers': 8, 'queue_size': 200, 'task_timeout': 120}
+            })
+            self.thread_pool_manager = ThreadPoolManager(thread_pools_config)
+            logger.info("线程池管理器初始化成功")
+            
+            # 3. 初始化任务队列
+            logger.info("初始化任务队列...")
+            task_queue_config = self.config.get('task_queue', {
+                'path': 'data/task_queue.db',
+                'max_size': 10000,
+                'auto_commit': True
+            })
+            self.task_queue = SQLiteTaskQueue(
+                db_path=task_queue_config['path'],
+                max_size=task_queue_config.get('max_size', 10000)
             )
-        )
-        
-        # 向量化工作进程配置
-        embedding_worker_config = self.config.get("embedding_worker", {
-            "device": "cpu",
-            "batch_size": 8,
-            "models": {
-                "chinese_clip_base": {
-                    "model_name": "OFA-Sys/chinese-clip-vit-base-patch16",
-                    "local_path": "data/models/chinese-clip-vit-base-patch16",
-                    "device": "cpu",
-                    "batch_size": 8
-                }
-            }
-        })
-        
-        num_embedding_workers = self.config.get("num_embedding_workers", 1)
-        self.process_manager.register_process_config(
-            "embedding_worker",
-            ProcessConfig(
-                process_type=ProcessType.EMBEDDING_WORKER,
-                target_func=embedding_worker_process,
-                args=(embedding_worker_config,),
-                num_instances=num_embedding_workers,
-                auto_restart=True
-            )
-        )
-        
-        # 任务工作进程配置
-        task_worker_config = self.config.get("task_worker", {})
-        num_task_workers = self.config.get("num_task_workers", 2)
-        
-        self.process_manager.register_process_config(
-            "task_worker",
-            ProcessConfig(
-                process_type=ProcessType.TASK_WORKER,
-                target_func=task_worker_process,
-                args=(task_worker_config,),
-                num_instances=num_task_workers,
-                auto_restart=True
-            )
-        )
-    
-    def start_ipc(self):
-        """启动IPC连接"""
-        if not self.ipc_client.connect():
-            print("无法连接到Redis，主进程退出")
+            logger.info("任务队列初始化成功")
+            
+            # 4. 初始化文件监视器
+            logger.info("初始化文件监视器...")
+            file_monitor_config = self.config.get('file_monitor', {
+                'watch_directories': ['/data/project/msearch/testdata'],
+                'debounce_interval': 500,
+                'batch_size': 100,
+                'enabled': True
+            })
+            self.file_monitor = create_file_monitor(file_monitor_config)
+            if self.file_monitor:
+                self.file_monitor.start_monitoring()
+                logger.info("文件监视器初始化成功")
+            else:
+                logger.warning("文件监视器初始化失败，将跳过文件监控")
+            
+            # 5. 初始化API服务器
+            logger.info("初始化API服务器...")
+            # 使用create_api_server工厂函数创建API服务器（async函数）
+            import asyncio
+            async def _create_server():
+                return await create_api_server("config/config.yml")
+            
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            self.api_server = loop.run_until_complete(_create_server())
+            logger.info("API服务器初始化成功")
+            
+            logger.info("应用程序初始化完成")
+            return True
+            
+        except Exception as e:
+            logger.error(f"应用程序初始化失败: {e}", exc_info=True)
             return False
-        
-        print("主进程IPC连接成功")
-        return True
     
-    def start_processes(self):
-        """启动所有子进程"""
-        print("正在启动子进程...")
-        self.process_manager.start_all_processes()
-        print("所有子进程已启动")
-    
-    def monitor_system(self):
-        """监控系统状态"""
-        while not self.shutdown_requested:
-            try:
-                # 获取所有进程状态
-                status = self.process_manager.get_all_process_status()
-                print(f"进程状态: {status}")
-                
-                # 获取所有注册的进程
-                processes = self.ipc_client.get_all_processes()
-                print(f"注册进程: {processes}")
-                
-                # 更新主进程心跳
-                self.ipc_client.update_heartbeat()
-                
-                # 等待一段时间
-                time.sleep(10)  # 每10秒检查一次
-                
-            except Exception as e:
-                print(f"监控系统时发生错误: {e}")
-                time.sleep(5)
-    
-    def run(self):
-        """运行主进程"""
-        print("msearch主进程启动（多进程架构）")
-        
-        # 启动IPC
-        if not self.start_ipc():
+    def start(self):
+        """启动应用程序"""
+        if not self.initialize():
+            logger.error("应用程序初始化失败，无法启动")
             return
         
-        # 设置并启动子进程
-        self.setup_processes()
-        self.start_processes()
+        logger.info("启动msearch应用程序...")
         
-        # 启动系统监控
-        self.monitor_system()
+        try:
+            # 启动API服务器（阻塞运行）
+            import uvicorn
+            host = self.config.get('api', {}).get('host', '0.0.0.0')
+            port = self.config.get('api', {}).get('port', 8000)
+            
+            logger.info(f"API服务器启动在 http://{host}:{port}")
+            uvicorn.run(
+                self.api_server.app,
+                host=host,
+                port=port,
+                log_level="info"
+            )
+            
+        except Exception as e:
+            logger.error(f"应用程序运行失败: {e}", exc_info=True)
+        finally:
+            self.shutdown()
     
     def shutdown(self):
-        """关闭主进程"""
-        print("正在关闭主进程...")
+        """关闭应用程序"""
+        if self.shutdown_requested:
+            return
         
-        # 停止所有子进程
-        self.process_manager.stop_all_processes()
+        logger.info("正在关闭应用程序...")
         
-        # 断开IPC连接
-        self.ipc_client.disconnect()
-        
-        print("主进程已关闭")
+        try:
+            # 停止文件监视器
+            if self.file_monitor:
+                self.file_monitor.stop_monitoring()
+                logger.info("文件监视器已停止")
+            
+            # 停止API服务器
+            if self.api_server:
+                # API服务器由uvicorn管理，会自动关闭
+                logger.info("API服务器已停止")
+            
+            # 停止线程池
+            if self.thread_pool_manager:
+                self.thread_pool_manager.shutdown(wait=True)
+                logger.info("线程池已停止")
+            
+            # 关闭任务队列
+            if self.task_queue:
+                self.task_queue.close()
+                logger.info("任务队列已关闭")
+            
+            logger.info("应用程序已关闭")
+            
+        except Exception as e:
+            logger.error(f"关闭应用程序时发生错误: {e}", exc_info=True)
+
 
 def main():
     """主函数"""
-    # 默认配置
-    config = {
-        "file_monitor": {
-            "watched_dirs": ["./testdata"],
-            "supported_extensions": [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp", 
-                                   ".mp4", ".avi", ".mov", ".mkv", ".wmv", ".flv",
-                                   ".mp3", ".wav", ".aac", ".flac", ".ogg", ".m4a"],
-            "recursive": True,
-            "scan_interval": 300
-        },
-        "embedding_worker": {
-            "device": "cpu",  # 根据系统配置调整
-            "batch_size": 8,
-            "models": {
-                "chinese_clip_base": {
-                    "model_name": "OFA-Sys/chinese-clip-vit-base-patch16",
-                    "local_path": "data/models/chinese-clip-vit-base-patch16",
-                    "device": "cpu",
-                    "batch_size": 8
-                }
-            }
-        },
-        "task_worker": {},
-        "num_embedding_workers": 1,
-        "num_task_workers": 2
-    }
+    # 配置日志
+    logging.basicConfig(
+        level=logging.INFO,
+        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
     
-    # 创建并运行主进程协调器
-    coordinator = MainProcessCoordinator(config)
-    
-    try:
-        coordinator.run()
-    except KeyboardInterrupt:
-        print("\n主进程被中断")
-        coordinator.shutdown()
+    # 创建并启动应用程序
+    app = MSearchApplication()
+    app.start()
 
 
 if __name__ == "__main__":

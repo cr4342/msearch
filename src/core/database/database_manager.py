@@ -697,6 +697,62 @@ class DatabaseManager:
             logger.error(f"清理无引用文件失败: {e}")
             return 0
     
+    def update_file_hash(self, file_id: str, file_hash: str) -> bool:
+        """
+        更新文件哈希
+        
+        Args:
+            file_id: 文件ID
+            file_hash: 新的文件哈希
+        
+        Returns:
+            是否成功
+        """
+        try:
+            cursor = self.connection.cursor()
+            now = datetime.now().timestamp()
+            
+            cursor.execute('''
+                UPDATE file_metadata 
+                SET file_hash = ?, updated_at = ?
+                WHERE id = ?
+            ''', (file_hash, now, file_id))
+            
+            self.connection.commit()
+            logger.debug(f"文件哈希更新成功: {file_id}")
+            return True
+        except Exception as e:
+            logger.error(f"更新文件哈希失败: {e}")
+            return False
+    
+    def update_file_path(self, file_id: str, file_path: str) -> bool:
+        """
+        更新文件路径
+        
+        Args:
+            file_id: 文件ID
+            file_path: 新的文件路径
+        
+        Returns:
+            是否成功
+        """
+        try:
+            cursor = self.connection.cursor()
+            now = datetime.now().timestamp()
+            
+            cursor.execute('''
+                UPDATE file_metadata 
+                SET file_path = ?, updated_at = ?
+                WHERE id = ?
+            ''', (file_path, now, file_id))
+            
+            self.connection.commit()
+            logger.debug(f"文件路径更新成功: {file_id} -> {file_path}")
+            return True
+        except Exception as e:
+            logger.error(f"更新文件路径失败: {e}")
+            return False
+    
     def _row_to_dict(self, cursor: sqlite3.Cursor, row: tuple) -> Dict[str, Any]:
         """
         将查询结果行转换为字典

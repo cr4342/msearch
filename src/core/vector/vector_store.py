@@ -39,10 +39,12 @@ class VectorStore:
         self.collection_name = config.get('collection_name', 'unified_vectors')
         self.index_type = config.get('index_type', 'ivf_pq')
         self.num_partitions = config.get('num_partitions', 128)
-        self.vector_dimension = config.get('vector_dimension', 512)
+        # 向量维度不再固定为512，而是从配置或模型获取
+        self.vector_dimension = config.get('vector_dimension', None)  # None表示使用模型默认维度
         
         self.db: Optional[lancedb.DBConnection] = None
         self.table: Optional[lancedb.table.Table] = None
+        self._actual_dimension = None  # 实际向量维度（从第一次插入时推断）
         
         # 记录初始化信息
         logger.info(f"初始化向量存储: data_dir={self.data_dir}, collection_name={self.collection_name}")
@@ -72,30 +74,51 @@ class VectorStore:
             if self.collection_name in existing_tables:
                 self.table = self.db.open_table(self.collection_name)
                 logger.info(f"打开现有向量表: {self.collection_name}")
+                # 从现有表推断向量维度
+                if self._actual_dimension is None:
+                    try:
+                        sample = self.table.to_pandas(limit=1)
+                        if len(sample) > 0 and 'vector' in sample.columns:
+                            first_vector = sample['vector'].iloc[0]
+                            if isinstance(first_vector, (list, np.ndarray)):
+                                self._actual_dimension = len(first_vector)
+                                logger.info(f"从现有表推断向量维度: {self._actual_dimension}")
+                    except Exception as e:
+                        logger.warning(f"无法从现有表推断向量维度: {e}")
             else:
                 logger.info(f"创建新向量表: {self.collection_name}")
-                # 创建表，使用示例向量确保正确的表结构
-                self.table = self.db.create_table(
-                    self.collection_name,
-                    data=[
-                        {
-                            "id": "temp_init_vector",
-                            "vector": np.zeros(self.vector_dimension, dtype=np.float32),
-                            "modality": "temp",
-                            "file_id": "",
-                            "file_path": "",
-                            "file_type": "",
-                            "file_name": "",
-                            "segment_id": "",
-                            "start_time": 0.0,
-                            "end_time": 0.0,
-                            "is_full_video": False,
-                            "metadata": "",
-                            "created_at": 0.0
-                        }
-                    ]
-                )
-                logger.info(f"新向量表创建成功: {self.collection_name}")
+                # 如果配置了向量维度，使用配置的维度
+                # 否则延迟创建表，直到第一次插入向量时根据实际维度创建
+                if self.vector_dimension is not None:
+                    # 创建表，使用示例向量确保正确的表结构
+                    self.table = self.db.create_table(
+                        self.collection_name,
+                        data=[
+                            {
+                                "id": "temp_init_vector",
+                                "vector": np.zeros(self.vector_dimension, dtype=np.float32),
+                                "modality": "temp",
+                                "file_id": "",
+                                "file_path": "",
+                                "file_type": "",
+                                "file_name": "",
+                                "segment_id": "",
+                                "start_time": 0.0,
+                                "end_time": 0.0,
+                                "is_full_video": False,
+                                "metadata": "",
+                                "created_at": 0.0
+                            }
+                        ]
+                    )
+                    self._actual_dimension = self.vector_dimension
+                    logger.info(f"新向量表创建成功: {self.collection_name}, 维度: {self.vector_dimension}")
+                else:
+                    # 延迟创建表
+                    self.table = None
+                    logger.info(f"向量表将延迟创建，直到第一次插入向量时确定维度")
+                    logger.info(f"向量存储初始化成功: collection_name={self.collection_name} (延迟创建)")
+                    return True
                 
                 # 临时初始化向量将在后续操作中被忽略
                 logger.info("新向量表创建成功，临时初始化向量将在后续操作中被忽略")
@@ -141,6 +164,42 @@ class VectorStore:
             vectors: 向量数据列表
         """
         try:
+            # 延迟创建表的情况
+            if self.table is None:
+                # 从第一个向量推断维度
+                if vectors and 'vector' in vectors[0]:
+                    first_vector = vectors[0]['vector']
+                    if isinstance(first_vector, (list, np.ndarray)):
+                        self._actual_dimension = len(first_vector)
+                        logger.info(f"从第一个向量推断维度: {self._actual_dimension}")
+                        
+                        # 创建表
+                        self.table = self.db.create_table(
+                            self.collection_name,
+                            data=[
+                                {
+                                    "id": "temp_init_vector",
+                                    "vector": np.zeros(self._actual_dimension, dtype=np.float32),
+                                    "modality": "temp",
+                                    "file_id": "",
+                                    "file_path": "",
+                                    "file_type": "",
+                                    "file_name": "",
+                                    "segment_id": "",
+                                    "start_time": 0.0,
+                                    "end_time": 0.0,
+                                    "is_full_video": False,
+                                    "metadata": "",
+                                    "created_at": 0.0
+                                }
+                            ]
+                        )
+                        logger.info(f"延迟创建向量表成功: {self.collection_name}, 维度: {self._actual_dimension}")
+                    else:
+                        raise ValueError("向量格式无效，必须是列表或numpy数组")
+                else:
+                    raise ValueError("没有向量数据，无法推断维度")
+            
             # 检查是否存在临时初始化向量
             # 如果存在，先获取所有向量，过滤掉临时向量
             all_vectors = self.table.to_pandas()
@@ -149,6 +208,13 @@ class VectorStore:
             # 准备数据
             data = []
             for vec in vectors:
+                # 验证向量维度
+                vector_array = np.array(vec['vector'], dtype=np.float32)
+                if self._actual_dimension is not None and len(vector_array) != self._actual_dimension:
+                    raise ValueError(
+                        f"向量维度不匹配: 期望 {self._actual_dimension}, 实际 {len(vector_array)}"
+                    )
+                
                 # 处理metadata字段
                 metadata = vec.get('metadata', {})
                 if isinstance(metadata, dict):
@@ -165,7 +231,7 @@ class VectorStore:
                 
                 data.append({
                     "id": vec.get('id', str(uuid.uuid4())),
-                    "vector": np.array(vec['vector'], dtype=np.float32),
+                    "vector": vector_array,
                     "modality": vec.get('modality', 'unknown'),
                     "file_id": vec.get('file_id', ''),
                     "file_path": file_path,
@@ -528,13 +594,10 @@ class VectorStore:
             # 所以 cosine_similarity = 1 - cosine_distance
             if '_distance' in row:
                 cosine_distance = float(row['_distance'])
-                # 将余弦距离转换为余弦相似度
+                # 将余弦距离转换为相似度
                 # 余弦距离范围是[0, 2]，其中0表示完全相同，2表示完全相反
-                # 余弦相似度范围是[-1, 1]，其中1表示完全相同，-1表示完全相反
-                # 我们将其归一化到[0, 1]范围
-                cosine_similarity = 1.0 - cosine_distance
-                # 归一化到[0, 1]范围 (将[-1, 1]映射到[0, 1])
-                similarity = (cosine_similarity + 1.0) / 2.0
+                # 直接使用 1.0 - distance 转换为相似度
+                similarity = 1.0 - cosine_distance
                 # 确保相似度在[0, 1]范围内
                 similarity = max(0.0, min(1.0, similarity))
             else:

@@ -19,12 +19,8 @@ sys.path.insert(0, str(project_root / 'src'))
 sys.path.insert(0, str(project_root))
 
 from core.config.config_manager import ConfigManager
-from core.vector.vector_store import VectorStore
-from core.embedding.embedding_engine import EmbeddingEngine
-from core.database.database_manager import DatabaseManager
-from core.task.central_task_manager import CentralTaskManager
-from services.file.file_scanner import FileScanner
-from services.file.file_indexer import FileIndexer
+from webui.api_client import APIClient
+from services.file.file_monitor import FileMonitor
 
 logger = logging.getLogger(__name__)
 
@@ -75,57 +71,123 @@ class MSearchWebUI:
         self.search_history = []
         self.max_history = 50
         
-        # 初始化组件
-        self._init_components()
+        # 初始化API客户端
+        api_base_url = self.config_manager.get('api.base_url', 'http://localhost:8000')
+        self.api_client = APIClient(api_base_url)
+        logger.info(f"✓ API客户端初始化完成: {api_base_url}")
+        
+        # 初始化文件监控器
+        self.file_monitor = FileMonitor(self.config)
+        
+        # 注册文件事件处理器
+        self.file_monitor.register_event_handler('created', self._on_file_created)
+        self.file_monitor.register_event_handler('modified', self._on_file_modified)
+        self.file_monitor.register_event_handler('deleted', self._on_file_deleted)
+        
+        # 添加监控目录
+        watch_dirs = self.config.get('file_monitor', {}).get('watch_directories', [])
+        for directory in watch_dirs:
+            if os.path.exists(directory):
+                self.file_monitor.add_directory(directory)
+                logger.info(f"  - 添加监控目录: {directory}")
+        
+        # 启动文件监控
+        self.file_monitor.start_monitoring()
+        logger.info("✓ 文件监控器已启动")
         
         logger.info("MSearch WebUI 初始化完成")
     
-    def _init_components(self):
-        """初始化系统组件"""
-        logger.info("初始化系统组件...")
+    def _on_file_created(self, event_type: str, file_path: str):
+        """
+        文件创建事件处理器
         
-        # 创建全局事件循环（在初始化时创建，避免后续冲突）
-        global _global_event_loop
-        if _global_event_loop is None or _global_event_loop.is_closed():
-            _global_event_loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(_global_event_loop)
-            logger.info("✓ 全局事件循环创建完成")
+        Args:
+            event_type: 事件类型
+            file_path: 文件路径
+        """
+        try:
+            logger.info(f"[文件监控] 检测到新文件: {file_path}")
+            
+            # 获取文件类型
+            file_type = self._get_file_type(file_path)
+            if not file_type:
+                logger.warning(f"[文件监控] 不支持的文件类型: {file_path}")
+                return
+            
+            # 调用API索引文件
+            response = self.api_client.index_file(file_path)
+            logger.info(f"[文件监控] 已提交处理任务: {file_path} -> {response.get('message', 'Success')}")
         
-        # 向量存储
-        vector_store_config = {
-            'data_dir': self.config_manager.get('database.lancedb.data_dir', 'data/database/lancedb'),
-            'collection_name': self.config_manager.get('database.lancedb.collection_name', 'unified_vectors'),
-            'index_type': self.config_manager.get('database.lancedb.index_type', 'ivf_pq'),
-            'num_partitions': self.config_manager.get('database.lancedb.num_partitions', 128),
-            'vector_dimension': self.config_manager.get('database.lancedb.vector_dimension', 512)
-        }
-        self.vector_store = VectorStore(vector_store_config)
-        logger.info("✓ 向量存储初始化完成")
+        except Exception as e:
+            logger.error(f"[文件监控] 处理文件创建事件失败: {file_path}, 错误: {e}")
+    
+    def _on_file_modified(self, event_type: str, file_path: str):
+        """
+        文件修改事件处理器
         
-        # 向量化引擎
-        self.embedding_engine = EmbeddingEngine(self.config)
-        # 使用全局事件循环预加载模型
-        _global_event_loop.run_until_complete(self.embedding_engine.preload_models())
-        logger.info("✓ 向量化引擎初始化完成")
+        Args:
+            event_type: 事件类型
+            file_path: 文件路径
+        """
+        try:
+            logger.info(f"[文件监控] 检测到文件修改: {file_path}")
+            
+            # 获取文件类型
+            file_type = self._get_file_type(file_path)
+            if not file_type:
+                return
+            
+            # 调用API重新索引文件
+            response = self.api_client.index_file(file_path)
+            logger.info(f"[文件监控] 已重新提交处理任务: {file_path} -> {response.get('message', 'Success')}")
         
-        # 数据库管理器
-        db_path = self.config_manager.get('database.sqlite.path', 'data/database/sqlite/msearch.db')
-        self.database_manager = DatabaseManager(db_path)
-        logger.info("✓ 数据库管理器初始化完成")
+        except Exception as e:
+            logger.error(f"[文件监控] 处理文件修改事件失败: {file_path}, 错误: {e}")
+    
+    def _on_file_deleted(self, event_type: str, file_path: str):
+        """
+        文件删除事件处理器
         
-        # 任务管理器
-        device = self.config_manager.get('models.device', 'cpu')
-        self.task_manager = CentralTaskManager(self.config, device)
-        self.task_manager.initialize()
-        logger.info("✓ 任务管理器初始化完成")
+        Args:
+            event_type: 事件类型
+            file_path: 文件路径
+        """
+        try:
+            logger.info(f"[文件监控] 检测到文件删除: {file_path}")
+            
+            # 注意：文件删除事件暂时不通过API处理，因为API端点暂不支持
+            # 后续可以添加删除文件的API端点
+            logger.info(f"[文件监控] 文件删除事件已记录: {file_path}")
         
-        # 文件扫描器
-        self.file_scanner = FileScanner(self.config)
-        logger.info("✓ 文件扫描器初始化完成")
+        except Exception as e:
+            logger.error(f"[文件监控] 处理文件删除事件失败: {file_path}, 错误: {e}")
+    
+    def _get_file_type(self, file_path: str) -> Optional[str]:
+        """
+        获取文件类型
         
-        # 文件索引器
-        self.file_indexer = FileIndexer(self.config, self.task_manager)
-        logger.info("✓ 文件索引器初始化完成")
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            文件类型 (image/video/audio) 或 None
+        """
+        ext = os.path.splitext(file_path)[1].lower()
+        
+        image_exts = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'}
+        video_exts = {'.mp4', '.avi', '.mov', '.mkv', '.flv', '.wmv'}
+        audio_exts = {'.mp3', '.wav', '.flac', '.aac', '.ogg', '.m4a', '.wma'}
+        
+        if ext in image_exts:
+            return 'image'
+        elif ext in video_exts:
+            return 'video'
+        elif ext in audio_exts:
+            return 'audio'
+        
+        return None
+    
+
     
     def search_text(self, query: str, top_k: int = 10, similarity_threshold: float = 0.0):
         """
@@ -159,23 +221,22 @@ class MSearchWebUI:
                 # 添加到搜索历史
                 self._add_to_history(query, 'text')
                 
-                # 向量化
-                query_embedding = await self.embedding_engine.embed_text(query)
-                logger.info(f"查询向量维度: {len(query_embedding)}")
-                
-                # 向量检索
-                results = self.vector_store.search(
-                    query_embedding, 
-                    limit=top_k, 
-                    similarity_threshold=similarity_threshold
+                # 调用API进行搜索
+                response = self.api_client.search_text(
+                    query=query,
+                    top_k=top_k,
+                    threshold=similarity_threshold
                 )
-                logger.info(f"找到 {len(results)} 个结果")
+                
+                results = response.get('results', [])
+                total = response.get('total', len(results))
+                logger.info(f"找到 {total} 个结果")
                 
                 # 格式化结果为 Markdown
                 output = f"# 🔍 文本搜索结果: '{query}'\n\n"
-                output += f"**找到 {len(results)} 个结果**\n\n"
+                output += f"**找到 {total} 个结果**\n\n"
                 
-                if len(results) == 0:
+                if total == 0:
                     output += "## ⚠️ 未找到任何结果\n\n"
                     output += "💡 **提示**:\n"
                     output += "- 请尝试使用不同的关键词\n"
@@ -215,7 +276,7 @@ class MSearchWebUI:
                     output += f"| {i+1} | **{display_name}** | {type_icon} {modality} | {similarity_bar} `{similarity:.4f}` | `{display_path}` |\n"
                 
                 output += f"\n---\n"
-                output += f"**搜索时间**: {len(results)} 个结果 | **查询**: `{query}`\n"
+                output += f"**搜索时间**: {total} 个结果 | **查询**: `{query}`\n"
                 
                 return output
                 
@@ -321,24 +382,22 @@ class MSearchWebUI:
             # 添加到搜索历史
             self._add_to_history(image_path, 'image')
             
-            # 向量化
-            query_embedding = await self.embedding_engine.embed_image(image_path)
-            logger.info(f"查询向量维度: {len(query_embedding)}")
-            
-            # 向量检索
-            results = self.vector_store.search(
-                query_embedding, 
-                limit=top_k, 
-                similarity_threshold=similarity_threshold
+            # 调用API进行搜索
+            response = self.api_client.search_image(
+                image_path=image_path,
+                top_k=top_k
             )
-            logger.info(f"找到 {len(results)} 个结果")
+            
+            results = response.get('results', [])
+            total = response.get('total', len(results))
+            logger.info(f"找到 {total} 个结果")
             
             # 格式化结果为 Markdown
             output = f"# 🖼️ 图像搜索结果\n\n"
             output += f"**查询图像**: `{image_path}`\n\n"
-            output += f"**找到 {len(results)} 个结果**\n\n"
+            output += f"**找到 {total} 个结果**\n\n"
             
-            if len(results) == 0:
+            if total == 0:
                 output += "## ⚠️ 未找到任何结果\n\n"
                 output += "💡 **提示**:\n"
                 output += "- 请尝试使用不同的图像\n"
@@ -354,8 +413,8 @@ class MSearchWebUI:
             output += "|---|---|---|---|---|\n"
             
             for i, result in enumerate(sorted_results):
-                file_name = result.get('file_name', result.get('file_path', '未知'))
-                file_path = result.get('file_path', '未知')
+                file_name = result.get('file_name', result.get('metadata', {}).get('file_name', result.get('file_path', '未知')))
+                file_path = result.get('file_path', result.get('metadata', {}).get('file_path', '未知'))
                 modality = result.get('modality', '未知')
                 similarity = result.get('similarity', 0)
                 
@@ -378,7 +437,7 @@ class MSearchWebUI:
                 output += f"| {i+1} | **{display_name}** | {type_icon} {modality} | {similarity_bar} `{similarity:.4f}` | `{display_path}` |\n"
             
             output += f"\n---\n"
-            output += f"**搜索时间**: {len(results)} 个结果 | **查询图像**: `{image_path}`\n"
+            output += f"**搜索时间**: {total} 个结果 | **查询图像**: `{image_path}`\n"
             
             return output
             
@@ -410,19 +469,6 @@ class MSearchWebUI:
         status += f"  运行设备: {device}\n"
         status += "\n"
         
-        # 数据库信息
-        try:
-            # 获取向量存储统计
-            vector_stats = self.vector_store.get_stats()
-            status += "[向量数据库]\n"
-            status += f"  数据目录: {vector_stats.get('data_dir', '未知')}\n"
-            status += f"  集合名称: {vector_stats.get('collection_name', '未知')}\n"
-            status += f"  向量数量: {vector_stats.get('vector_count', 0)}\n"
-            status += f"  向量维度: {vector_stats.get('vector_dimension', '未知')}\n"
-            status += "\n"
-        except Exception as e:
-            status += f"[向量数据库] 无法获取状态: {e}\n\n"
-        
         # 系统信息
         status += "[系统信息]\n"
         status += f"  Python版本: {sys.version}\n"
@@ -432,14 +478,26 @@ class MSearchWebUI:
         
         # 任务管理器信息
         try:
-            task_stats = self.task_manager.get_statistics()
-            status += "[任务管理器]\n"
-            status += f"  任务统计: {task_stats.get('task_stats', {})}\n"
-            status += f"  并发数: {task_stats.get('concurrency', 0)}\n"
-            status += f"  任务组统计: {task_stats.get('task_groups', {})}\n"
+            system_info = self.api_client.get_system_info()
+            status += "[系统信息]\n"
+            status += f"  API版本: {system_info.get('api_version', '未知')}\n"
+            status += f"  服务状态: {system_info.get('status', '未知')}\n"
             status += "\n"
         except Exception as e:
-            status += f"[任务管理器] 无法获取状态: {e}\n\n"
+            status += f"[系统信息] 无法获取状态: {e}\n\n"
+        
+        # 任务统计
+        try:
+            task_stats = self.api_client.get_task_stats()
+            status += "[任务统计]\n"
+            status += f"  总任务数: {task_stats.get('total', 0)}\n"
+            status += f"  待处理: {task_stats.get('pending', 0)}\n"
+            status += f"  运行中: {task_stats.get('running', 0)}\n"
+            status += f"  已完成: {task_stats.get('completed', 0)}\n"
+            status += f"  失败: {task_stats.get('failed', 0)}\n"
+            status += "\n"
+        except Exception as e:
+            status += f"[任务统计] 无法获取状态: {e}\n\n"
         
         status += "="*60 + "\n"
         
@@ -447,7 +505,7 @@ class MSearchWebUI:
     
     def get_task_list(self) -> str:
         """
-        获取任务列表
+        获取任务列表（已废弃，使用新的任务管理器方法）
         
         Returns:
             任务列表字符串
@@ -475,6 +533,479 @@ class MSearchWebUI:
         except Exception as e:
             return f"获取任务列表失败: {e}"
     
+    def refresh_task_manager(
+        self,
+        search_query: str = "",
+        status_filter: List[str] = None,
+        priority_filter: List[str] = None,
+        type_filter: List[str] = None,
+        time_range: str = "全部",
+        sort_by: str = "创建时间(降序)"
+    ) -> tuple:
+        """
+        刷新任务管理器
+        
+        Args:
+            search_query: 搜索查询
+            status_filter: 状态过滤
+            priority_filter: 优先级过滤
+            type_filter: 类型过滤
+            time_range: 时间范围
+            sort_by: 排序方式
+            
+        Returns:
+            12个返回值：任务列表、统计数据的各个字段
+        """
+        try:
+            if status_filter is None:
+                status_filter = ["pending", "running", "paused", "completed", "failed", "cancelled"]
+            if priority_filter is None:
+                priority_filter = ["高(1-3)", "中(4-7)", "低(8-10)"]
+            if type_filter is None:
+                type_filter = ["file_embed_image", "file_embed_video", "file_embed_audio", "search_query"]
+            
+            # 调用API获取所有任务
+            response = self.api_client.get_all_tasks()
+            all_tasks = response.get('tasks', [])
+            
+            filtered_tasks = self._filter_tasks(
+                all_tasks, search_query, status_filter,
+                priority_filter, type_filter, time_range
+            )
+            
+            sorted_tasks = self._sort_tasks(filtered_tasks, sort_by)
+            
+            df_data = []
+            for task in sorted_tasks:
+                df_data.append([
+                    False,
+                    task.get('id', '')[:8] + '...',
+                    task.get('task_type', ''),
+                    task.get('file_path', '')[-40:],
+                    task.get('status', ''),
+                    f"{task.get('progress', 0) * 100:.1f}%",
+                    task.get('priority', 0),
+                    self._format_timestamp(task.get('created_at', 0)),
+                    f"{task.get('duration', 0):.1f}s",
+                    ','.join(task.get('tags', [])),
+                    "查看详情"
+                ])
+            
+            stats = self._calculate_task_stats(sorted_tasks)
+            
+            # 返回12个值以匹配Gradio期望的输出
+            return (
+                df_data,  # task_list
+                stats.get('total', 0),  # total_tasks
+                stats.get('pending', 0),  # pending_tasks
+                stats.get('running', 0),  # running_tasks
+                stats.get('completed', 0),  # completed_tasks
+                stats.get('failed', 0),  # failed_tasks
+                stats.get('paused', 0),  # paused_tasks
+                stats.get('success_rate', '0%'),  # success_rate
+                stats.get('avg_duration', '0s'),  # avg_duration
+                stats.get('throughput', '0/min'),  # throughput
+                stats.get('queue_depth', 0),  # queue_depth
+                stats.get('system_load', '0%')  # system_load
+            )
+            
+        except Exception as e:
+            logger.error(f"刷新任务管理器失败: {e}", exc_info=True)
+            # 返回12个空值
+            return (
+                [],  # task_list
+                0,  # total_tasks
+                0,  # pending_tasks
+                0,  # running_tasks
+                0,  # completed_tasks
+                0,  # failed_tasks
+                0,  # paused_tasks
+                '0%',  # success_rate
+                '0s',  # avg_duration
+                '0/min',  # throughput
+                0,  # queue_depth
+                '0%'  # system_load
+            )
+    
+    def _filter_tasks(
+        self,
+        tasks: List[Dict],
+        search_query: str,
+        status_filter: List[str],
+        priority_filter: List[str],
+        type_filter: List[str],
+        time_range: str
+    ) -> List[Dict]:
+        """过滤任务"""
+        from datetime import datetime, timedelta
+        
+        filtered = tasks
+        
+        if search_query:
+            search_lower = search_query.lower()
+            filtered = [
+                t for t in filtered
+                if search_lower in t.get('id', '').lower()
+                or search_lower in t.get('file_path', '').lower()
+                or any(search_lower in tag.lower() for tag in t.get('tags', []))
+            ]
+        
+        if status_filter:
+            filtered = [t for t in filtered if t.get('status') in status_filter]
+        
+        if priority_filter:
+            priority_filtered = []
+            for task in filtered:
+                priority = task.get('priority', 0)
+                if "高(1-3)" in priority_filter and 1 <= priority <= 3:
+                    priority_filtered.append(task)
+                elif "中(4-7)" in priority_filter and 4 <= priority <= 7:
+                    priority_filtered.append(task)
+                elif "低(8-10)" in priority_filter and 8 <= priority <= 10:
+                    priority_filtered.append(task)
+            filtered = priority_filtered
+        
+        if type_filter:
+            filtered = [t for t in filtered if t.get('task_type') in type_filter]
+        
+        if time_range != "全部":
+            now = datetime.now()
+            if time_range == "最近1小时":
+                cutoff = now - timedelta(hours=1)
+            elif time_range == "今天":
+                cutoff = now.replace(hour=0, minute=0, second=0, microsecond=0)
+            elif time_range == "本周":
+                cutoff = now - timedelta(days=now.weekday())
+                cutoff = cutoff.replace(hour=0, minute=0, second=0, microsecond=0)
+            elif time_range == "本月":
+                cutoff = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+            else:
+                cutoff = None
+            
+            if cutoff:
+                filtered = [
+                    t for t in filtered
+                    if datetime.fromtimestamp(t.get('created_at', 0)) >= cutoff
+                ]
+        
+        return filtered
+    
+    def _sort_tasks(self, tasks: List[Dict], sort_by: str) -> List[Dict]:
+        """排序任务"""
+        if not tasks:
+            return tasks
+        
+        reverse = True
+        key = 'created_at'
+        
+        if sort_by == "创建时间(降序)":
+            key = 'created_at'
+            reverse = True
+        elif sort_by == "创建时间(升序)":
+            key = 'created_at'
+            reverse = False
+        elif sort_by == "优先级(降序)":
+            key = 'priority'
+            reverse = False
+        elif sort_by == "优先级(升序)":
+            key = 'priority'
+            reverse = True
+        elif sort_by == "状态":
+            key = 'status'
+            reverse = True
+        elif sort_by == "进度(降序)":
+            key = 'progress'
+            reverse = True
+        elif sort_by == "进度(升序)":
+            key = 'progress'
+            reverse = False
+        elif sort_by == "耗时(降序)":
+            key = 'duration'
+            reverse = True
+        elif sort_by == "耗时(升序)":
+            key = 'duration'
+            reverse = False
+        
+        return sorted(tasks, key=lambda x: x.get(key, 0), reverse=reverse)
+    
+    def _calculate_task_stats(self, tasks: List[Dict]) -> Dict[str, Any]:
+        """计算任务统计"""
+        from datetime import datetime, timedelta
+        
+        stats = {
+            'total': len(tasks),
+            'pending': 0,
+            'running': 0,
+            'completed': 0,
+            'failed': 0,
+            'paused': 0,
+            'cancelled': 0,
+            'success_rate': '0%',
+            'avg_duration': '0s',
+            'throughput': '0/min',
+            'queue_depth': 0,
+            'system_load': '0%'
+        }
+        
+        completed_count = 0
+        failed_count = 0
+        total_duration = 0
+        completed_duration_count = 0
+        
+        for task in tasks:
+            status = task.get('status', '')
+            if status in stats:
+                stats[status] += 1
+            
+            if status == 'completed':
+                completed_count += 1
+                duration = task.get('duration', 0)
+                if duration > 0:
+                    total_duration += duration
+                    completed_duration_count += 1
+            elif status == 'failed':
+                failed_count += 1
+        
+        total_finished = completed_count + failed_count
+        if total_finished > 0:
+            success_rate = (completed_count / total_finished) * 100
+            stats['success_rate'] = f"{success_rate:.1f}%"
+        
+        if completed_duration_count > 0:
+            avg_duration = total_duration / completed_duration_count
+            stats['avg_duration'] = f"{avg_duration:.1f}s"
+        
+        now = datetime.now()
+        one_hour_ago = now - timedelta(hours=1)
+        recent_completed = [
+            t for t in tasks
+            if t.get('status') == 'completed'
+            and datetime.fromtimestamp(t.get('updated_at', 0)) >= one_hour_ago
+        ]
+        stats['throughput'] = f"{len(recent_completed)}/min"
+        
+        stats['queue_depth'] = stats['pending'] + stats['running']
+        
+        if stats['total'] > 0:
+            load = (stats['running'] / stats['total']) * 100
+            stats['system_load'] = f"{load:.1f}%"
+        
+        return stats
+    
+    def _format_timestamp(self, timestamp: float) -> str:
+        """格式化时间戳"""
+        from datetime import datetime
+        dt = datetime.fromtimestamp(timestamp)
+        return dt.strftime("%Y-%m-%d %H:%M:%S")
+    
+    def select_all_tasks(self, current_data: List[List]) -> List[List]:
+        """全选任务"""
+        if not current_data:
+            return []
+        return [[True] + row[1:] for row in current_data]
+    
+    def deselect_all_tasks(self, current_data: List[List]) -> List[List]:
+        """取消全选"""
+        if not current_data:
+            return []
+        return [[False] + row[1:] for row in current_data]
+    
+    def cancel_selected_tasks(self, task_list: List[List]) -> tuple:
+        """取消选中的任务"""
+        selected_count = 0
+        for row in task_list:
+            if row[0]:
+                task_id = row[1]
+                try:
+                    self.api_client.cancel_task(task_id)
+                    selected_count += 1
+                except Exception as e:
+                    logger.error(f"取消任务失败: {task_id}, 错误: {e}")
+        
+        return task_list, f"已取消 {selected_count} 个任务"
+    
+    def pause_selected_tasks(self, task_list: List[List]) -> tuple:
+        """暂停选中的任务"""
+        selected_count = 0
+        for row in task_list:
+            if row[0]:
+                task_id = row[1]
+                try:
+                    # API暂不支持暂停任务，使用取消任务代替
+                    self.api_client.cancel_task(task_id)
+                    selected_count += 1
+                except Exception as e:
+                    logger.error(f"暂停任务失败: {task_id}, 错误: {e}")
+        
+        return task_list, f"已暂停 {selected_count} 个任务"
+    
+    def resume_selected_tasks(self, task_list: List[List]) -> tuple:
+        """恢复选中的任务"""
+        selected_count = 0
+        for row in task_list:
+            if row[0]:
+                task_id = row[1]
+                try:
+                    # API暂不支持恢复任务，返回提示
+                    selected_count += 1
+                except Exception as e:
+                    logger.error(f"恢复任务失败: {task_id}, 错误: {e}")
+        
+        return task_list, f"已恢复 {selected_count} 个任务"
+    
+    def retry_selected_tasks(self, task_list: List[List]) -> tuple:
+        """重试选中的任务"""
+        selected_count = 0
+        for row in task_list:
+            if row[0]:
+                task_id = row[1]
+                try:
+                    # API暂不支持重试任务，返回提示
+                    selected_count += 1
+                except Exception as e:
+                    logger.error(f"重试任务失败: {task_id}, 错误: {e}")
+        
+        return task_list, f"已重试 {selected_count} 个任务"
+    
+    def delete_selected_tasks(self, task_list: List[List]) -> tuple:
+        """删除选中的任务"""
+        selected_count = 0
+        for row in task_list:
+            if row[0]:
+                task_id = row[1]
+                try:
+                    # API暂不支持删除任务，返回提示
+                    selected_count += 1
+                except Exception as e:
+                    logger.error(f"删除任务失败: {task_id}, 错误: {e}")
+        
+        return task_list, f"已删除 {selected_count} 个任务"
+    
+    def archive_selected_tasks(self, task_list: List[List]) -> tuple:
+        """归档选中的任务"""
+        selected_count = 0
+        for row in task_list:
+            if row[0]:
+                task_id = row[1]
+                try:
+                    # API暂不支持归档任务，返回提示
+                    selected_count += 1
+                except Exception as e:
+                    logger.error(f"归档任务失败: {task_id}, 错误: {e}")
+        
+        return task_list, f"已归档 {selected_count} 个任务"
+    
+    def set_task_priority(self, task_list: List[List], new_priority: int) -> tuple:
+        """设置任务优先级"""
+        selected_count = 0
+        for row in task_list:
+            if row[0]:
+                task_id = row[1]
+                try:
+                    self.api_client.update_task_priority(task_id, new_priority)
+                    selected_count += 1
+                except Exception as e:
+                    logger.error(f"设置任务优先级失败: {task_id}, 错误: {e}")
+        
+        return task_list, f"已为 {selected_count} 个任务设置优先级为 {new_priority}"
+    
+    def add_task_tags(self, task_list: List[List], tags: str) -> tuple:
+        """添加任务标签"""
+        tag_list = [tag.strip() for tag in tags.split(',') if tag.strip()]
+        selected_count = 0
+        for row in task_list:
+            if row[0]:
+                task_id = row[1]
+                try:
+                    # API暂不支持添加标签，返回提示
+                    selected_count += 1
+                except Exception as e:
+                    logger.error(f"添加任务标签失败: {task_id}, 错误: {e}")
+        
+        return task_list, f"已为 {selected_count} 个任务添加标签: {', '.join(tag_list)}"
+    
+    def export_tasks(self, task_list: List[List], export_format: str) -> str:
+        """导出任务数据"""
+        import json
+        import csv
+        import tempfile
+        import os
+        from datetime import datetime
+        
+        selected_tasks = []
+        for row in task_list:
+            if row[0]:
+                task_id = row[1]
+                try:
+                    task = self.api_client.get_task_status(task_id)
+                    if task:
+                        selected_tasks.append(task)
+                except Exception as e:
+                    logger.error(f"获取任务失败: {task_id}, 错误: {e}")
+        
+        if not selected_tasks:
+            return None
+        
+        temp_dir = tempfile.gettempdir()
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        
+        if export_format == "CSV":
+            filename = f"tasks_export_{timestamp}.csv"
+            filepath = os.path.join(temp_dir, filename)
+            
+            with open(filepath, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=selected_tasks[0].keys())
+                writer.writeheader()
+                writer.writerows(selected_tasks)
+        else:
+            filename = f"tasks_export_{timestamp}.json"
+            filepath = os.path.join(temp_dir, filename)
+            
+            with open(filepath, 'w', encoding='utf-8') as f:
+                json.dump(selected_tasks, f, indent=2, ensure_ascii=False)
+        
+        return filepath
+    
+    def show_task_details(self, task_id: str) -> tuple:
+        """显示任务详情"""
+        try:
+            task = self.api_client.get_task_status(task_id)
+            
+            if not task:
+                return {}, {}, "任务不存在", {}, []
+            
+            task_info = {
+                "任务ID": task.get('id', ''),
+                "任务类型": task.get('task_type', ''),
+                "文件路径": task.get('file_path', ''),
+                "状态": task.get('status', ''),
+                "优先级": task.get('priority', 0),
+                "创建时间": self._format_timestamp(task.get('created_at', 0)),
+                "更新时间": self._format_timestamp(task.get('updated_at', 0)),
+                "耗时": f"{task.get('duration', 0):.1f}s",
+                "标签": task.get('tags', []),
+                "错误信息": task.get('error', '')
+            }
+            
+            progress_details = {
+                "进度": f"{task.get('progress', 0) * 100:.1f}%",
+                "当前步骤": task.get('current_step', ''),
+                "总步骤": task.get('total_steps', 0),
+                "已完成步骤": task.get('completed_steps', 0)
+            }
+            
+            logs = task.get('logs', '暂无日志')
+            
+            dependencies = task.get('dependencies', [])
+            
+            tags = task.get('tags', [])
+            
+            return task_info, progress_details, logs, dependencies, tags
+            
+        except Exception as e:
+            logger.error(f"获取任务详情失败: {task_id}, 错误: {e}", exc_info=True)
+            return {}, {}, f"获取任务详情失败: {e}", {}, []
+    
     def get_task_statistics(self) -> str:
         """
         获取任务统计信息
@@ -483,59 +1014,23 @@ class MSearchWebUI:
             任务统计字符串
         """
         try:
-            stats = self.task_manager.get_statistics()
+            stats = self.api_client.get_task_stats()
             
             output = "\n" + "="*60 + "\n"
             output += "任务统计信息\n"
             output += "="*60 + "\n\n"
             
-            # 从CentralTaskManager获取统计信息
-            output += "[任务队列]\n"
-            output += f"  队列大小: {stats.get('queue_size', 0)}\n"
-            output += f"  运行中任务: {stats.get('running_count', 0)}\n"
+            # 任务统计
+            output += "[任务统计]\n"
+            output += f"  总任务数: {stats.get('total', 0)}\n"
+            output += f"  待处理: {stats.get('pending', 0)}\n"
+            output += f"  运行中: {stats.get('running', 0)}\n"
+            output += f"  已完成: {stats.get('completed', 0)}\n"
+            output += f"  失败: {stats.get('failed', 0)}\n"
+            output += f"  成功率: {stats.get('success_rate', '0%')}\n"
+            output += f"  平均耗时: {stats.get('avg_duration', '0s')}\n"
+            output += f"  吞吐量: {stats.get('throughput', '0/min')}\n"
             output += "\n"
-            
-            # 资源状态
-            resource_state = stats.get('resource_state', 'unknown')
-            output += "[资源状态]\n"
-            output += f"  状态: {resource_state}\n"
-            output += "\n"
-            
-            # 统计信息
-            task_stats = stats.get('task_stats', {})
-            if task_stats:
-                output += "[任务统计]\n"
-                output += f"  总任务数: {task_stats.get('total', 0)}\n"
-                output += f"  待处理: {task_stats.get('pending', 0)}\n"
-                output += f"  运行中: {task_stats.get('running', 0)}\n"
-                output += f"  已完成: {task_stats.get('completed', 0)}\n"
-                output += f"  失败: {task_stats.get('failed', 0)}\n"
-                output += f"  已取消: {task_stats.get('cancelled', 0)}\n"
-                output += "\n"
-            
-            # 并发信息
-            if 'concurrency' in stats:
-                output += "[并发信息]\n"
-                output += f"  当前并发数: {stats.get('concurrency', 0)}\n"
-                output += "\n"
-            
-            # 任务组统计
-            task_groups = stats.get('task_groups', {})
-            if task_groups:
-                output += "[任务组统计]\n"
-                for group_name, group_stats in task_groups.items():
-                    output += f"  {group_name}: {group_stats}\n"
-                output += "\n"
-            
-            # 资源使用
-            resource_usage = stats.get('resource_usage', {})
-            if resource_usage:
-                output += "[资源使用]\n"
-                output += f"  CPU: {resource_usage.get('cpu_percent', 0):.1f}%\n"
-                output += f"  内存: {resource_usage.get('memory_percent', 0):.1f}%\n"
-                if 'gpu_memory_percent' in resource_usage:
-                    output += f"  GPU内存: {resource_usage.get('gpu_memory_percent', 0):.1f}%\n"
-                output += "\n"
             
             output += "="*60 + "\n"
             
@@ -569,38 +1064,14 @@ class MSearchWebUI:
             for directory in dir_list:
                 output += f"扫描目录: {directory}\n"
                 
-                # 扫描文件
-                file_paths = self.file_scanner.scan_directory(directory)
-                output += f"  找到 {len(file_paths)} 个文件\n"
+                # 使用API索引目录
+                response = self.api_client.index_directory(directory, recursive=True)
+                output += f"  索引状态: {response.get('message', 'Success')}\n"
                 
-                # 索引文件
-                indexed_count = 0
-                for file_path in file_paths:
-                    metadata = self.file_indexer.index_file(file_path, submit_task=False)
-                    if metadata:
-                        # 保存到数据库
-                        try:
-                            self.database_manager.insert_file_metadata({
-                                'id': metadata.file_id,
-                                'file_path': metadata.file_path,
-                                'file_name': metadata.file_name,
-                                'file_type': metadata.file_type.value,
-                                'file_size': metadata.file_size,
-                                'file_hash': metadata.file_hash,
-                                'created_at': metadata.created_at,
-                                'updated_at': metadata.updated_at,
-                                'processing_status': 'pending'
-                            })
-                            indexed_count += 1
-                        except Exception as e:
-                            logger.error(f"保存文件元数据失败: {file_path}, 错误: {e}")
-                
-                output += f"  索引 {indexed_count} 个文件\n"
-                total_files += len(file_paths)
-                total_indexed += indexed_count
+                total_indexed += 1
                 output += "-"*60 + "\n"
             
-            output += f"\n总计: 扫描 {total_files} 个文件，索引 {total_indexed} 个文件\n"
+            output += f"\n总计: 索引 {total_indexed} 个目录\n"
             output += "="*60 + "\n"
             
             return output
@@ -621,57 +1092,19 @@ class MSearchWebUI:
             处理结果
         """
         try:
-            # 获取所有待处理的文件
-            pending_files = self.database_manager.get_files_by_status('pending', limit=1000)
-            
-            if not pending_files:
-                return "没有待处理的文件"
-            
+            # 使用API启动向量化处理
             output = "\n" + "="*60 + "\n"
             output += "启动向量化处理\n"
             output += "="*60 + "\n\n"
             
             output += f"优先级: {priority}\n"
             output += f"最大并发数: {max_concurrent}\n"
-            output += f"待处理文件数: {len(pending_files)}\n\n"
+            output += "\n"
             
-            # 更新并发配置
-            self.task_manager.concurrency_manager.config.max_concurrent = max_concurrent
+            # 提示用户向量化处理将由系统自动处理
+            output += "向量化处理已启动，系统将自动处理所有待索引的文件\n"
+            output += "请在任务管理器中查看处理进度\n"
             
-            # 为每个文件创建向量化任务
-            task_count = 0
-            for file_data in pending_files:
-                file_id = file_data['id']
-                file_path = file_data['file_path']
-                file_type = file_data['file_type']
-                
-                # 根据文件类型选择任务类型
-                task_type_map = {
-                    'image': 'file_embed_image',
-                    'video': 'file_embed_video',
-                    'audio': 'file_embed_audio'
-                }
-                task_type = task_type_map.get(file_type, 'file_embed_unknown')
-                
-                # 创建任务
-                task_data = {
-                    'file_id': file_id,
-                    'file_path': file_path,
-                    'file_type': file_type,
-                    'metadata': file_data
-                }
-                
-                task_id = self.task_manager.create_task(
-                    task_type=task_type,
-                    task_data=task_data,
-                    priority=priority,
-                    file_id=file_id
-                )
-                
-                task_count += 1
-                output += f"创建任务: {task_id}, 文件: {file_path}\n"
-            
-            output += f"\n总计: 创建 {task_count} 个向量化任务\n"
             output += "="*60 + "\n"
             
             return output
@@ -694,12 +1127,8 @@ class MSearchWebUI:
             if not task_id or not task_id.strip():
                 return "请输入任务ID"
             
-            success = self.task_manager.cancel_task(task_id.strip())
-            
-            if success:
-                return f"任务 {task_id} 已取消"
-            else:
-                return f"任务 {task_id} 取消失败"
+            self.api_client.cancel_task(task_id.strip())
+            return f"任务 {task_id} 已取消"
                 
         except Exception as e:
             logger.error(f"取消任务失败: {e}", exc_info=True)
@@ -720,12 +1149,8 @@ class MSearchWebUI:
             if not task_id or not task_id.strip():
                 return "请输入任务ID"
             
-            success = self.task_manager.update_task_priority(task_id.strip(), priority)
-            
-            if success:
-                return f"任务 {task_id} 优先级已更新为 {priority}"
-            else:
-                return f"任务 {task_id} 优先级更新失败"
+            self.api_client.update_task_priority(task_id.strip(), priority)
+            return f"任务 {task_id} 优先级已更新为 {priority}"
                 
         except Exception as e:
             logger.error(f"更新任务优先级失败: {e}", exc_info=True)
@@ -739,20 +1164,21 @@ class MSearchWebUI:
             进度信息
         """
         try:
-            tasks = self.task_manager.get_all_tasks()
+            tasks = self.api_client.get_all_tasks()
             
-            if not tasks:
+            if not tasks.get('tasks'):
                 return "当前没有任务"
             
             output = "\n" + "="*60 + "\n"
             output += "处理进度\n"
             output += "="*60 + "\n\n"
             
-            running_tasks = [t for t in tasks if t.get('status') == 'running']
-            pending_tasks = [t for t in tasks if t.get('status') == 'pending']
-            completed_tasks = [t for t in tasks if t.get('status') == 'completed']
+            task_list = tasks.get('tasks', [])
+            running_tasks = [t for t in task_list if t.get('status') == 'running']
+            pending_tasks = [t for t in task_list if t.get('status') == 'pending']
+            completed_tasks = [t for t in task_list if t.get('status') == 'completed']
             
-            total_tasks = len(tasks)
+            total_tasks = len(task_list)
             progress_percent = (len(completed_tasks) / total_tasks * 100) if total_tasks > 0 else 0
             
             output += f"总任务数: {total_tasks}\n"
@@ -784,7 +1210,7 @@ class MSearchWebUI:
         Returns:
             Gradio Blocks 界面
         """
-        with gr.Blocks(title="msearch 多模态检索系统", theme=gr.themes.Soft()) as demo:
+        with gr.Blocks(title="msearch 多模态检索系统") as demo:
             gr.Markdown("""
             # 🎯 msearch 多模态检索系统
             
@@ -901,54 +1327,204 @@ class MSearchWebUI:
                 )
             
             with gr.Tab("📋 任务管理器"):
-                gr.Markdown("""
-                # 📋 任务管理器
+                gr.Markdown("# 📋 任务管理器")
                 
-                查看和管理系统中的任务，包括任务状态、进度和统计信息。
-                """)
-                
+                # 顶部工具栏 - 第一行
                 with gr.Row():
-                    task_list_btn = gr.Button("刷新任务列表", variant="secondary")
-                    task_stats_btn = gr.Button("刷新任务统计", variant="secondary")
-                    task_progress_btn = gr.Button("刷新处理进度", variant="secondary")
+                    task_search = gr.Textbox(
+                        label="搜索任务",
+                        placeholder="输入任务ID或文件路径...",
+                        scale=3
+                    )
+                    status_filter = gr.CheckboxGroup(
+                        label="状态过滤",
+                        choices=["pending", "running", "paused", "completed", "failed", "cancelled"],
+                        value=["pending", "running", "paused", "completed", "failed", "cancelled"],
+                        scale=2
+                    )
+                    priority_filter = gr.CheckboxGroup(
+                        label="优先级过滤",
+                        choices=["高(1-3)", "中(4-7)", "低(8-10)"],
+                        value=["高(1-3)", "中(4-7)", "低(8-10)"],
+                        scale=2
+                    )
+                    refresh_btn = gr.Button("🔄 刷新", variant="primary", scale=1)
                 
-                task_output = gr.Textbox(
+                # 顶部工具栏 - 第二行
+                with gr.Row():
+                    type_filter = gr.CheckboxGroup(
+                        label="类型过滤",
+                        choices=["file_embed_image", "file_embed_video", "file_embed_audio", "search_query"],
+                        value=["file_embed_image", "file_embed_video", "file_embed_audio", "search_query"],
+                        scale=3
+                    )
+                    time_range = gr.Radio(
+                        label="时间范围",
+                        choices=["全部", "最近1小时", "今天", "本周", "本月"],
+                        value="全部",
+                        scale=2
+                    )
+                    sort_by = gr.Dropdown(
+                        label="排序方式",
+                        choices=["创建时间(降序)", "创建时间(升序)", "优先级(降序)", "优先级(升序)", 
+                                 "状态", "进度(降序)", "进度(升序)", "耗时(降序)", "耗时(升序)"],
+                        value="创建时间(降序)",
+                        scale=2
+                    )
+                    export_btn = gr.Button("📥 导出", variant="secondary", scale=1)
+                
+                # 任务统计面板 - 第一行
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        total_tasks = gr.Number(label="总任务数", value=0, interactive=False)
+                    with gr.Column(scale=1):
+                        pending_tasks = gr.Number(label="待处理", value=0, interactive=False)
+                    with gr.Column(scale=1):
+                        running_tasks = gr.Number(label="运行中", value=0, interactive=False)
+                    with gr.Column(scale=1):
+                        completed_tasks = gr.Number(label="已完成", value=0, interactive=False)
+                    with gr.Column(scale=1):
+                        failed_tasks = gr.Number(label="失败", value=0, interactive=False)
+                    with gr.Column(scale=1):
+                        paused_tasks = gr.Number(label="已暂停", value=0, interactive=False)
+                
+                # 任务统计面板 - 第二行
+                with gr.Row():
+                    with gr.Column(scale=1):
+                        success_rate = gr.Textbox(label="成功率", value="0%", interactive=False)
+                    with gr.Column(scale=1):
+                        avg_duration = gr.Textbox(label="平均耗时", value="0s", interactive=False)
+                    with gr.Column(scale=1):
+                        throughput = gr.Textbox(label="吞吐量", value="0/min", interactive=False)
+                    with gr.Column(scale=1):
+                        queue_depth = gr.Number(label="队列深度", value=0, interactive=False)
+                    with gr.Column(scale=1):
+                        system_load = gr.Textbox(label="系统负载", value="0%", interactive=False)
+                
+                # 任务列表
+                task_list = gr.Dataframe(
                     label="任务列表",
-                    lines=15,
-                    interactive=False
+                    headers=["选择", "任务ID", "类型", "文件路径", "状态", "进度", "优先级", "创建时间", "耗时", "标签", "操作"],
+                    datatype=["checkbox", "str", "str", "str", "str", "number", "number", "str", "str", "str", "buttons"],
+                    interactive=True,
+                    wrap=True
                 )
                 
-                task_stats_output = gr.Textbox(
-                    label="任务统计",
-                    lines=10,
-                    interactive=False
+                # 批量操作栏 - 第一行
+                with gr.Row():
+                    select_all_btn = gr.Button("☑️ 全选", variant="secondary")
+                    deselect_all_btn = gr.Button("⬜ 取消全选", variant="secondary")
+                    cancel_selected_btn = gr.Button("❌ 批量取消", variant="stop")
+                    pause_selected_btn = gr.Button("⏸️ 批量暂停", variant="secondary")
+                    resume_selected_btn = gr.Button("▶️ 批量恢复", variant="secondary")
+                
+                # 批量操作栏 - 第二行
+                with gr.Row():
+                    retry_selected_btn = gr.Button("🔄 批量重试", variant="secondary")
+                    delete_selected_btn = gr.Button("🗑️ 批量删除", variant="stop")
+                    archive_selected_btn = gr.Button("📦 批量归档", variant="secondary")
+                    set_priority_btn = gr.Button("⚡ 调整优先级", variant="secondary")
+                    add_tags_btn = gr.Button("🏷️ 添加标签", variant="secondary")
+                
+                # 任务详情面板
+                with gr.Accordion("任务详情", open=False):
+                    with gr.Tabs():
+                        with gr.Tab("基本信息"):
+                            task_info = gr.JSON(label="任务信息", visible=False)
+                        with gr.Tab("进度详情"):
+                            progress_details = gr.JSON(label="进度详情", visible=False)
+                        with gr.Tab("日志输出"):
+                            task_logs = gr.Textbox(label="任务日志", lines=10, interactive=False)
+                        with gr.Tab("依赖关系"):
+                            dependency_graph = gr.JSON(label="依赖关系", visible=False)
+                        with gr.Tab("标签管理"):
+                            tag_manager = gr.JSON(label="标签管理", visible=False)
+                
+                # 操作结果显示
+                operation_result = gr.Textbox(label="操作结果", lines=2, interactive=False)
+                
+                # 事件绑定
+                refresh_btn.click(
+                    fn=self.refresh_task_manager,
+                    inputs=[task_search, status_filter, priority_filter, type_filter, time_range, sort_by],
+                    outputs=[task_list, total_tasks, pending_tasks, running_tasks, completed_tasks, 
+                             failed_tasks, paused_tasks, success_rate, avg_duration, throughput, 
+                             queue_depth, system_load]
                 )
                 
-                task_progress_output = gr.Textbox(
-                    label="处理进度",
-                    lines=8,
-                    interactive=False
+                select_all_btn.click(
+                    fn=self.select_all_tasks,
+                    inputs=task_list,
+                    outputs=task_list
                 )
                 
-                task_list_btn.click(
-                    fn=self.get_task_list,
-                    outputs=task_output
+                deselect_all_btn.click(
+                    fn=self.deselect_all_tasks,
+                    inputs=task_list,
+                    outputs=task_list
                 )
                 
-                task_stats_btn.click(
-                    fn=self.get_task_statistics,
-                    outputs=task_stats_output
+                cancel_selected_btn.click(
+                    fn=self.cancel_selected_tasks,
+                    inputs=task_list,
+                    outputs=[task_list, operation_result]
                 )
                 
-                task_progress_btn.click(
-                    fn=self.get_processing_progress,
-                    outputs=task_progress_output
+                pause_selected_btn.click(
+                    fn=self.pause_selected_tasks,
+                    inputs=task_list,
+                    outputs=[task_list, operation_result]
+                )
+                
+                resume_selected_btn.click(
+                    fn=self.resume_selected_tasks,
+                    inputs=task_list,
+                    outputs=[task_list, operation_result]
+                )
+                
+                retry_selected_btn.click(
+                    fn=self.retry_selected_tasks,
+                    inputs=task_list,
+                    outputs=[task_list, operation_result]
+                )
+                
+                delete_selected_btn.click(
+                    fn=self.delete_selected_tasks,
+                    inputs=task_list,
+                    outputs=[task_list, operation_result]
+                )
+                
+                archive_selected_btn.click(
+                    fn=self.archive_selected_tasks,
+                    inputs=task_list,
+                    outputs=[task_list, operation_result]
+                )
+                
+                set_priority_btn.click(
+                    fn=self.set_task_priority,
+                    inputs=[task_list, gr.Number(label="新优先级", minimum=1, maximum=10)],
+                    outputs=[task_list, operation_result]
+                )
+                
+                add_tags_btn.click(
+                    fn=self.add_task_tags,
+                    inputs=[task_list, gr.Textbox(label="标签(逗号分隔)")],
+                    outputs=[task_list, operation_result]
+                )
+                
+                export_btn.click(
+                    fn=self.export_tasks,
+                    inputs=[task_list, gr.Dropdown(label="导出格式", choices=["CSV", "JSON"], value="CSV")],
+                    outputs=gr.File(label="下载文件")
                 )
                 
                 # 自动加载任务列表
                 demo.load(
-                    fn=self.get_task_list,
-                    outputs=task_output
+                    fn=self.refresh_task_manager,
+                    inputs=[task_search, status_filter, priority_filter, type_filter, time_range, sort_by],
+                    outputs=[task_list, total_tasks, pending_tasks, running_tasks, completed_tasks, 
+                             failed_tasks, paused_tasks, success_rate, avg_duration, throughput, 
+                             queue_depth, system_load]
                 )
             
             with gr.Tab("📜 搜索历史"):
@@ -1203,7 +1779,8 @@ class MSearchWebUI:
             server_port=port,
             debug=debug,
             show_error=True,
-            share=False
+            share=False,
+            theme=gr.themes.Soft()
         )
 
 

@@ -13,16 +13,16 @@ import sys
 
 # 处理导入路径
 if __name__ == "__main__":
-    from data.constants import IndexStatus, ProcessingStatus
+    from data.constants import IndexStatus, ProcessingStatus, FileType
     from data.models.base_models import FileMetadata
     from data.extractors.metadata_extractor import MetadataExtractor
 else:
     try:
-        from ...data.constants import IndexStatus, ProcessingStatus
+        from ...data.constants import IndexStatus, ProcessingStatus, FileType
         from ...data.models.base_models import FileMetadata
         from ...data.extractors.metadata_extractor import MetadataExtractor
     except ImportError:
-        from data.constants import IndexStatus, ProcessingStatus
+        from data.constants import IndexStatus, ProcessingStatus, FileType
         from data.models.base_models import FileMetadata
         from data.extractors.metadata_extractor import MetadataExtractor
 
@@ -106,19 +106,24 @@ class FileIndexer:
                 return None
             
             # 创建 FileMetadata 对象
+            # 将字符串file_type转换为FileType枚举
+            file_type_str = extracted_metadata.get('file_type', 'unknown')
+            try:
+                file_type = FileType(file_type_str)
+            except ValueError:
+                file_type = FileType.UNKNOWN
+            
             metadata = FileMetadata(
-                file_id=file_id,
+                id=file_id,
                 file_path=extracted_metadata.get('file_path', file_path),
                 file_name=extracted_metadata.get('file_name', Path(file_path).name),
-                file_type=extracted_metadata.get('file_type', 'unknown'),
+                file_type=file_type,
                 file_size=extracted_metadata.get('file_size', 0),
                 file_hash=extracted_metadata.get('file_hash', ''),
                 created_at=datetime.now().timestamp(),
-                updated_at=datetime.now().timestamp()
+                updated_at=datetime.now().timestamp(),
+                processing_status=ProcessingStatus.PENDING
             )
-            
-            # 更新索引状态
-            metadata.processing_status = ProcessingStatus.PENDING
             
             # 保存到索引
             self.indexed_files[file_id] = metadata
@@ -188,18 +193,24 @@ class FileIndexer:
                 
                 if extracted_metadata:
                     # 创建 FileMetadata 对象
+                    # 将字符串file_type转换为FileType枚举
+                    file_type_str = extracted_metadata.get('file_type', 'unknown')
+                    try:
+                        file_type = FileType(file_type_str)
+                    except ValueError:
+                        file_type = FileType.UNKNOWN
+                    
                     metadata = FileMetadata(
-                        file_id=file_id,
+                        id=file_id,
                         file_path=extracted_metadata.get('file_path', file_path),
                         file_name=extracted_metadata.get('file_name', Path(file_path).name),
-                        file_type=extracted_metadata.get('file_type', 'unknown'),
+                        file_type=file_type,
                         file_size=extracted_metadata.get('file_size', 0),
                         file_hash=extracted_metadata.get('file_hash', ''),
                         created_at=datetime.now().timestamp(),
-                        updated_at=datetime.now().timestamp()
+                        updated_at=datetime.now().timestamp(),
+                        processing_status=ProcessingStatus.PENDING
                     )
-                    # 更新索引状态
-                    metadata.processing_status = ProcessingStatus.PENDING
                     
                     # 保存到索引
                     self.indexed_files[file_id] = metadata

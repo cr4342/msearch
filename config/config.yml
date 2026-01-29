@@ -1,9 +1,15 @@
 database:
   metadata_db_path: data/database/sqlite/msearch.db
   vector_db_path: data/database/lancedb
+device: cpu
 file_monitor:
-  debounce_interval: 1000
+  batch_size: 100
+  debounce_interval: 500
   enabled: true
+  exclude_patterns:
+  - '*.tmp'
+  - '*.cache'
+  - .*
   ignore_patterns:
   - .*
   - '*.tmp'
@@ -125,6 +131,14 @@ models:
     enable_model_warmup: true
     max_concurrent_requests: 10
     request_timeout: 30
+processing:
+  audio:
+    bitrate: 128000
+    channels: 1
+    format: aac
+    min_duration: 5.0
+    quality: high
+    sample_rate: 48000
 search:
   max_distance: 0.5
   re_rank: true
@@ -162,3 +176,23 @@ task_manager:
   min_concurrent_tasks: 4
   retry_delay: 30
   task_queue_size: 1000
+task_queue:
+  auto_commit: true
+  max_size: 10000
+  path: data/task_queue.db
+thread_pools:
+  embedding:
+    max_workers: 4
+    min_workers: 1
+    queue_size: 100
+    task_timeout: 300
+  io:
+    max_workers: 8
+    min_workers: 4
+    queue_size: 200
+    task_timeout: 60
+  task:
+    max_workers: 8
+    min_workers: 4
+    queue_size: 200
+    task_timeout: 120
