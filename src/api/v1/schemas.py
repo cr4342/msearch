@@ -85,14 +85,14 @@ class SearchResponse(BaseModel):
 
 class IndexAddRequest(BaseModel):
     """添加索引请求"""
-    file_paths: List[str] = Field(..., description="要索引的文件路径列表", min_items=1)
+    file_paths: List[str] = Field(..., description="要索引的文件路径列表", min_length=1)
     recursive: bool = Field(False, description="是否递归处理子目录")
     priority: int = Field(5, ge=1, le=10, description="任务优先级")
 
 
 class IndexRemoveRequest(BaseModel):
     """移除索引请求"""
-    file_uuids: List[str] = Field(..., description="要移除的文件UUID列表", min_items=1)
+    file_uuids: List[str] = Field(..., description="要移除的文件UUID列表", min_length=1)
 
 
 class IndexStatusResponse(BaseModel):
