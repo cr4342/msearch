@@ -5,7 +5,9 @@ const state = {
     searchResults: [],
     tasks: [],
     files: [],
-    systemInfo: {}
+    systemInfo: {},
+    topK: 10,
+    threshold: 0.0
 };
 
 // 页面导航
@@ -53,12 +55,74 @@ function navigateTo(page) {
 // 搜索功能
 document.getElementById('search-type').addEventListener('change', (e) => {
     state.searchType = e.target.value;
+    updateSearchUI();
 });
 
-document.getElementById('search-btn').addEventListener('click', performTextSearch);
+document.getElementById('search-btn').addEventListener('click', performSearch);
+
+// 滑块控制
+document.getElementById('top-k-slider').addEventListener('input', (e) => {
+    state.topK = parseInt(e.target.value);
+    document.getElementById('top-k-value').textContent = state.topK;
+});
+
+document.getElementById('threshold-slider').addEventListener('input', (e) => {
+    state.threshold = parseFloat(e.target.value);
+    document.getElementById('threshold-value').textContent = state.threshold.toFixed(2);
+});
+
+function updateSearchUI() {
+    const searchType = state.searchType;
+    const textInput = document.getElementById('search-input-text');
+    const fileInput = document.getElementById('search-input-file');
+    
+    if (searchType === 'text') {
+        textInput.style.display = 'block';
+        fileInput.style.display = 'none';
+        textInput.placeholder = '描述你想找的内容...';
+    } else if (searchType === 'image') {
+        textInput.style.display = 'none';
+        fileInput.style.display = 'block';
+        fileInput.accept = 'image/*';
+    } else if (searchType === 'audio') {
+        textInput.style.display = 'none';
+        fileInput.style.display = 'block';
+        fileInput.accept = 'audio/*';
+    }
+}
+
+// 辅助函数：获取搜索输入
+function getSearchInput() {
+    const searchType = state.searchType;
+    
+    if (searchType === 'text') {
+        return {
+            type: 'text',
+            value: document.getElementById('search-input-text').value.trim()
+        };
+    } else {
+        const fileInput = document.getElementById('search-input-file');
+        return {
+            type: 'file',
+            file: fileInput.files[0]
+        };
+    }
+}
+
+async function performSearch() {
+    const searchType = state.searchType;
+    
+    if (searchType === 'text') {
+        await performTextSearch();
+    } else if (searchType === 'image') {
+        await performImageSearch();
+    } else if (searchType === 'audio') {
+        await performAudioSearch();
+    }
+}
 
 async function performTextSearch() {
-    const query = document.getElementById('search-input').value.trim();
+    const query = document.getElementById('search-input-text').value.trim();
     if (!query) {
         showToast('请输入搜索内容', 'warning');
         return;
@@ -71,8 +135,8 @@ async function performTextSearch() {
         let endpoint = '/api/v1/search/text';
         let requestBody = {
             query: query,
-            top_k: 20,
-            threshold: 0.0
+            top_k: state.topK,
+            threshold: state.threshold
         };
         
         const response = await fetch(endpoint, {
@@ -100,11 +164,85 @@ async function performTextSearch() {
 }
 
 async function performImageSearch() {
-    showToast('图像搜索功能开发中', 'warning');
+    const fileInput = document.getElementById('search-input-file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showToast('请选择图像文件', 'warning');
+        return;
+    }
+    
+    showLoading(true);
+    
+    try {
+        // 创建FormData
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // 直接使用FormData调用图像搜索API
+        const response = await fetch('/api/v1/search/image', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.results && data.results.length > 0) {
+            state.searchResults = data.results;
+            renderSearchResults(data.results);
+            showToast(`找到 ${data.results.length} 个结果`, 'success');
+        } else {
+            state.searchResults = [];
+            renderSearchResults([]);
+            showToast('未找到相关结果', 'info');
+        }
+    } catch (error) {
+        console.error('图像搜索失败:', error);
+        showToast('图像搜索失败: ' + error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
 }
 
 async function performAudioSearch() {
-    showToast('音频搜索功能开发中', 'warning');
+    const fileInput = document.getElementById('search-input-file');
+    const file = fileInput.files[0];
+    
+    if (!file) {
+        showToast('请选择音频文件', 'warning');
+        return;
+    }
+    
+    showLoading(true);
+    
+    try {
+        // 创建FormData
+        const formData = new FormData();
+        formData.append('file', file);
+        
+        // 直接使用FormData调用音频搜索API
+        const response = await fetch('/api/v1/search/audio', {
+            method: 'POST',
+            body: formData
+        });
+        
+        const data = await response.json();
+        
+        if (data.results && data.results.length > 0) {
+            state.searchResults = data.results;
+            renderSearchResults(data.results);
+            showToast(`找到 ${data.results.length} 个结果`, 'success');
+        } else {
+            state.searchResults = [];
+            renderSearchResults([]);
+            showToast('未找到相关结果', 'info');
+        }
+    } catch (error) {
+        console.error('音频搜索失败:', error);
+        showToast('音频搜索失败: ' + error.message, 'error');
+    } finally {
+        showLoading(false);
+    }
 }
 
 function renderSearchResults(results) {
@@ -206,10 +344,10 @@ function openFile(filePath) {
 // 任务管理
 async function refreshTasks() {
     try {
-        const response = await fetch('/api/v1/tasks');
+        const response = await fetch('/api/v1/tasks?limit=100');
         const data = await response.json();
         
-        if (data.success) {
+        if (data.tasks) {
             state.tasks = data.tasks;
             renderTasks(data.tasks);
         }
@@ -227,24 +365,61 @@ function renderTasks(tasks) {
         return;
     }
     
-    tasks.forEach(task => {
-        const item = document.createElement('div');
-        item.className = 'task-item';
-        item.innerHTML = `
-            <span>${task.task_type}</span>
-            <span>${task.status}</span>
-        `;
-        container.appendChild(item);
-    });
+    const table = document.createElement('table');
+    table.className = 'task-table';
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th>任务ID</th>
+                <th>类型</th>
+                <th>状态</th>
+                <th>优先级</th>
+                <th>进度</th>
+                <th>创建时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${tasks.map(task => {
+                // 处理不同的时间戳格式
+                let createdTime;
+                if (task.created_at) {
+                    if (typeof task.created_at === 'number') {
+                        createdTime = new Date(task.created_at * 1000).toLocaleString();
+                    } else if (typeof task.created_at === 'string') {
+                        createdTime = new Date(task.created_at).toLocaleString();
+                    }
+                } else {
+                    createdTime = '未知';
+                }
+                
+                return `
+                    <tr>
+                        <td><code>${task.task_id ? task.task_id.substring(0, 8) + '...' : '未知'}</code></td>
+                        <td>${task.task_type || '未知'}</td>
+                        <td><span class="status-badge status-${task.status}">${task.status}</span></td>
+                        <td>${task.priority || 0}</td>
+                        <td>
+                            <div class="progress-bar">
+                                <div class="progress-fill" style="width: ${(task.progress || 0) * 100}%"></div>
+                            </div>
+                        </td>
+                        <td>${createdTime}</td>
+                    </tr>
+                `;
+            }).join('')}
+        </tbody>
+    `;
+    
+    container.appendChild(table);
 }
 
 // 文件管理
 async function refreshFiles() {
     try {
-        const response = await fetch('/api/v1/files');
+        const response = await fetch('/api/v1/files/list?limit=100');
         const data = await response.json();
         
-        if (data.success) {
+        if (data.files) {
             state.files = data.files;
             renderFiles(data.files);
         }
@@ -262,52 +437,112 @@ function renderFiles(files) {
         return;
     }
     
-    files.forEach(file => {
-        const item = document.createElement('div');
-        item.className = 'file-item';
-        item.innerHTML = `
-            <span>${file.file_name}</span>
-            <span>${file.file_type}</span>
-        `;
-        container.appendChild(item);
-    });
+    const table = document.createElement('table');
+    table.className = 'file-table';
+    table.innerHTML = `
+        <thead>
+            <tr>
+                <th>文件名</th>
+                <th>类型</th>
+                <th>大小</th>
+                <th>状态</th>
+                <th>创建时间</th>
+            </tr>
+        </thead>
+        <tbody>
+            ${files.map(file => `
+                <tr>
+                    <td>${file.file_name}</td>
+                    <td>${file.file_type}</td>
+                    <td>${formatFileSize(file.file_size)}</td>
+                    <td><span class="status-badge status-${file.indexed ? 'indexed' : 'pending'}">${file.indexed ? '已索引' : '未索引'}</span></td>
+                    <td>${new Date(file.created_at).toLocaleString()}</td>
+                </tr>
+            `).join('')}
+        </tbody>
+    `;
+    
+    container.appendChild(table);
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 // 系统信息
 async function loadSystemInfo() {
     try {
-        const response = await fetch('/api/v1/system/info');
-        const data = await response.json();
+        // 获取系统统计
+        const statsResponse = await fetch('/api/v1/system/stats');
+        const statsData = await statsResponse.json();
         
-        if (data.success) {
-            state.systemInfo = data.info;
-            renderSystemInfo(data.info);
+        // 获取向量统计
+        const vectorResponse = await fetch('/api/v1/vector/stats');
+        const vectorData = await vectorResponse.json();
+        
+        // 获取任务统计
+        const taskResponse = await fetch('/api/v1/tasks/stats');
+        const taskData = await taskResponse.json();
+        
+        if (statsData || vectorData || taskData) {
+            state.systemInfo = {
+                stats: statsData,
+                vector: vectorData,
+                task: taskData
+            };
+            renderSystemInfo(statsData, vectorData, taskData);
         }
     } catch (error) {
         console.error('获取系统信息失败:', error);
     }
 }
 
-function renderSystemInfo(info) {
-    const container = document.getElementById('system-info');
-    container.innerHTML = '';
+function renderSystemInfo(statsData, vectorData, taskData) {
+    // 更新资源使用
+    if (statsData && statsData.memory_usage) {
+        const memoryPercent = statsData.memory_usage.percent;
+        document.getElementById('memory-usage').textContent = `${memoryPercent.toFixed(1)}%`;
+        document.getElementById('memory-progress').style.width = `${memoryPercent}%`;
+    }
     
-    const stats = [
-        { label: '待处理任务', value: info.pending_tasks || 0 },
-        { label: '运行中任务', value: info.running_tasks || 0 },
-        { label: '已完成任务', value: info.completed_tasks || 0 },
-        { label: '失败任务', value: info.failed_tasks || 0 }
-    ];
+    // 更新CPU使用
+    if (taskData && taskData.resource_usage) {
+        const cpuPercent = taskData.resource_usage.cpu_percent;
+        document.getElementById('cpu-usage').textContent = `${cpuPercent.toFixed(1)}%`;
+        document.getElementById('cpu-progress').style.width = `${cpuPercent}%`;
+    }
     
-    stats.forEach(stat => {
-        const card = document.createElement('div');
-        card.className = 'stat-card';
-        card.innerHTML = `
-            <div class="stat-value">${stat.value}</div>
-            <div class="stat-label">${stat.label}</div>
-        `;
-        container.appendChild(card);
-    });
+    // 更新GPU使用
+    if (taskData && taskData.resource_usage) {
+        const gpuPercent = taskData.resource_usage.gpu_percent;
+        document.getElementById('gpu-usage').textContent = `${gpuPercent.toFixed(1)}%`;
+        document.getElementById('gpu-progress').style.width = `${gpuPercent}%`;
+    }
+    
+    // 更新向量统计
+    if (vectorData) {
+        document.getElementById('vector-count').textContent = (vectorData.total_vectors || 0).toLocaleString();
+        document.getElementById('vector-dimension').textContent = vectorData.vector_dimension || '未知';
+    }
+    
+    // 更新文件统计
+    if (statsData) {
+        document.getElementById('file-count').textContent = (statsData.total_files || 0).toLocaleString();
+    }
+    
+    // 更新任务统计
+    if (taskData && taskData.task_stats && taskData.task_stats.overall) {
+        const overall = taskData.task_stats.overall;
+        document.getElementById('stat-total').textContent = overall.total || 0;
+        document.getElementById('stat-pending').textContent = overall.pending || 0;
+        document.getElementById('stat-running').textContent = overall.running || 0;
+        document.getElementById('stat-completed').textContent = overall.completed || 0;
+        document.getElementById('stat-failed').textContent = overall.failed || 0;
+    }
 }
 
 // UI工具函数
@@ -332,7 +567,12 @@ function showToast(message, type = 'info') {
     }, 3000);
 }
 
+// 刷新按钮
+document.getElementById('refresh-tasks-btn').addEventListener('click', refreshTasks);
+document.getElementById('refresh-system-btn').addEventListener('click', loadSystemInfo);
+
 // 初始化
 document.addEventListener('DOMContentLoaded', () => {
     console.log('msearch WebUI initialized');
+    updateSearchUI();
 });
