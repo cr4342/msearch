@@ -107,7 +107,7 @@ def test_database_status():
         db = lancedb.connect(db_path)
         
         # 列出所有表
-        tables = db.table_names()
+        tables = db.list_tables()
         print(f"\n✓ 数据库连接成功")
         print(f"  表数量: {len(tables)}")
         print(f"  表名: {', '.join(tables)}")
