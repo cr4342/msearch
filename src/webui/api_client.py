@@ -3,6 +3,7 @@ API Client for msearch FastAPI server
 Handles HTTP requests to the backend API
 """
 
+import os
 import json
 import logging
 import requests
@@ -104,12 +105,21 @@ class APIClient:
             搜索结果
         """
         endpoint = "/api/v1/search/image"
+        
+        # 使用 FormData 上传文件
+        files = {
+            'file': (os.path.basename(image_path), open(image_path, 'rb'), 'image/jpeg')
+        }
         data = {
-            "query_image": image_path,
-            "top_k": top_k
+            'top_k': str(top_k)
         }
         
-        return self._make_request("POST", endpoint, json=data)
+        try:
+            response = self._make_request("POST", endpoint, files=files, data=data)
+            return response
+        finally:
+            # 关闭文件
+            files['file'][1].close()
     
     def search_audio(self, audio_path: str, top_k: int = 20) -> Dict[str, Any]:
         """
@@ -123,12 +133,21 @@ class APIClient:
             搜索结果
         """
         endpoint = "/api/v1/search/audio"
+        
+        # 使用 FormData 上传文件
+        files = {
+            'file': (os.path.basename(audio_path), open(audio_path, 'rb'), 'audio/wav')
+        }
         data = {
-            "query_audio": audio_path,
-            "top_k": top_k
+            'top_k': str(top_k)
         }
         
-        return self._make_request("POST", endpoint, json=data)
+        try:
+            response = self._make_request("POST", endpoint, files=files, data=data)
+            return response
+        finally:
+            # 关闭文件
+            files['file'][1].close()
     
     # ==================== 任务管理相关 ====================
     
@@ -252,7 +271,7 @@ class APIClient:
     def index_file(self, file_path: str) -> Dict[str, Any]:
         """
         索引文件
-        
+
         Args:
             file_path: 文件路径
             
@@ -261,12 +280,12 @@ class APIClient:
         """
         endpoint = "/api/v1/index/file"
         data = {"file_path": file_path}
-        return self._make_request("POST", endpoint, json=data)
+        return self._make_request("POST", endpoint, data=data)
     
     def index_directory(self, directory: str, recursive: bool = True) -> Dict[str, Any]:
         """
         索引目录
-        
+
         Args:
             directory: 目录路径
             recursive: 是否递归索引
@@ -279,7 +298,7 @@ class APIClient:
             "directory": directory,
             "recursive": str(recursive).lower()
         }
-        return self._make_request("POST", endpoint, json=data)
+        return self._make_request("POST", endpoint, data=data)
     
     def get_index_status(self) -> Dict[str, Any]:
         """
