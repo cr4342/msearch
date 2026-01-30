@@ -102,16 +102,27 @@ class SearchEngine:
             # 1. 文本向量化
             query_vector = await self.embedding_engine.embed_text(query)
             
-            # 2. 向量搜索
-            search_results = self.vector_store.search(query_vector, limit=k)
+            # 2. 构建过滤条件
+            search_filters = {}
+            if modalities:
+                search_filters['modality'] = modalities
+            if filters:
+                search_filters.update(filters)
             
-            # 3. 结果排序和过滤
+            # 3. 向量搜索
+            search_results = self.vector_store.search(
+                query_vector, 
+                limit=k, 
+                filter=search_filters if search_filters else None
+            )
+            
+            # 4. 结果排序和过滤
             ranked_results = self._rank_results(search_results)
             
-            # 4. 结果聚合
+            # 5. 结果聚合
             aggregated_results = self._aggregate_results(ranked_results)
             
-            # 5. 结果格式化
+            # 6. 结果格式化
             formatted_results = self._format_results(aggregated_results)
             
             return {
