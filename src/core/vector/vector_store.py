@@ -316,18 +316,27 @@ class VectorStore:
             # 如果设置了相似度阈值，我们需要先获取足够多的结果，然后过滤
             actual_limit = limit if similarity_threshold is None else max(limit * 2, 100)  # 获取更多结果用于过滤
             
-            # 执行搜索（使用余弦相似度）
-            # LanceDB支持metric参数: "cosine", "l2", "dot"
-            results = self.table.search(query_vector, vector_column_name="vector")\
+            # 构建LanceDB查询
+            query = self.table.search(query_vector, vector_column_name="vector")\
                 .metric("cosine")\
-                .limit(actual_limit)\
-                .to_pandas()
+                .limit(actual_limit)
             
-            # 应用过滤条件
+            # 应用过滤条件（使用LanceDB的where子句）
             if filter:
                 for key, value in filter.items():
-                    if key in results.columns:
-                        results = results[results[key] == value]
+                    if isinstance(value, list):
+                        # 如果值是列表，构建in子句
+                        value_str = ", ".join([f"'{v}'" for v in value])
+                        query = query.where(f"{key} in ({value_str})")
+                    else:
+                        # 如果值是单个值，构建等式子句
+                        if isinstance(value, str):
+                            query = query.where(f"{key} = '{value}'")
+                        else:
+                            query = query.where(f"{key} = {value}")
+            
+            # 执行搜索
+            results = query.to_pandas()
             
             # 转换为字典列表（带有相似度计算）
             result_dicts = self._results_to_dicts(results)
@@ -339,12 +348,16 @@ class VectorStore:
             result_dicts = sorted(result_dicts, key=lambda x: x['similarity'], reverse=True)
             
             # 去重：根据file_path去重，保留相似度最高的
+            # 只有当file_path存在时才去重，否则保留所有结果
             seen_files = set()
             unique_results = []
             for r in result_dicts:
                 file_path = r.get('file_path', '')
-                if file_path and file_path not in seen_files:
-                    seen_files.add(file_path)
+                if file_path:  # 如果有file_path，则进行去重
+                    if file_path not in seen_files:
+                        seen_files.add(file_path)
+                        unique_results.append(r)
+                else:  # 如果没有file_path，保留所有结果
                     unique_results.append(r)
             result_dicts = unique_results
             
@@ -478,7 +491,7 @@ class VectorStore:
             
             # 找到要更新的向量
             vector_index = all_vectors[all_vectors['id'] == vector_id].index[0]
-            vector_to_update = all_vectors.iloc[vector_index]
+            vector_to_update = all_vectors.iloc[vector_index].copy()
             
             # 应用更新
             for key, value in updates.items():
