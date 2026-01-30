@@ -98,7 +98,7 @@ class APIHandlers:
                     file_name=result.get('file_name', ''),
                     file_type=file_type,
                     score=result.get('similarity', 0.0),
-                    modality=ModalityType.TEXT,
+                    modality=ModalityType(modality) if modality in ['image', 'video', 'audio', 'text'] else ModalityType.TEXT,
                     thumbnail_path=result.get('thumbnail_path'),
                     preview_path=result.get('preview_path'),
                     metadata=result.get('metadata'),
