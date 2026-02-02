@@ -28,7 +28,7 @@ class RelevanceFeedback:
         query_id: str,
         result_id: str,
         user_feedback: int,
-        feedback_type: str = "explicit"
+        feedback_type: str = "explicit",
     ) -> bool:
         """
         记录用户反馈
@@ -47,7 +47,7 @@ class RelevanceFeedback:
             "result_id": result_id,
             "user_feedback": user_feedback,
             "feedback_type": feedback_type,
-            "timestamp": datetime.now().isoformat()
+            "timestamp": datetime.now().isoformat(),
         }
 
         if query_id not in self.feedback_store:
@@ -55,13 +55,12 @@ class RelevanceFeedback:
 
         self.feedback_store[query_id].append(feedback_entry)
 
-        logger.info(f"记录反馈: query={query_id}, result={result_id}, feedback={user_feedback}")
+        logger.info(
+            f"记录反馈: query={query_id}, result={result_id}, feedback={user_feedback}"
+        )
         return True
 
-    async def get_feedback_for_query(
-        self,
-        query_id: str
-    ) -> List[Dict[str, Any]]:
+    async def get_feedback_for_query(self, query_id: str) -> List[Dict[str, Any]]:
         """
         获取查询的反馈记录
 
@@ -74,9 +73,7 @@ class RelevanceFeedback:
         return self.feedback_store.get(query_id, [])
 
     async def calculate_relevance_scores(
-        self,
-        query_id: str,
-        results: List[Dict[str, Any]]
+        self, query_id: str, results: List[Dict[str, Any]]
     ) -> List[Dict[str, Any]]:
         """
         计算基于反馈的相关性分数

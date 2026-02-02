@@ -46,7 +46,7 @@ def get_file_extension(file_path: str) -> str:
     Returns:
         文件扩展名（小写，不带点）
     """
-    return Path(file_path).suffix.lower().lstrip('.')
+    return Path(file_path).suffix.lower().lstrip(".")
 
 
 def get_file_size(file_path: str) -> int:
@@ -72,7 +72,7 @@ def format_file_size(size_bytes: int) -> str:
     Returns:
         格式化的文件大小字符串
     """
-    for unit in ['B', 'KB', 'MB', 'GB', 'TB']:
+    for unit in ["B", "KB", "MB", "GB", "TB"]:
         if size_bytes < 1024.0:
             return f"{size_bytes:.2f} {unit}"
         size_bytes /= 1024.0
@@ -100,8 +100,9 @@ def safe_filename(filename: str) -> str:
         安全的文件名
     """
     import re
+
     # 移除或替换不安全的字符
-    safe_name = re.sub(r'[\\/*?:"<>|]', '_', filename)
+    safe_name = re.sub(r'[\\/*?:"<>|]', "_", filename)
     # 限制文件名长度
     return safe_name[:255]
 
@@ -126,7 +127,9 @@ def deep_merge_dict(base: Dict[str, Any], update: Dict[str, Any]) -> Dict[str, A
     return result
 
 
-def flatten_dict(d: Dict[str, Any], parent_key: str = '', sep: str = '.') -> Dict[str, Any]:
+def flatten_dict(
+    d: Dict[str, Any], parent_key: str = "", sep: str = "."
+) -> Dict[str, Any]:
     """
     展平嵌套字典
 
@@ -159,10 +162,10 @@ def chunk_list(lst: List[Any], chunk_size: int) -> List[List[Any]]:
     Returns:
         分块后的列表
     """
-    return [lst[i:i + chunk_size] for i in range(0, len(lst), chunk_size)]
+    return [lst[i : i + chunk_size] for i in range(0, len(lst), chunk_size)]
 
 
-def truncate_string(s: str, max_length: int, suffix: str = '...') -> str:
+def truncate_string(s: str, max_length: int, suffix: str = "...") -> str:
     """
     截断字符串
 
@@ -176,4 +179,4 @@ def truncate_string(s: str, max_length: int, suffix: str = '...') -> str:
     """
     if len(s) <= max_length:
         return s
-    return s[:max_length - len(suffix)] + suffix
+    return s[: max_length - len(suffix)] + suffix

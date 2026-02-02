@@ -4,12 +4,12 @@ from .progress_dialog import (
     ProgressDialog,
     IndexingProgressDialog,
     SearchProgressDialog,
-    DownloadProgressDialog
+    DownloadProgressDialog,
 )
 
 __all__ = [
-    'ProgressDialog',
-    'IndexingProgressDialog',
-    'SearchProgressDialog',
-    'DownloadProgressDialog'
+    "ProgressDialog",
+    "IndexingProgressDialog",
+    "SearchProgressDialog",
+    "DownloadProgressDialog",
 ]

@@ -52,7 +52,11 @@ class LoggingConfig:
             if handlers.get("console", {}).get("enabled", True):
                 console_handler = logging.StreamHandler()
                 console_handler.setLevel(logging.DEBUG)
-                console_formatter = logging.Formatter(self.config.get("format", '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+                console_formatter = logging.Formatter(
+                    self.config.get(
+                        "format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                    )
+                )
                 console_handler.setFormatter(console_formatter)
                 root_logger.addHandler(console_handler)
 
@@ -60,8 +64,7 @@ class LoggingConfig:
             file_config = handlers.get("file", {})
             if file_config.get("enabled", True):
                 file_handler = self._create_file_handler(
-                    file_config.get("path", "logs/msearch.log"),
-                    logging.DEBUG
+                    file_config.get("path", "logs/msearch.log"), logging.DEBUG
                 )
                 if file_handler:
                     root_logger.addHandler(file_handler)
@@ -71,7 +74,7 @@ class LoggingConfig:
             if error_config.get("enabled", True):
                 error_handler = self._create_file_handler(
                     error_config.get("path", "logs/error.log"),
-                    getattr(logging, error_config.get("level", "ERROR"))
+                    getattr(logging, error_config.get("level", "ERROR")),
                 )
                 if error_handler:
                     root_logger.addHandler(error_handler)
@@ -81,7 +84,7 @@ class LoggingConfig:
             if perf_config.get("enabled", True):
                 perf_handler = self._create_file_handler(
                     perf_config.get("path", "logs/performance.log"),
-                    getattr(logging, perf_config.get("level", "INFO"))
+                    getattr(logging, perf_config.get("level", "INFO")),
                 )
                 if perf_handler:
                     root_logger.addHandler(perf_handler)
@@ -91,7 +94,7 @@ class LoggingConfig:
             if timestamp_config.get("enabled", True):
                 timestamp_handler = self._create_file_handler(
                     timestamp_config.get("path", "logs/timestamp.log"),
-                    getattr(logging, timestamp_config.get("level", "DEBUG"))
+                    getattr(logging, timestamp_config.get("level", "DEBUG")),
                 )
                 if timestamp_handler:
                     root_logger.addHandler(timestamp_handler)
@@ -102,7 +105,9 @@ class LoggingConfig:
             print(f"初始化日志系统失败: {e}")
             return False
 
-    def _create_file_handler(self, log_path: str, level: int) -> Optional[logging.Handler]:
+    def _create_file_handler(
+        self, log_path: str, level: int
+    ) -> Optional[logging.Handler]:
         """
         创建文件处理器
 
@@ -122,13 +127,14 @@ class LoggingConfig:
             backup_count = rotation.get("backup_count", 10)
 
             handler = logging.handlers.RotatingFileHandler(
-                log_file,
-                maxBytes=max_size,
-                backupCount=backup_count,
-                encoding='utf-8'
+                log_file, maxBytes=max_size, backupCount=backup_count, encoding="utf-8"
             )
             handler.setLevel(level)
-            formatter = logging.Formatter(self.config.get("format", '%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+            formatter = logging.Formatter(
+                self.config.get(
+                    "format", "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+                )
+            )
             handler.setFormatter(formatter)
             return handler
         except Exception as e:
@@ -191,7 +197,9 @@ class LoggingConfig:
             print(f"日志轮转失败: {e}")
             return False
 
-    def add_custom_handler(self, handler: logging.Handler, level: Optional[int] = None) -> None:
+    def add_custom_handler(
+        self, handler: logging.Handler, level: Optional[int] = None
+    ) -> None:
         """
         添加自定义日志处理器
 

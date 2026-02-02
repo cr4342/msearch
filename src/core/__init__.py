@@ -8,10 +8,10 @@ from .task.central_task_manager import CentralTaskManager as TaskManager
 from .logging.logging_config import LoggingConfig
 
 __all__ = [
-    'ConfigManager',
-    'DatabaseManager',
-    'VectorStore',
-    'EmbeddingEngine',
-    'TaskManager',
-    'LoggingConfig'
+    "ConfigManager",
+    "DatabaseManager",
+    "VectorStore",
+    "EmbeddingEngine",
+    "TaskManager",
+    "LoggingConfig",
 ]

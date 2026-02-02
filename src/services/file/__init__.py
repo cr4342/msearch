@@ -9,8 +9,4 @@ from .file_monitor import FileMonitor
 from .file_scanner import FileScanner
 from .file_indexer import FileIndexer
 
-__all__ = [
-    "FileMonitor",
-    "FileScanner",
-    "FileIndexer"
-]
+__all__ = ["FileMonitor", "FileScanner", "FileIndexer"]

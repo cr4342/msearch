@@ -3,7 +3,4 @@
 from .search_panel import SearchPanel
 from .result_panel import ResultPanel
 
-__all__ = [
-    'SearchPanel',
-    'ResultPanel'
-]
+__all__ = ["SearchPanel", "ResultPanel"]

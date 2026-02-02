@@ -23,46 +23,44 @@ from src.api_server import APIServer
 def create_api_server(config_path: str = "config/config.yml") -> APIServer:
     """
     创建API服务器实例
-    
+
     Args:
         config_path: 配置文件路径
-        
+
     Returns:
         API服务器实例
     """
     # 1. 创建配置管理器
     config_manager = ConfigManager(config_path=config_path)
-    
+
     # 2. 创建数据库管理器
     database_manager = DatabaseManager(config_manager.config)
-    
+
     # 3. 创建向量存储
     vector_store = VectorStore(config_manager.config)
-    
+
     # 4. 创建向量化引擎
     embedding_engine = EmbeddingEngine(config_manager.config)
-    
+
     # 5. 创建任务管理器
-    device = config_manager.config.get('models', {}).get('device', 'cpu')
+    device = config_manager.config.get("models", {}).get("device", "cpu")
     task_manager = CentralTaskManager(config_manager.config, device)
     task_manager.initialize()
-    
+
     # 6. 创建搜索引擎
     search_engine = SearchEngine(
         embedding_engine=embedding_engine,
-        vector_store=vector_store
+        vector_store=vector_store,
+        config=config_manager.config.get("search", {}),
     )
     search_engine.initialize()
-    
+
     # 7. 创建文件索引器
-    file_indexer = FileIndexer(
-        config=config_manager.config,
-        task_manager=task_manager
-    )
+    file_indexer = FileIndexer(config=config_manager.config, task_manager=task_manager)
     # 将依赖传递给file_indexer
     file_indexer.vector_store = vector_store
     file_indexer.embedding_engine = embedding_engine
-    
+
     # 8. 创建API服务器
     api_server = APIServer(
         config=config_manager,
@@ -71,9 +69,9 @@ def create_api_server(config_path: str = "config/config.yml") -> APIServer:
         embedding_engine=embedding_engine,
         task_manager=task_manager,
         search_engine=search_engine,
-        file_indexer=file_indexer
+        file_indexer=file_indexer,
     )
-    
+
     return api_server
 
 

@@ -7,11 +7,11 @@ from .audio_preprocessor import AudioPreprocessor
 from .media_utils import MediaInfoHelper, calculate_file_hash, check_duplicate_file
 
 __all__ = [
-    'MediaProcessor',
-    'ImagePreprocessor',
-    'VideoPreprocessor',
-    'AudioPreprocessor',
-    'MediaInfoHelper',
-    'calculate_file_hash',
-    'check_duplicate_file'
+    "MediaProcessor",
+    "ImagePreprocessor",
+    "VideoPreprocessor",
+    "AudioPreprocessor",
+    "MediaInfoHelper",
+    "calculate_file_hash",
+    "check_duplicate_file",
 ]

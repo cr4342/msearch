@@ -32,6 +32,17 @@ logging:
   log_file: logs/msearch.log
   rotation: daily
   rotation_size: 10MB
+media:
+  video:
+    large_video:
+      segment_duration: 5.0
+    scene_detection:
+      enabled: true
+      method: histogram
+      min_scene_length: 2.0
+      threshold: 30.0
+    short_video:
+      threshold: 6.0
 models:
   active_models:
   - chinese_clip_base
@@ -135,16 +146,33 @@ processing:
   audio:
     bitrate: 128000
     channels: 1
-    format: aac
-    min_duration: 5.0
+    format: wav
+    min_duration: 3.0
     quality: high
     sample_rate: 48000
 search:
+  audio_keywords:
+  - 音乐
+  - 歌曲
+  - BGM
+  - 背景音乐
+  - 讲话
+  - 会议
+  - 语音
+  - 对话
+  - 演讲
+  audio_weight_multiplier: 1.5
+  default_modality_weights:
+    audio: 0.0
+    image: 1.0
+    text: 1.0
+    video: 1.0
   max_distance: 0.5
   re_rank: true
   re_rank_top_k: 50
   similarity_threshold: 0.3
   top_k: 20
+  visual_weight_multiplier: 0.7
 task_manager:
   base_concurrent_tasks: 8
   concurrency_mode: dynamic

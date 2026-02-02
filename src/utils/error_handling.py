@@ -11,7 +11,7 @@ from .exceptions import MSearchError
 
 logger = logging.getLogger(__name__)
 
-T = TypeVar('T')
+T = TypeVar("T")
 
 
 class ErrorHandler:
@@ -27,7 +27,9 @@ class ErrorHandler:
         self.config = config
         self.custom_handlers: Dict[str, Callable[[Exception], None]] = {}
 
-    def handle_error(self, error: Exception, context: Optional[Dict[str, Any]] = None) -> None:
+    def handle_error(
+        self, error: Exception, context: Optional[Dict[str, Any]] = None
+    ) -> None:
         """
         处理错误
 
@@ -75,7 +77,9 @@ class ErrorHandler:
 
         return isinstance(error, retryable_errors)
 
-    def get_retry_delay(self, attempt: int, initial_delay: float = 1.0, multiplier: float = 2.0) -> float:
+    def get_retry_delay(
+        self, attempt: int, initial_delay: float = 1.0, multiplier: float = 2.0
+    ) -> float:
         """
         获取重试延迟
 
@@ -89,7 +93,12 @@ class ErrorHandler:
         """
         return initial_delay * (multiplier ** (attempt - 1))
 
-    def convert_exception(self, error: Exception, target_error_type: Type[MSearchError], context: Optional[Dict[str, Any]] = None) -> MSearchError:
+    def convert_exception(
+        self,
+        error: Exception,
+        target_error_type: Type[MSearchError],
+        context: Optional[Dict[str, Any]] = None,
+    ) -> MSearchError:
         """
         转换异常
 
@@ -106,7 +115,7 @@ class ErrorHandler:
 
         return target_error_type(
             message=str(error),
-            context=context or {"original_error": type(error).__name__}
+            context=context or {"original_error": type(error).__name__},
         )
 
     def get_error_code(self, error: Exception) -> str:
@@ -124,7 +133,9 @@ class ErrorHandler:
         else:
             return type(error).__name__
 
-    def register_custom_handler(self, error_type: Type[Exception], handler: Callable[[Exception], None]) -> None:
+    def register_custom_handler(
+        self, error_type: Type[Exception], handler: Callable[[Exception], None]
+    ) -> None:
         """
         注册自定义错误处理器
 
@@ -151,7 +162,7 @@ def retry(
     max_attempts: int = 3,
     initial_delay: float = 1.0,
     multiplier: float = 2.0,
-    exceptions: Tuple[Type[Exception], ...] = (Exception,)
+    exceptions: Tuple[Type[Exception], ...] = (Exception,),
 ):
     """
     重试装饰器
@@ -165,6 +176,7 @@ def retry(
     Returns:
         装饰器函数
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(*args, **kwargs) -> T:
@@ -176,20 +188,24 @@ def retry(
                     last_error = e
                     if attempt < max_attempts:
                         delay = initial_delay * (multiplier ** (attempt - 1))
-                        logger.warning(f"Attempt {attempt}/{max_attempts} failed: {str(e)}. Retrying in {delay:.1f}s...")
+                        logger.warning(
+                            f"Attempt {attempt}/{max_attempts} failed: {str(e)}. Retrying in {delay:.1f}s..."
+                        )
                         time.sleep(delay)
                     else:
                         logger.error(f"All {max_attempts} attempts failed: {str(e)}")
                         raise
             raise last_error  # type: ignore
+
         return wrapper
+
     return decorator
 
 
 def handle_errors(
     error_handler: Optional[ErrorHandler] = None,
     default_return: Any = None,
-    log_errors: bool = True
+    log_errors: bool = True,
 ):
     """
     错误处理装饰器
@@ -202,6 +218,7 @@ def handle_errors(
     Returns:
         装饰器函数
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(*args, **kwargs) -> T:
@@ -213,13 +230,14 @@ def handle_errors(
                 elif log_errors:
                     logger.error(f"Error in {func.__name__}: {str(e)}")
                 return default_return  # type: ignore
+
         return wrapper
+
     return decorator
 
 
 def convert_errors(
-    target_error_type: Type[MSearchError],
-    context: Optional[Dict[str, Any]] = None
+    target_error_type: Type[MSearchError], context: Optional[Dict[str, Any]] = None
 ):
     """
     异常转换装饰器
@@ -231,6 +249,7 @@ def convert_errors(
     Returns:
         装饰器函数
     """
+
     def decorator(func: Callable[..., T]) -> Callable[..., T]:
         @wraps(func)
         def wrapper(*args, **kwargs) -> T:
@@ -241,5 +260,7 @@ def convert_errors(
             except Exception as e:
                 error_handler = ErrorHandler({})
                 raise error_handler.convert_exception(e, target_error_type, context)
+
         return wrapper
+
     return decorator

@@ -14,10 +14,7 @@ class UnifiedDataAccess:
     """统一数据访问层"""
 
     def __init__(
-        self,
-        database_manager,
-        vector_store,
-        config: Optional[Dict[str, Any]] = None
+        self, database_manager, vector_store, config: Optional[Dict[str, Any]] = None
     ):
         """
         初始化统一数据访问层
@@ -36,7 +33,7 @@ class UnifiedDataAccess:
         query_vector: List[float],
         modality: str,
         top_k: int = 10,
-        filters: Optional[Dict[str, Any]] = None
+        filters: Optional[Dict[str, Any]] = None,
     ) -> List[Dict[str, Any]]:
         """
         搜索并返回包含元数据的结果
@@ -51,10 +48,7 @@ class UnifiedDataAccess:
             包含元数据的搜索结果列表
         """
         vector_results = await self.vector_store.search(
-            query_vector=query_vector,
-            modality=modality,
-            top_k=top_k,
-            filters=filters
+            query_vector=query_vector, modality=modality, top_k=top_k, filters=filters
         )
 
         results = []
@@ -63,18 +57,12 @@ class UnifiedDataAccess:
             metadata = await self.database_manager.get_metadata(file_id)
 
             if metadata:
-                result = {
-                    **item,
-                    "metadata": metadata
-                }
+                result = {**item, "metadata": metadata}
                 results.append(result)
 
         return results
 
-    async def get_file_with_vectors(
-        self,
-        file_id: str
-    ) -> Optional[Dict[str, Any]]:
+    async def get_file_with_vectors(self, file_id: str) -> Optional[Dict[str, Any]]:
         """
         获取文件及其向量数据
 
@@ -90,15 +78,10 @@ class UnifiedDataAccess:
 
         vectors = await self.vector_store.get_vectors_by_file_id(file_id)
 
-        return {
-            "metadata": metadata,
-            "vectors": vectors
-        }
+        return {"metadata": metadata, "vectors": vectors}
 
     async def delete_file_data(
-        self,
-        file_id: str,
-        delete_from_disk: bool = False
+        self, file_id: str, delete_from_disk: bool = False
     ) -> bool:
         """
         删除文件及其相关数据
@@ -132,7 +115,4 @@ class UnifiedDataAccess:
         db_stats = await self.database_manager.get_statistics()
         vector_stats = await self.vector_store.get_statistics()
 
-        return {
-            "database": db_stats,
-            "vector_store": vector_stats
-        }
+        return {"database": db_stats, "vector_store": vector_stats}

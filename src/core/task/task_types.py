@@ -9,6 +9,7 @@ from enum import Enum
 
 class TaskStatus(Enum):
     """任务状态枚举"""
+
     PENDING = "pending"
     RUNNING = "running"
     COMPLETED = "completed"
@@ -18,6 +19,7 @@ class TaskStatus(Enum):
 
 class TaskType(Enum):
     """任务类型枚举"""
+
     # 核心任务
     IMAGE_PREPROCESS = "image_preprocess"
     VIDEO_PREPROCESS = "video_preprocess"
@@ -27,7 +29,7 @@ class TaskType(Enum):
     FILE_EMBED_VIDEO = "file_embed_video"
     FILE_EMBED_AUDIO = "file_embed_audio"
     FILE_EMBED_TEXT = "file_embed_text"
-    
+
     # 辅助任务
     THUMBNAIL_GENERATE = "thumbnail_generate"
     PREVIEW_GENERATE = "preview_generate"

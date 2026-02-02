@@ -10,9 +10,4 @@ from .timeline import VideoTimelineGenerator
 from .query_processor import QueryProcessor
 from .result_ranker import ResultRanker
 
-__all__ = [
-    "SearchEngine",
-    "VideoTimelineGenerator",
-    "QueryProcessor",
-    "ResultRanker"
-]
+__all__ = ["SearchEngine", "VideoTimelineGenerator", "QueryProcessor", "ResultRanker"]

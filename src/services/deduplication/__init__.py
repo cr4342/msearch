@@ -7,4 +7,4 @@
 
 from .content_hash_deduplicator import ContentHashDeduplicator
 
-__all__ = ['ContentHashDeduplicator']
+__all__ = ["ContentHashDeduplicator"]

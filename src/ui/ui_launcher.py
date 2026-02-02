@@ -25,8 +25,7 @@ from src.ui.main_window import MainWindow
 
 # 配置日志
 logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s"
 )
 logger = logging.getLogger(__name__)
 
@@ -34,41 +33,41 @@ logger = logging.getLogger(__name__)
 def setup_application():
     """设置应用程序"""
     app = QApplication(sys.argv)
-    
+
     # 设置应用程序信息
     app.setApplicationName("msearch")
     app.setApplicationVersion("1.0.0")
     app.setOrganizationName("msearch Team")
-    
+
     # 设置默认字体
     font = QFont("Arial", 10)
     app.setFont(font)
-    
+
     # 启用高DPI缩放
     app.setAttribute(Qt.AA_EnableHighDpiScaling, True)
     app.setAttribute(Qt.AA_UseHighDpiPixmaps, True)
-    
+
     return app
 
 
 def main():
     """主函数"""
     logger.info("启动 msearch UI...")
-    
+
     try:
         # 设置应用程序
         app = setup_application()
-        
+
         # 创建主窗口
         logger.info("创建主窗口...")
         main_window = MainWindow()
         main_window.show()
-        
+
         logger.info("msearch UI 启动成功")
-        
+
         # 运行应用程序
         sys.exit(app.exec())
-        
+
     except KeyboardInterrupt:
         logger.info("用户中断，正在退出...")
         sys.exit(0)

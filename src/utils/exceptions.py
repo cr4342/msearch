@@ -9,7 +9,12 @@ from typing import Any, Dict, Optional
 class MSearchError(Exception):
     """MSearch自定义异常基类"""
 
-    def __init__(self, message: str, error_code: Optional[str] = None, context: Optional[Dict[str, Any]] = None):
+    def __init__(
+        self,
+        message: str,
+        error_code: Optional[str] = None,
+        context: Optional[Dict[str, Any]] = None,
+    ):
         """
         初始化异常
 

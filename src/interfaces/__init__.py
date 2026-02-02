@@ -8,7 +8,10 @@
 
 # 直接导入接口类
 from .embedding_interface import EmbeddingEngine as EmbeddingEngineInterface
-from .storage_interface import VectorStore as VectorStoreInterface, DatabaseManager as DatabaseInterface
+from .storage_interface import (
+    VectorStore as VectorStoreInterface,
+    DatabaseManager as DatabaseInterface,
+)
 from .search_interface import SearchEngine as SearchEngineInterface
 from .indexer_interface import FileIndexer as FileIndexerInterface
 from .task_interface import (
@@ -16,23 +19,23 @@ from .task_interface import (
     TaskSchedulerInterface,
     TaskExecutorInterface,
     TaskMonitorInterface,
-    TaskGroupManagerInterface
+    TaskGroupManagerInterface,
 )
 
 __all__ = [
     # 向量化接口
-    'EmbeddingEngineInterface',
+    "EmbeddingEngineInterface",
     # 存储接口
-    'VectorStoreInterface',
-    'DatabaseInterface',
+    "VectorStoreInterface",
+    "DatabaseInterface",
     # 搜索接口
-    'SearchEngineInterface',
+    "SearchEngineInterface",
     # 索引接口
-    'FileIndexerInterface',
+    "FileIndexerInterface",
     # 任务管理接口
-    'TaskManagerInterface',
-    'TaskSchedulerInterface',
-    'TaskExecutorInterface',
-    'TaskMonitorInterface',
-    'TaskGroupManagerInterface',
+    "TaskManagerInterface",
+    "TaskSchedulerInterface",
+    "TaskExecutorInterface",
+    "TaskMonitorInterface",
+    "TaskGroupManagerInterface",
 ]

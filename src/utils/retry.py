@@ -19,7 +19,7 @@ class RetryStrategy:
         initial_delay: float = 1.0,
         multiplier: float = 2.0,
         max_delay: float = 60.0,
-        jitter: bool = False
+        jitter: bool = False,
     ):
         """
         初始化重试策略
@@ -52,6 +52,7 @@ class RetryStrategy:
 
         if self.jitter:
             import random
+
             delay = delay * (0.5 + random.random())
 
         return delay
@@ -76,7 +77,7 @@ def retry_on_exception(
     multiplier: float = 2.0,
     max_delay: float = 60.0,
     exceptions: Tuple[Type[Exception], ...] = (Exception,),
-    on_retry: Optional[Callable[[int, Exception], None]] = None
+    on_retry: Optional[Callable[[int, Exception], None]] = None,
 ):
     """
     异常重试装饰器
@@ -92,6 +93,7 @@ def retry_on_exception(
     Returns:
         装饰器函数
     """
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         def wrapper(*args, **kwargs) -> Any:
             strategy = RetryStrategy(max_attempts, initial_delay, multiplier, max_delay)
@@ -104,7 +106,9 @@ def retry_on_exception(
                     last_error = e
                     if strategy.should_retry(attempt, e):
                         delay = strategy.get_delay(attempt)
-                        logger.warning(f"Attempt {attempt}/{max_attempts} failed: {str(e)}. Retrying in {delay:.1f}s...")
+                        logger.warning(
+                            f"Attempt {attempt}/{max_attempts} failed: {str(e)}. Retrying in {delay:.1f}s..."
+                        )
                         if on_retry:
                             on_retry(attempt, e)
                         time.sleep(delay)
@@ -115,6 +119,7 @@ def retry_on_exception(
             raise last_error  # type: ignore
 
         return wrapper
+
     return decorator
 
 
@@ -122,7 +127,7 @@ def retry_on_condition(
     max_attempts: int = 3,
     initial_delay: float = 1.0,
     multiplier: float = 2.0,
-    condition: Callable[[Any], bool] = lambda result: result is None
+    condition: Callable[[Any], bool] = lambda result: result is None,
 ):
     """
     条件重试装饰器
@@ -136,6 +141,7 @@ def retry_on_condition(
     Returns:
         装饰器函数
     """
+
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         def wrapper(*args, **kwargs) -> Any:
             strategy = RetryStrategy(max_attempts, initial_delay, multiplier)
@@ -149,7 +155,9 @@ def retry_on_condition(
 
                     if strategy.should_retry(attempt):
                         delay = strategy.get_delay(attempt)
-                        logger.warning(f"Attempt {attempt}/{max_attempts} did not meet condition. Retrying in {delay:.1f}s...")
+                        logger.warning(
+                            f"Attempt {attempt}/{max_attempts} did not meet condition. Retrying in {delay:.1f}s..."
+                        )
                         time.sleep(delay)
                     else:
                         return result
@@ -162,13 +170,12 @@ def retry_on_condition(
             return last_result
 
         return wrapper
+
     return decorator
 
 
 def exponential_backoff(
-    max_attempts: int = 3,
-    base_delay: float = 1.0,
-    max_delay: float = 60.0
+    max_attempts: int = 3, base_delay: float = 1.0, max_delay: float = 60.0
 ):
     """
     指数退避装饰器
@@ -185,5 +192,5 @@ def exponential_backoff(
         max_attempts=max_attempts,
         initial_delay=base_delay,
         multiplier=2.0,
-        max_delay=max_delay
+        max_delay=max_delay,
     )

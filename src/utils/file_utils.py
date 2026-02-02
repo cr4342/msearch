@@ -9,7 +9,9 @@ from typing import List, Optional
 from pathlib import Path
 
 
-def get_files_by_extension(directory: str, extensions: List[str], recursive: bool = True) -> List[str]:
+def get_files_by_extension(
+    directory: str, extensions: List[str], recursive: bool = True
+) -> List[str]:
     """
     根据扩展名获取文件列表
 
@@ -21,19 +23,19 @@ def get_files_by_extension(directory: str, extensions: List[str], recursive: boo
     Returns:
         文件路径列表
     """
-    extensions = [ext.lower().lstrip('.') for ext in extensions]
+    extensions = [ext.lower().lstrip(".") for ext in extensions]
     files = []
 
     if recursive:
         for root, _, filenames in os.walk(directory):
             for filename in filenames:
-                if any(filename.lower().endswith(f'.{ext}') for ext in extensions):
+                if any(filename.lower().endswith(f".{ext}") for ext in extensions):
                     files.append(os.path.join(root, filename))
     else:
         for filename in os.listdir(directory):
             filepath = os.path.join(directory, filename)
             if os.path.isfile(filepath):
-                if any(filename.lower().endswith(f'.{ext}') for ext in extensions):
+                if any(filename.lower().endswith(f".{ext}") for ext in extensions):
                     files.append(filepath)
 
     return files
@@ -49,8 +51,8 @@ def is_image_file(file_path: str) -> bool:
     Returns:
         是否为图像文件
     """
-    image_extensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'tiff']
-    return Path(file_path).suffix.lower().lstrip('.') in image_extensions
+    image_extensions = ["jpg", "jpeg", "png", "gif", "bmp", "webp", "tiff"]
+    return Path(file_path).suffix.lower().lstrip(".") in image_extensions
 
 
 def is_video_file(file_path: str) -> bool:
@@ -63,8 +65,8 @@ def is_video_file(file_path: str) -> bool:
     Returns:
         是否为视频文件
     """
-    video_extensions = ['mp4', 'avi', 'mov', 'mkv', 'flv', 'wmv', 'webm', 'm4v']
-    return Path(file_path).suffix.lower().lstrip('.') in video_extensions
+    video_extensions = ["mp4", "avi", "mov", "mkv", "flv", "wmv", "webm", "m4v"]
+    return Path(file_path).suffix.lower().lstrip(".") in video_extensions
 
 
 def is_audio_file(file_path: str) -> bool:
@@ -77,8 +79,8 @@ def is_audio_file(file_path: str) -> bool:
     Returns:
         是否为音频文件
     """
-    audio_extensions = ['mp3', 'wav', 'flac', 'aac', 'ogg', 'm4a', 'wma']
-    return Path(file_path).suffix.lower().lstrip('.') in audio_extensions
+    audio_extensions = ["mp3", "wav", "flac", "aac", "ogg", "m4a", "wma"]
+    return Path(file_path).suffix.lower().lstrip(".") in audio_extensions
 
 
 def ensure_directory_exists(directory: str) -> None:
@@ -129,7 +131,9 @@ def safe_delete_directory(directory: str) -> bool:
         return False
 
 
-def copy_file_with_progress(src: str, dst: str, progress_callback: Optional[callable] = None) -> bool:
+def copy_file_with_progress(
+    src: str, dst: str, progress_callback: Optional[callable] = None
+) -> bool:
     """
     带进度回调的文件复制
 
@@ -145,7 +149,7 @@ def copy_file_with_progress(src: str, dst: str, progress_callback: Optional[call
         file_size = os.path.getsize(src)
         copied = 0
 
-        with open(src, 'rb') as fsrc, open(dst, 'wb') as fdst:
+        with open(src, "rb") as fsrc, open(dst, "wb") as fdst:
             while True:
                 chunk = fsrc.read(1024 * 1024)  # 1MB chunks
                 if not chunk:
@@ -186,4 +190,4 @@ def is_hidden_file(file_path: str) -> bool:
         是否为隐藏文件
     """
     filename = os.path.basename(file_path)
-    return filename.startswith('.')
+    return filename.startswith(".")

@@ -637,22 +637,25 @@ file_monitor:
     - ".flac"
 
 # 音频预处理配置
-audio_preprocess:
-  target_sample_rate: 48000  # CLAP模型要求48kHz
-  target_channels: 1  # 单声道
-  normalize: true
-  trim_silence: false
+processing:
+  audio:
+    sample_rate: 48000  # CLAP模型要求48kHz
+    channels: 1  # 单声道
+    format: wav
+    min_duration: 3.0
 
 # 视频预处理配置
-video_preprocess:
-  scene_detection:
-    enabled: true
-    threshold: 0.3
-    min_scene_duration: 1.0
-  frame_extraction:
-    fps: 1.0  # 每秒提取1帧
-    max_frames: 100  # 最大提取帧数
-  short_video_threshold: 6.0  # 短视频阈值（秒）
+media:
+  video:
+    short_video:
+      threshold: 6.0  # 短视频阈值（秒）
+    large_video:
+      segment_duration: 5.0
+    scene_detection:
+      enabled: true
+      method: histogram
+      threshold: 30.0
+      min_scene_length: 2.0
 
 # 向量存储配置
 vector_store:
@@ -1411,6 +1414,11 @@ class SearchEngine:
         # 3. 后处理
         return self._post_process_results(results)
 ```
+
+**模态权重策略**：
+- **默认文本查询**：以文搜图/文搜视频（纯视觉）为主，音频权重默认设置为 0
+- **音频关键词触发**：当查询包含音频相关关键词时，按配置提升音频权重并适度降低视觉权重
+- **配置来源**：`config.yml -> search.default_modality_weights / audio_keywords / audio_weight_multiplier / visual_weight_multiplier`
 
 ## 2.9 WebUI 系统
 
@@ -2855,20 +2863,21 @@ class MainWindow(QMainWindow):
         # 主布局
         main_layout = QHBoxLayout(central_widget)
         
-        # 左侧面板 - 搜索
-        left_panel = self._create_search_panel()
+        # 左侧面板 - 搜索和任务管理
+        left_panel = self._create_left_panel()
         main_layout.addWidget(left_panel, 1)
         
         # 右侧面板 - 结果
         right_panel = self._create_result_panel()
         main_layout.addWidget(right_panel, 3)
         
-    def _create_search_panel(self) -> QWidget:
-        """创建搜索面板"""
+    def _create_left_panel(self) -> QWidget:
+        """创建左侧面板"""
         panel = QWidget()
         layout = QVBoxLayout(panel)
         
-        # 搜索输入
+        # 搜索区域
+        layout.addWidget(QLabel("🔍 搜索"))
         self.search_input = QLineEdit()
         self.search_input.setPlaceholderText("输入搜索内容...")
         layout.addWidget(self.search_input)
@@ -2878,12 +2887,114 @@ class MainWindow(QMainWindow):
         search_btn.clicked.connect(self._on_search)
         layout.addWidget(search_btn)
         
-        # 任务列表
-        layout.addWidget(QLabel("任务列表:"))
-        self.task_list = QListWidget()
+        # 分隔线
+        layout.addWidget(self._create_separator())
+        
+        # 监控目录区域
+        layout.addWidget(QLabel("📁 监控目录"))
+        self.monitored_directories_panel = self._create_monitored_directories_panel()
+        layout.addWidget(self.monitored_directories_panel)
+        
+        # 分隔线
+        layout.addWidget(self._create_separator())
+        
+        # 任务队列区域
+        layout.addWidget(QLabel("📋 任务队列"))
+        self.task_list = self._create_task_list()
         layout.addWidget(self.task_list)
         
         layout.addStretch()
+        return panel
+        
+    def _create_monitored_directories_panel(self) -> QWidget:
+        """创建监控目录面板"""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        
+        # 目录列表
+        self.directory_list = QListWidget()
+        self.directory_list.setAlternatingRowColors(True)
+        self.directory_list.setSelectionMode(QListWidget.NoSelection)
+        layout.addWidget(self.directory_list)
+        
+        # 控制按钮
+        controls_layout = QHBoxLayout()
+        add_btn = QPushButton("+ 添加")
+        add_btn.clicked.connect(self._add_directory)
+        remove_btn = QPushButton("- 移除")
+        remove_btn.clicked.connect(self._remove_directory)
+        controls_layout.addWidget(add_btn)
+        controls_layout.addWidget(remove_btn)
+        layout.addLayout(controls_layout)
+        
+        # 文件统计
+        self.stats_label = QLabel("总文件: 0 | 图像: 0 | 视频: 0 | 音频: 0")
+        layout.addWidget(self.stats_label)
+        
+        return panel
+        
+    def _create_task_list(self) -> QWidget:
+        """创建任务列表"""
+        panel = QWidget()
+        layout = QVBoxLayout(panel)
+        
+        # 任务过滤和排序
+        filter_layout = QHBoxLayout()
+        self.task_filter = QListWidget()
+        self.task_filter.setFlow(QListWidget.LeftToRight)
+        self.task_filter.setMaximumHeight(40)
+        self.task_filter.addItem("全部")
+        self.task_filter.addItem("待处理")
+        self.task_filter.addItem("运行中")
+        self.task_filter.addItem("已完成")
+        self.task_filter.addItem("失败")
+        layout.addWidget(self.task_filter)
+        
+        # 任务优先级控制
+        priority_layout = QHBoxLayout()
+        priority_layout.addWidget(QLabel("优先级:"))
+        self.video_priority = QComboBox()
+        self.video_priority.addItems(["高", "中", "低"])
+        self.video_priority.setCurrentText("中")
+        self.audio_priority = QComboBox()
+        self.audio_priority.addItems(["高", "中", "低"])
+        self.audio_priority.setCurrentText("中")
+        self.image_priority = QComboBox()
+        self.image_priority.addItems(["高", "中", "低"])
+        self.image_priority.setCurrentText("中")
+        priority_layout.addWidget(QLabel("视频:"))
+        priority_layout.addWidget(self.video_priority)
+        priority_layout.addWidget(QLabel("音频:"))
+        priority_layout.addWidget(self.audio_priority)
+        priority_layout.addWidget(QLabel("图像:"))
+        priority_layout.addWidget(self.image_priority)
+        apply_btn = QPushButton("应用")
+        apply_btn.clicked.connect(self._apply_priority_settings)
+        priority_layout.addWidget(apply_btn)
+        layout.addLayout(priority_layout)
+        
+        # 任务列表
+        self.task_list_widget = QListWidget()
+        self.task_list_widget.setAlternatingRowColors(True)
+        layout.addWidget(self.task_list_widget)
+        
+        # 进度信息
+        self.progress_label = QLabel("处理中: 0/0 | 预计剩余: 计算中...")
+        layout.addWidget(self.progress_label)
+        
+        # 控制按钮
+        controls_layout = QHBoxLayout()
+        self.pause_btn = QPushButton("暂停")
+        self.pause_btn.clicked.connect(self._pause_tasks)
+        self.resume_btn = QPushButton("恢复")
+        self.resume_btn.clicked.connect(self._resume_tasks)
+        self.cancel_btn = QPushButton("取消")
+        self.cancel_btn.clicked.connect(self._cancel_tasks)
+        controls_layout.addWidget(self.pause_btn)
+        controls_layout.addWidget(self.resume_btn)
+        controls_layout.addWidget(self.cancel_btn)
+        layout.addLayout(controls_layout)
+        
         return panel
         
     def _create_result_panel(self) -> QWidget:
@@ -2896,6 +3007,13 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.result_list)
         
         return panel
+        
+    def _create_separator(self) -> QWidget:
+        """创建分隔线"""
+        line = QWidget()
+        line.setFixedHeight(1)
+        line.setStyleSheet("background-color: #cccccc;")
+        return line
         
     def _on_search(self):
         """搜索按钮点击事件"""
@@ -2913,7 +3031,194 @@ class MainWindow(QMainWindow):
         self.result_list.clear()
         for result in results:
             self.result_list.addItem(result['file_name'])
+            
+    def _add_directory(self):
+        """添加监控目录"""
+        directory = QFileDialog.getExistingDirectory(self, "选择要监控的目录")
+        if directory:
+            # 调用API添加监控目录
+            self.api_client.add_monitored_directory(directory)
+            # 刷新目录列表
+            self._refresh_directories()
+            
+    def _remove_directory(self):
+        """移除监控目录"""
+        # 调用API移除监控目录
+        # 刷新目录列表
+        self._refresh_directories()
+        
+    def _refresh_directories(self):
+        """刷新监控目录列表"""
+        self.directory_list.clear()
+        # 调用API获取监控目录列表
+        directories = self.api_client.get_monitored_directories()
+        for dir_info in directories:
+            # 添加目录项，包含路径和状态
+            status_icon = "🟢" if dir_info['status'] == 'monitoring' else "🔴"
+            item_text = f"{status_icon} {dir_info['path']}"
+            self.directory_list.addItem(item_text)
+        # 更新文件统计
+        self._refresh_stats()
+        
+    def _refresh_stats(self):
+        """刷新文件统计信息"""
+        # 调用API获取文件统计
+        stats = self.api_client.get_file_stats()
+        self.stats_label.setText(
+            f"总文件: {stats['total']} | "
+            f"图像: {stats['image']} | "
+            f"视频: {stats['video']} | "
+            f"音频: {stats['audio']}"
+        )
+        
+    def _apply_priority_settings(self):
+        """应用优先级设置"""
+        # 调用API设置文件类型优先级
+        priority_settings = {
+            'video': self.video_priority.currentText(),
+            'audio': self.audio_priority.currentText(),
+            'image': self.image_priority.currentText()
+        }
+        self.api_client.set_priority_settings(priority_settings)
+        
+    def _pause_tasks(self):
+        """暂停任务"""
+        # 调用API暂停任务
+        self.api_client.pause_tasks()
+        
+    def _resume_tasks(self):
+        """恢复任务"""
+        # 调用API恢复任务
+        self.api_client.resume_tasks()
+        
+    def _cancel_tasks(self):
+        """取消任务"""
+        # 调用API取消任务
+        self.api_client.cancel_tasks()
 ```
+
+### 2.10.3 监控目录可视化设计
+
+#### 2.10.3.1 监控目录面板UI布局
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  📁 监控目录                                              │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 🟢 /data/project/msearch/testdata              │   │
+│  │   文件: 125 | 图像: 80 | 视频: 30 | 音频: 15     │   │
+│  │   [暂停] [删除]                                │   │
+│  ├─────────────────────────────────────────────────┤   │
+│  │ 🟢 /home/user/MediaLibrary                     │   │
+│  │   文件: 342 | 图像: 200 | 视频: 100 | 音频: 42    │   │
+│  │   [暂停] [删除]                                │   │
+│  ├─────────────────────────────────────────────────┤   │
+│  │ 🔴 /home/user/TempFiles                       │   │
+│  │   文件: 0 | 图像: 0 | 视频: 0 | 音频: 0          │   │
+│  │   状态: 错误 - 目录不可访问                     │   │
+│  │   [恢复] [删除]                                │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  [+ 添加目录]                                           │
+│                                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 总计: 467 | 图像: 280 | 视频: 130 | 音频: 57       │   │
+│  │ 新文件: 5 | 处理中: 12 | 待处理: 450               │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 2.10.3.2 目录状态指示器
+
+| 状态 | 图标 | 说明 |
+|------|------|------|
+| 监控中 | 🟢 | 目录正在正常监控 |
+| 暂停 | 🟡 | 目录监控已暂停 |
+| 错误 | 🔴 | 目录监控出错（不可访问、权限问题等） |
+| 初始化中 | 🔵 | 目录监控正在初始化 |
+
+### 2.10.4 任务优先级控制设计
+
+#### 2.10.4.1 任务优先级控制UI
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  📋 任务优先级控制                                       │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  文件类型优先级:                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 视频: [高 ▼] [中] [低]                           │   │
+│  │ 音频: [高] [中 ▼] [低]                           │   │
+│  │ 图像: [高] [中 ▼] [低]                           │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  [应用设置] [恢复默认]                                 │
+│                                                         │
+│  当前优先级队列:                                         │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 1. video_embed (优先级: 2)                     │   │
+│  │ 2. audio_embed (优先级: 3)                     │   │
+│  │ 3. image_embed (优先级: 5)                     │   │
+│  │ 4. thumbnail_gen (优先级: 9)                   │   │
+│  │ 5. preview_gen (优先级: 10)                    │   │
+│  └─────────────────────────────────────────────────┘   │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 2.10.4.2 优先级调整规则
+
+| 优先级 | 高 | 中 | 低 |
+|--------|-----|-----|-----|
+| 视频 | 1-2 | 4-5 | 8-9 |
+| 音频 | 1-2 | 4-5 | 8-9 |
+| 图像 | 1-2 | 4-5 | 8-9 |
+| 缩略图 | 8-9 | 9-10 | 10-11 |
+| 预览 | 8-9 | 9-10 | 10-11 |
+
+### 2.10.5 处理进度可视化设计
+
+#### 2.10.5.1 进度显示UI
+
+```
+┌─────────────────────────────────────────────────────────┐
+│  📊 处理进度                                            │
+├─────────────────────────────────────────────────────────┤
+│                                                         │
+│  总体进度:                                               │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ [██████████░░░░░░░░░░░░░░] 35%                  │   │
+│  │ 450/1280 文件                                     │   │
+│  │ 预计剩余时间: 00:45:23                           │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  当前处理:                                               │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 🎬 video_project_01.mp4                         │   │
+│  │ 类型: 视频 | 状态: 处理中                        │   │
+│  │ 进度: [███████████░░░░] 67%                      │   │
+│  │ 已用: 12.5s | 预计剩余: 6.2s                     │   │
+│  │ 任务: 向量化 (优先级: 2)                         │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  队列状态:                                               │
+│  ┌─────────────────────────────────────────────────┐   │
+│  │ 等待: 435 | 运行中: 3 | 完成: 842 | 失败: 0        │   │
+│  │ 速度: 12.5 文件/分钟 | 并发数: 4/8                │   │
+│  └─────────────────────────────────────────────────┘   │
+│                                                         │
+│  [暂停] [恢复] [取消]                                 │
+└─────────────────────────────────────────────────────────┘
+```
+
+#### 2.10.5.2 进度更新规则
+
+- **实时更新**: 进度信息每秒更新一次
+- **预计剩余时间**: 基于最近处理的平均速度计算
+- **处理速度**: 显示最近60秒的平均处理速度
+- **并发数**: 显示当前活跃任务数和最大并发数
 
 ---
 
