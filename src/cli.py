@@ -226,7 +226,8 @@ class MSearchCLI:
 
         print("\n总体统计:")
         overall = result["task_stats"]["overall"]
-        print(f"  - 总任务数: {overall['total']}")
+        total_tasks = result["task_stats"]["total"]
+        print(f"  - 总任务数: {total_tasks}")
         print(f"  - 待处理: {overall['pending']}")
         print(f"  - 运行中: {overall['running']}")
         print(f"  - 已完成: {overall['completed']}")
@@ -268,12 +269,12 @@ class MSearchCLI:
 
         result = self._request("GET", "/api/v1/tasks", params=params)
 
-        print(f"任务总数: {result['total']}")
+        print(f"任务总数: {result['total_tasks']}")
 
         if result["tasks"]:
             print("\n任务列表:")
             for i, task in enumerate(result["tasks"], 1):
-                print(f"\n  [{i}] 任务ID: {task['id'][:8]}...")
+                print(f"\n  [{i}] 任务ID: {task['task_id'][:8]}...")
                 print(f"      类型: {task['task_type']}")
                 print(f"      状态: {task['status']}")
                 print(f"      优先级: {task['priority']}")
@@ -292,7 +293,7 @@ class MSearchCLI:
 
         result = self._request("GET", f"/api/v1/tasks/{task_id}")
 
-        print(f"任务ID: {result['id']}")
+        print(f"任务ID: {result['task_id']}")
         print(f"类型: {result['task_type']}")
         print(f"状态: {result.get('success')}")
         print(f"优先级: {result['priority']}")

@@ -162,8 +162,9 @@ search:
   - 对话
   - 演讲
   audio_weight_multiplier: 1.5
+  visual_weight_multiplier: 0.7
   default_modality_weights:
-    audio: 0.0
+    audio: 1.0
     image: 1.0
     text: 1.0
     video: 1.0

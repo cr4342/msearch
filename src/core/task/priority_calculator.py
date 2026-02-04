@@ -56,7 +56,7 @@ class PriorityCalculator:
         self.wait_compensation_step = 1  # 每个间隔增加的补偿值
 
     def calculate_priority(
-        self, task: Task, file_info: Dict = None, file_priority: int = 5
+        self, task: Task, file_info: Dict = None, file_priority: int = 5, central_task_manager=None
     ) -> int:
         """
         计算任务优先级（根据设计文档公式）
@@ -65,6 +65,7 @@ class PriorityCalculator:
             task: 任务对象
             file_info: 文件信息字典
             file_priority: 文件级优先级（1-10）
+            central_task_manager: 中央任务管理器实例（用于检查连续性）
 
         Returns:
             计算后的优先级（数值越小优先级越高）
@@ -102,18 +103,27 @@ class PriorityCalculator:
                     wait_intervals * self.wait_compensation_step,
                 )
 
+            # 计算流水线连续性奖励
+            continuity_bonus = self._calculate_continuity_bonus(task)
+
+            # 如果提供了中央任务管理器，使用更精确的连续性判断
+            if central_task_manager:
+                if self._is_continuation_task(task, central_task_manager):
+                    continuity_bonus = -20  # 负值表示提高优先级
+
             # 计算最终优先级（根据设计文档公式）
             final_priority = (
                 base_priority * 1000  # 基础优先级权重：1000
                 + file_priority * 100  # 文件级优先级权重：100
                 + type_priority * 10  # 类型优先级权重：10
                 + wait_compensation  # 等待时间补偿权重：1
+                + continuity_bonus  # 流水线连续性奖励
             )
 
             logger.debug(
                 f"任务 {task.id} 优先级计算: 基础={base_priority}, "
                 f"文件优先级={file_priority}, 类型优先级={type_priority}, "
-                f"等待补偿={wait_compensation}, 最终={final_priority}"
+                f"等待补偿={wait_compensation}, 连续性奖励={continuity_bonus}, 最终={final_priority}"
             )
 
             return final_priority
@@ -151,23 +161,45 @@ class PriorityCalculator:
             "file_embed_image",
             "file_embed_video",
             "file_embed_audio",
+            "file_embed_text",  # 添加文本嵌入任务
         ]
         return task_type in pipeline_tasks
 
-    def _is_continuation_task(self, task: Task) -> bool:
+    def _is_continuation_task(self, task: Task, central_task_manager=None) -> bool:
         """
         检查是否为连续任务（同一文件的流水线任务）
 
         Args:
             task: 任务对象
+            central_task_manager: 中央任务管理器实例（可选）
 
         Returns:
             是否为连续任务
         """
-        # 这里需要访问任务管理系统来检查同一文件的其他任务状态
-        # 由于这是一个独立的组件，需要通过参数传入相关信息
-        # 在实际实现中，这里可能需要与中央任务管理器集成
-        return True  # 简化实现，实际应用中需要更复杂的逻辑
+        if not task.file_id or not central_task_manager:
+            return False
+
+        # 检查同一文件是否还有其他流水线任务在等待
+        # 通过中央任务管理器检查任务组状态
+        try:
+            # 如果提供了中央任务管理器，通过它检查任务组
+            group = central_task_manager.get_task_group(task.file_id)
+            if group:
+                # 检查是否有已完成的流水线任务
+                completed_tasks = group.get_completed_tasks()
+                pending_tasks = group.get_pending_tasks()
+                
+                # 如果当前任务是流水线任务，且在同一文件中还有其他已处理的任务
+                # 则认为它是连续任务，应获得优先级提升
+                if self._is_pipeline_task(task.task_type):
+                    # 检查是否有已处理过的流水线任务
+                    for completed_task in completed_tasks:
+                        if self._is_pipeline_task(completed_task.task_type):
+                            return True
+        except Exception as e:
+            logger.warning(f"检查连续任务时出错: {e}")
+        
+        return False
 
     def update_base_priority(self, task_type: str, priority: int) -> None:
         """

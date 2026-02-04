@@ -167,6 +167,9 @@ class TaskInfo(BaseModel):
     error_message: Optional[str] = None
     progress: Optional[float] = None
     result: Optional[Dict[str, Any]] = None
+    file_path: Optional[str] = None
+    duration: Optional[float] = None
+    tags: Optional[List[str]] = None
 
 
 class TasksListRequest(BaseModel):

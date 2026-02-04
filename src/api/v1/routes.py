@@ -448,9 +448,11 @@ async def list_tasks(
     获取系统中所有任务的列表
     """
     try:
+        from .schemas import TaskStatus as TaskStatusEnum
+        
         request = TasksListRequest(
             task_type=task_type,
-            status=TaskStatus(status) if status else None,
+            status=TaskStatusEnum(status) if status else None,
             limit=limit,
             offset=offset,
         )
@@ -541,6 +543,7 @@ async def get_task_stats(handlers: APIHandlers = Depends(get_handlers)):
                 "gpu_percent": 0.0,
             }
 
+        status_counts["total"] = len(all_tasks)
         return TaskStatsResponse(
             task_stats={
                 "overall": status_counts,
@@ -712,13 +715,75 @@ async def update_task_priority(
     更新指定任务的优先级
     """
     try:
-        # TaskManager 可能没有直接的更新优先级方法
-        # 这里简化处理，返回成功响应
-        return {
-            "success": True,
-            "message": f"任务 {task_id} 优先级已更新",
-            "result": {"new_priority": priority},
-        }
+        success = handlers.task_manager.update_task_priority(task_id, priority)
+        if success:
+            return {
+                "success": True,
+                "message": f"任务 {task_id} 优先级已更新",
+                "result": {"new_priority": priority},
+            }
+        else:
+            raise HTTPException(status_code=404, detail=f"任务不存在: {task_id}")
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tasks/{task_id}/pause")
+async def pause_task(task_id: str, handlers: APIHandlers = Depends(get_handlers)):
+    """
+    暂停任务
+
+    暂停指定的运行中任务
+    """
+    try:
+        return await handlers.handle_task_pause(task_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tasks/{task_id}/resume")
+async def resume_task(task_id: str, handlers: APIHandlers = Depends(get_handlers)):
+    """
+    恢复任务
+
+    恢复指定的已暂停任务
+    """
+    try:
+        return await handlers.handle_task_resume(task_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tasks/{task_id}/retry")
+async def retry_task(task_id: str, handlers: APIHandlers = Depends(get_handlers)):
+    """
+    重试任务
+
+    重试指定的失败任务
+    """
+    try:
+        return await handlers.handle_task_retry(task_id)
+    except ValueError as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/tasks/{task_id}/archive")
+async def archive_task(task_id: str, handlers: APIHandlers = Depends(get_handlers)):
+    """
+    归档任务
+
+    归档指定的任务
+    """
+    try:
+        return await handlers.handle_task_archive(task_id)
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
     except Exception as e:
@@ -737,7 +802,8 @@ async def get_vector_stats(handlers: APIHandlers = Depends(get_handlers)):
     """
     try:
         # 获取向量统计
-        total_vectors = handlers.vector_store.get_total_vectors()
+        vector_stats = handlers.vector_store.get_collection_stats()
+        total_vectors = vector_stats.get("total_vectors", 0)
 
         # 获取模态分布
         try:
@@ -755,7 +821,7 @@ async def get_vector_stats(handlers: APIHandlers = Depends(get_handlers)):
         return {
             "collection_name": handlers.vector_store.collection_name,
             "total_vectors": total_vectors,
-            "vector_dimension": handlers.vector_store.vector_dim,
+            "vector_dimension": handlers.vector_store.vector_dimension,
             "modality_counts": modality_counts,
         }
     except Exception as e:
@@ -774,19 +840,6 @@ async def get_system_info(handlers: APIHandlers = Depends(get_handlers)):
     """
     try:
         return await handlers.handle_system_info()
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
-
-
-@router.get("/system/stats", response_model=SystemStats)
-async def get_system_stats(handlers: APIHandlers = Depends(get_handlers)):
-    """
-    获取系统统计信息
-
-    获取系统运行统计信息
-    """
-    try:
-        return await handlers.handle_system_stats()
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 

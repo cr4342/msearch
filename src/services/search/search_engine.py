@@ -135,6 +135,9 @@ class SearchEngine:
         """
         执行文本搜索
 
+        支持跨模态检索：文本查询可以检索图像、视频和音频内容。
+        音频检索使用专门的CLAP模型进行跨模态匹配。
+
         Args:
             query: 查询文本
             k: 返回结果数量
@@ -150,34 +153,39 @@ class SearchEngine:
                 f"Searching with query: {query}, k: {k}, modalities: {modalities}"
             )
 
-            # 1. 文本向量化
-            query_vector = await self.embedding_engine.embed_text(query)
+            all_results = []
+            modalities = modalities or ["image", "video", "audio"]
 
-            # 2. 构建过滤条件
-            search_filters = {}
-            if modalities:
-                search_filters["modality"] = modalities
-            if filters:
-                search_filters.update(filters)
+            if "audio" in modalities:
+                audio_results = await self._search_audio_with_text(query, k, filters)
+                all_results.extend(audio_results)
+                logger.debug(f"Audio search returned {len(audio_results)} results")
 
-            # 3. 向量搜索
-            search_results = self.vector_store.search(
-                query_vector, limit=k, filter=search_filters if search_filters else None
-            )
+            image_video_modalities = [m for m in modalities if m in ["image", "video"]]
+            if image_video_modalities:
+                query_vector = await self.embedding_engine.embed_text(query)
 
-            # 4. 根据关键词调整模态权重
+                search_filters = {"modality": image_video_modalities}
+                if filters:
+                    search_filters.update(filters)
+
+                image_video_results = self.vector_store.search(
+                    query_vector,
+                    limit=k,
+                    filter=search_filters if search_filters else None
+                )
+                all_results.extend(image_video_results)
+                logger.debug(f"Image/Video search returned {len(image_video_results)} results")
+
             modality_weights = self._get_modality_weights(query)
             weighted_results = self._apply_modality_weights(
-                search_results, modality_weights
+                all_results, modality_weights
             )
 
-            # 5. 结果排序和过滤
             ranked_results = self._rank_results(weighted_results)
 
-            # 5. 结果聚合
             aggregated_results = self._aggregate_results(ranked_results)
 
-            # 6. 结果格式化
             formatted_results = self._format_results(aggregated_results)
 
             return {
@@ -191,6 +199,8 @@ class SearchEngine:
             }
         except Exception as e:
             logger.error(f"Failed to search: {e}")
+            import traceback
+            traceback.print_exc()
             return {
                 "status": "error",
                 "error": str(e),
@@ -198,6 +208,47 @@ class SearchEngine:
                 "results": [],
                 "total": 0,
             }
+
+    async def _search_audio_with_text(
+        self,
+        query: str,
+        k: int = 10,
+        filters: Optional[Dict[str, Any]] = None,
+    ) -> List[Dict[str, Any]]:
+        """
+        使用文本查询检索音频（跨模态检索）
+
+        使用CLAP模型的文本-音频检索能力，将文本查询转换为音频向量空间进行匹配。
+
+        Args:
+            query: 查询文本
+            k: 返回结果数量
+            filters: 过滤条件
+
+        Returns:
+            音频搜索结果列表
+        """
+        try:
+            audio_vector = await self.embedding_engine.embed_audio(
+                query, model_type="audio_model", is_text_query=True
+            )
+
+            search_filters = {"modality": "audio"}
+            if filters:
+                search_filters.update(filters)
+
+            audio_results = self.vector_store.search(
+                audio_vector,
+                limit=k,
+                filter=search_filters if search_filters else None
+            )
+
+            logger.debug(f"Audio search completed: {len(audio_results)} results for query '{query}'")
+            return audio_results
+
+        except Exception as e:
+            logger.warning(f"Audio search failed, skipping audio results: {e}")
+            return []
 
     async def image_search(
         self,

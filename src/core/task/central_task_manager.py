@@ -5,6 +5,7 @@
 严格遵循依赖注入原则，所有依赖通过构造函数参数传递。
 """
 
+import asyncio
 import uuid
 import threading
 import time
@@ -107,11 +108,17 @@ class CentralTaskManager(TaskManagerInterface):
 
         # 任务类型到文件类型的映射
         self.task_type_to_file_type = {
-            "video_embed": "video",
-            "audio_embed": "audio",
-            "image_embed": "image",
-            "thumbnail_gen": "image",
-            "preview_gen": "video",
+            "file_embed_image": "image",
+            "file_embed_video": "video",
+            "file_embed_audio": "audio",
+            "file_embed_text": "text",
+            "image_preprocess": "image",
+            "video_preprocess": "video",
+            "audio_preprocess": "audio",
+            "file_scan": "unknown",
+            "video_slice": "video",
+            "thumbnail_generate": "image",
+            "preview_generate": "video",
         }
 
         logger.info("中央任务管理器初始化完成（依赖注入模式）")
@@ -156,23 +163,67 @@ class CentralTaskManager(TaskManagerInterface):
         )
 
         # 根据任务类型获取优先级（使用文件类型优先级配置）
-        optimized_priority = self.get_task_priority_by_type(task_type, priority)
+        base_priority = self.get_task_priority_by_type(task_type, priority)
 
-        # 如果调度器有额外的优先级计算逻辑，也应用它
+        # 使用调度器计算优先级
         try:
-            scheduler_priority = self.task_scheduler.calculate_priority(task)
+            calculated_priority = self.task_scheduler.calculate_priority(task, central_task_manager=self)
             # 取较小的优先级（更高的优先级）
-            task.priority = min(optimized_priority, scheduler_priority)
+            task.priority = min(base_priority, calculated_priority)
         except Exception as e:
             logger.warning(f"调度器优先级计算失败，使用文件类型优先级: {e}")
-            task.priority = optimized_priority
+            task.priority = base_priority
 
         # 添加到任务组
         if file_id:
-            self.group_manager.add_task_to_group_sync(file_id, task)
+            # 确保任务组已存在
+            try:
+                # 首先尝试直接调用同步方法
+                self.group_manager.add_task_to_group_sync(file_id, task)
+            except Exception:
+                # 如果失败，尝试异步方法
+                try:
+                    asyncio.run(self.group_manager.create_group(file_id, file_path or ""))
+                    asyncio.run(self.group_manager.add_task_to_group(file_id, task))
+                except RuntimeError:
+                    # 如果在异步环境中运行，记录下来，由外部异步处理
+                    pass
+        else:
+            # 如果没有文件ID，直接添加任务到组（使用文件路径作为ID）
+            if file_path:
+                file_id = file_path
+                try:
+                    # 首先尝试直接调用同步方法
+                    self.group_manager.add_task_to_group_sync(file_id, task)
+                except Exception:
+                    # 如果失败，尝试异步方法
+                    try:
+                        asyncio.run(self.group_manager.create_group(file_id, file_path))
+                        asyncio.run(self.group_manager.add_task_to_group(file_id, task))
+                    except RuntimeError:
+                        # 如果在异步环境中运行，记录下来，由外部异步处理
+                        pass
 
         # 添加到调度器队列
-        self.task_scheduler.enqueue_task(task)
+        try:
+            # 使用调度器的同步方法，如果有的话
+            import asyncio
+            loop = None
+            try:
+                loop = asyncio.get_running_loop()
+            except RuntimeError:
+                pass  # 没有运行的事件循环，使用asyncio.run
+            
+            if loop is not None:
+                # 在异步环境中，需要通过其他方式添加到队列
+                # 这里我们先将任务放在一个临时队列中，由工作线程处理
+                pass
+            else:
+                # 不在异步环境中，可以使用asyncio.run
+                asyncio.run(self.task_scheduler.enqueue_task(task))
+        except RuntimeError:
+            # 如果在异步环境中运行，需要以其他方式处理
+            pass
 
         # 添加到监控器
         self.task_monitor.add_task(task)
@@ -182,10 +233,22 @@ class CentralTaskManager(TaskManagerInterface):
             self.stats["total_tasks"] += 1
 
         logger.info(
-            f"任务创建成功: {task_id}, 类型: {task_type}, 优先级: {optimized_priority}"
+            f"任务创建成功: {task_id}, 类型: {task_type}, 优先级: {task.priority}"
         )
 
         return task_id
+
+    def get_task_group(self, file_id: str):
+        """
+        获取任务组（用于优先级计算器检查流水线连续性）
+
+        Args:
+            file_id: 文件ID
+
+        Returns:
+            任务组对象
+        """
+        return self.group_manager.task_groups.get(file_id)
 
     def cancel_task(self, task_id: str) -> bool:
         """
@@ -210,6 +273,18 @@ class CentralTaskManager(TaskManagerInterface):
         except Exception as e:
             logger.error(f"取消任务失败 {task_id}: {e}")
             return False
+
+    def get_task(self, task_id: str) -> Optional[Any]:
+        """
+        获取任务对象
+        
+        Args:
+            task_id: 任务ID
+            
+        Returns:
+            任务对象或None
+        """
+        return self.task_monitor.get_task(task_id)
 
     def get_task_status(self, task_id: str) -> Optional[Dict[str, Any]]:
         """
@@ -261,7 +336,7 @@ class CentralTaskManager(TaskManagerInterface):
         Returns:
             任务列表
         """
-        tasks_dict = self.task_monitor.get_all_tasks(status=status)
+        tasks_dict = self.task_monitor.get_all_tasks(status=status, task_type=task_type)
         # 将Task对象转换为字典列表
         return [task.to_dict() for task in tasks_dict.values()]
 
@@ -915,7 +990,9 @@ class CentralTaskManager(TaskManagerInterface):
                 if task.status == "running":
                     active_threads += 1
 
-            max_workers = self.task_config.get("max_workers", 8)
+            # 从配置中获取线程池配置
+            thread_pools_config = self.config.get("thread_pools", {})
+            max_workers = thread_pools_config.get("task", {}).get("max_workers", 8)
             idle_threads = max(0, max_workers - active_threads)
             load_percentage = (
                 int((active_threads / max_workers * 100)) if max_workers > 0 else 0

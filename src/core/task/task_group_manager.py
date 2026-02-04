@@ -71,37 +71,37 @@ class TaskGroup:
 
     def get_pending_tasks(self) -> List[Task]:
         """获取待处理任务"""
-        return [t for t in self.tasks.values() if t.status == TaskStatus.PENDING]
+        return [t for t in self.tasks.values() if t.status == "pending"]
 
     def get_running_tasks(self) -> List[Task]:
         """获取运行中任务"""
-        return [t for t in self.tasks.values() if t.status == TaskStatus.RUNNING]
+        return [t for t in self.tasks.values() if t.status == "running"]
 
     def get_completed_tasks(self) -> List[Task]:
         """获取已完成任务"""
-        return [t for t in self.tasks.values() if t.status == TaskStatus.COMPLETED]
+        return [t for t in self.tasks.values() if t.status == "completed"]
 
     def get_failed_tasks(self) -> List[Task]:
         """获取失败任务"""
-        return [t for t in self.tasks.values() if t.status == TaskStatus.FAILED]
+        return [t for t in self.tasks.values() if t.status == "failed"]
 
     def get_core_tasks(self) -> List[Task]:
         """获取核心任务"""
         core_types = {
-            TaskType.IMAGE_PREPROCESS,
-            TaskType.VIDEO_PREPROCESS,
-            TaskType.AUDIO_PREPROCESS,
-            TaskType.VIDEO_SLICE,
-            TaskType.FILE_EMBED_IMAGE,
-            TaskType.FILE_EMBED_VIDEO,
-            TaskType.FILE_EMBED_AUDIO,
-            TaskType.FILE_EMBED_TEXT,
+            TaskType.IMAGE_PREPROCESS.value,
+            TaskType.VIDEO_PREPROCESS.value,
+            TaskType.AUDIO_PREPROCESS.value,
+            TaskType.VIDEO_SLICE.value,
+            TaskType.FILE_EMBED_IMAGE.value,
+            TaskType.FILE_EMBED_VIDEO.value,
+            TaskType.FILE_EMBED_AUDIO.value,
+            TaskType.FILE_EMBED_TEXT.value,
         }
-        return [t for t in self.tasks.values() if t.type in core_types]
+        return [t for t in self.tasks.values() if t.task_type in core_types]
 
     def get_pending_core_tasks(self) -> List[Task]:
         """获取待处理的核心任务"""
-        return [t for t in self.get_core_tasks() if t.status == TaskStatus.PENDING]
+        return [t for t in self.get_core_tasks() if t.status == "pending"]
 
     def has_pending_core_tasks(self) -> bool:
         """检查是否有待处理的核心任务"""

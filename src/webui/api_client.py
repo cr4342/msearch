@@ -193,6 +193,58 @@ class APIClient:
         data = {"priority": priority}
         return self._make_request("POST", endpoint, json=data)
 
+    def pause_task(self, task_id: str) -> Dict[str, Any]:
+        """
+        暂停任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            操作结果
+        """
+        endpoint = f"/api/v1/tasks/{task_id}/pause"
+        return self._make_request("POST", endpoint)
+
+    def resume_task(self, task_id: str) -> Dict[str, Any]:
+        """
+        恢复任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            操作结果
+        """
+        endpoint = f"/api/v1/tasks/{task_id}/resume"
+        return self._make_request("POST", endpoint)
+
+    def retry_task(self, task_id: str) -> Dict[str, Any]:
+        """
+        重试任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            操作结果
+        """
+        endpoint = f"/api/v1/tasks/{task_id}/retry"
+        return self._make_request("POST", endpoint)
+
+    def archive_task(self, task_id: str) -> Dict[str, Any]:
+        """
+        归档任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            操作结果
+        """
+        endpoint = f"/api/v1/tasks/{task_id}/archive"
+        return self._make_request("POST", endpoint)
+
     def cancel_task(self, task_id: str) -> Dict[str, Any]:
         """
         取消任务
@@ -203,8 +255,8 @@ class APIClient:
         Returns:
             操作结果
         """
-        endpoint = f"/api/v1/tasks/{task_id}/cancel"
-        return self._make_request("POST", endpoint)
+        endpoint = f"/api/v1/tasks/{task_id}"
+        return self._make_request("DELETE", endpoint)
 
     def cancel_all_tasks(self, cancel_running: bool = False) -> Dict[str, Any]:
         """

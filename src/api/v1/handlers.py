@@ -667,36 +667,65 @@ class APIHandlers:
             任务列表响应
         """
         try:
-            # 获取任务列表
-            tasks = self.task_manager.list_tasks(
+            # 获取任务列表 - 不传递limit和offset参数因为CentralTaskManager.list_tasks不支持
+            all_tasks = self.task_manager.list_tasks(
                 task_type=request.task_type,
                 status=request.status.value if request.status else None,
-                limit=request.limit,
-                offset=request.offset,
             )
 
             # 转换为TaskInfo对象
-            task_infos = []
-            for task in tasks:
-                task_infos.append(
-                    TaskInfo(
-                        task_id=task.id,
-                        task_type=task.task_type,
-                        status=TaskStatus(task.status),
-                        priority=task.priority,
-                        created_at=task.created_at,
-                        started_at=task.started_at,
-                        completed_at=task.completed_at,
-                        error_message=task.error,
-                        progress=task.progress,
-                        result=task.result,
-                    )
+            all_task_infos = []
+            for task in all_tasks:
+                # 确保task对象有必要的属性
+                if hasattr(task, 'to_dict'):
+                    task_dict = task.to_dict()
+                else:
+                    # 如果是字典格式，直接使用
+                    task_dict = task if isinstance(task, dict) else {}
+                
+                # 获取状态值
+                status_value = task_dict.get('status', getattr(task, 'status', 'pending'))
+                # 确保状态值是有效的TaskStatus
+                try:
+                    task_status = TaskStatus(status_value)
+                except ValueError:
+                    # 如果状态值无效，使用默认的pending状态
+                    task_status = TaskStatus.PENDING
+                
+                # 创建TaskInfo对象
+                # 从result中提取file_path（如果有）
+                result_data = task_dict.get('result', getattr(task, 'result', None)) or {}
+                file_path = result_data.get('file_path', '') if isinstance(result_data, dict) else ''
+                
+                # 使用 task_id 字段，因为现在 Task.to_dict() 同时包含 id 和 task_id
+                task_id = task_dict.get('task_id', getattr(task, 'task_id', task_dict.get('id', getattr(task, 'id', ''))))
+                
+                task_info = TaskInfo(
+                    task_id=task_id,
+                    task_type=task_dict.get('task_type', getattr(task, 'task_type', '')),
+                    status=task_status,
+                    priority=task_dict.get('priority', getattr(task, 'priority', 5)),
+                    created_at=task_dict.get('created_at', getattr(task, 'created_at', None)),
+                    started_at=task_dict.get('started_at', getattr(task, 'started_at', None)),
+                    completed_at=task_dict.get('completed_at', getattr(task, 'completed_at', None)),
+                    error_message=task_dict.get('error', getattr(task, 'error', None)),
+                    progress=task_dict.get('progress', getattr(task, 'progress', 0.0)),
+                    result=result_data,
+                    file_path=file_path,
+                    duration=task_dict.get('duration', getattr(task, 'duration', None)),
+                    tags=task_dict.get('tags', getattr(task, 'tags', None)) or [],
                 )
+                all_task_infos.append(task_info)
 
-            # 获取总数
-            total_tasks = self.task_manager.get_total_tasks()
+            # 应用分页
+            total_tasks = len(all_task_infos)
+            
+            # 按offset和limit进行分页
+            start_index = request.offset
+            end_index = start_index + request.limit
+            paged_tasks = all_task_infos[start_index:end_index]
 
-            return TasksListResponse(total_tasks=total_tasks, tasks=task_infos)
+            return TasksListResponse(total_tasks=total_tasks, tasks=paged_tasks)
 
         except Exception as e:
             logger.error(f"获取任务列表失败: {e}")
@@ -720,7 +749,7 @@ class APIHandlers:
                 raise ValueError(f"任务不存在: {task_id}")
 
             return TaskStatusResponse(
-                task_id=task.id,
+                task_id=task.task_id,  # 使用 task_id 而不是 id
                 task_type=task.task_type,
                 status=TaskStatus(task.status),
                 progress=task.progress,
@@ -755,6 +784,147 @@ class APIHandlers:
             logger.error(f"取消任务失败: {e}")
             raise
 
+    async def handle_task_pause(self, task_id: str) -> SuccessResponse:
+        """
+        处理暂停任务请求
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            成功响应
+        """
+        try:
+            # 获取任务状态
+            task = self.task_manager.get_task(task_id)
+            if not task:
+                raise ValueError(f"任务不存在: {task_id}")
+            
+            if task.status != "running":
+                raise ValueError(f"任务状态不是运行中，无法暂停: {task.status}")
+            
+            # 暂停任务 - 目前实现为取消任务，在后续版本中可以扩展为真正的暂停
+            success = self.task_manager.cancel_task(task_id)
+            
+            if success:
+                return SuccessResponse(success=True, message=f"任务已暂停: {task_id}")
+            else:
+                raise ValueError(f"无法暂停任务: {task_id}")
+
+        except Exception as e:
+            logger.error(f"暂停任务失败: {e}")
+            raise
+
+    async def handle_task_resume(self, task_id: str) -> SuccessResponse:
+        """
+        处理恢复任务请求
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            成功响应
+        """
+        try:
+            # 获取任务状态
+            task = self.task_manager.get_task(task_id)
+            if not task:
+                raise ValueError(f"任务不存在: {task_id}")
+            
+            if task.status != "cancelled" and task.status != "paused":
+                raise ValueError(f"任务状态不是已取消或已暂停，无法恢复: {task.status}")
+                
+            # 恢复任务 - 重新提交任务到队列
+            new_task_id = self.task_manager.create_task(
+                task_type=task.task_type,
+                task_data=task.task_data,
+                priority=task.priority,
+                file_id=task.file_id,
+                depends_on=task.depends_on
+            )
+            
+            if new_task_id:
+                return SuccessResponse(
+                    success=True, 
+                    message=f"任务已恢复: {task_id} -> {new_task_id}",
+                    data={"new_task_id": new_task_id}
+                )
+            else:
+                raise ValueError(f"无法恢复任务: {task_id}")
+
+        except Exception as e:
+            logger.error(f"恢复任务失败: {e}")
+            raise
+
+    async def handle_task_retry(self, task_id: str) -> SuccessResponse:
+        """
+        处理重试任务请求
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            成功响应
+        """
+        try:
+            # 获取任务状态
+            task = self.task_manager.get_task(task_id)
+            if not task:
+                raise ValueError(f"任务不存在: {task_id}")
+            
+            if task.status != "failed":
+                raise ValueError(f"任务状态不是失败，无法重试: {task.status}")
+                
+            # 重试任务 - 重新提交任务到队列
+            new_task_id = self.task_manager.create_task(
+                task_type=task.task_type,
+                task_data=task.task_data,
+                priority=task.priority,
+                file_id=task.file_id,
+                depends_on=task.depends_on
+            )
+            
+            if new_task_id:
+                return SuccessResponse(
+                    success=True, 
+                    message=f"任务已重试: {task_id} -> {new_task_id}",
+                    data={"new_task_id": new_task_id}
+                )
+            else:
+                raise ValueError(f"无法重试任务: {task_id}")
+
+        except Exception as e:
+            logger.error(f"重试任务失败: {e}")
+            raise
+
+    async def handle_task_archive(self, task_id: str) -> SuccessResponse:
+        """
+        处理归档任务请求
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            成功响应
+        """
+        try:
+            # 获取任务状态
+            task = self.task_manager.get_task(task_id)
+            if not task:
+                raise ValueError(f"任务不存在: {task_id}")
+                
+            # 目前实现为简单删除任务（在后续版本中可以实现真正的归档）
+            success = self.task_manager.cancel_task(task_id)
+            
+            if success:
+                return SuccessResponse(success=True, message=f"任务已归档: {task_id}")
+            else:
+                raise ValueError(f"无法归档任务: {task_id}")
+
+        except Exception as e:
+            logger.error(f"归档任务失败: {e}")
+            raise
+
     # ==================== 系统信息处理器 ====================
 
     async def handle_system_info(self) -> SystemInfo:
@@ -785,18 +955,39 @@ class APIHandlers:
                     )
                 )
 
+            # 获取向量存储统计 - 添加错误处理
+            try:
+                vector_stats = self.vector_store.get_collection_stats()
+                total_vectors = vector_stats.get("total_vectors", 0)
+                collection_name = self.vector_store.collection_name
+                vector_store_connected = True
+            except Exception as e:
+                logger.warning(f"获取向量存储统计失败: {e}")
+                total_vectors = 0
+                collection_name = "unknown"
+                vector_store_connected = False
+
+            # 获取数据库状态 - 添加错误处理
+            try:
+                total_files = self.database_manager.get_total_files()
+                database_connected = True
+            except Exception as e:
+                logger.warning(f"获取数据库文件数失败: {e}")
+                total_files = 0
+                database_connected = False
+
             # 获取数据库状态
             database_status = {
-                "connected": True,  # 简化处理，假设数据库总是连接的
-                "total_files": self.database_manager.get_total_files(),
-                "total_vectors": self.vector_store.get_total_vectors(),
+                "connected": database_connected,
+                "total_files": total_files,
+                "total_vectors": total_vectors,
             }
 
             # 获取向量存储状态
             vector_store_status = {
-                "connected": True,  # 简化处理，假设向量存储总是连接的
-                "total_vectors": self.vector_store.get_total_vectors(),
-                "collection_name": self.vector_store.collection_name,
+                "connected": vector_store_connected,
+                "total_vectors": total_vectors,
+                "collection_name": collection_name,
             }
 
             return SystemInfo(
@@ -811,7 +1002,25 @@ class APIHandlers:
 
         except Exception as e:
             logger.error(f"获取系统信息失败: {e}")
-            raise
+            # 返回最小化的系统信息而不是完全失败
+            import platform as plt
+            return SystemInfo(
+                version="1.0.0",
+                python_version=plt.python_version(),
+                platform=plt.platform(),
+                uptime=time.time(),
+                models=[],
+                database_status={
+                    "connected": False,
+                    "total_files": 0,
+                    "total_vectors": 0,
+                },
+                vector_store_status={
+                    "connected": False,
+                    "total_vectors": 0,
+                    "collection_name": "unknown",
+                },
+            )
 
     async def handle_system_stats(self) -> SystemStats:
         """

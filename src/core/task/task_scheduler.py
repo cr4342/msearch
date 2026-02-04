@@ -29,6 +29,7 @@ from enum import Enum
 
 from .task import Task
 from .task_types import TaskType, TaskStatus
+from .priority_calculator import PriorityCalculator
 
 
 logger = logging.getLogger(__name__)
@@ -65,27 +66,11 @@ class TaskScheduler:
     负责计算任务优先级和管理任务队列
     """
 
-    # 任务类型基础优先级映射
-    TASK_TYPE_PRIORITY = {
-        # 核心任务 - 高优先级
-        TaskType.IMAGE_PREPROCESS: 1,
-        TaskType.VIDEO_PREPROCESS: 1,
-        TaskType.AUDIO_PREPROCESS: 1,
-        TaskType.FILE_EMBED_IMAGE: 1,
-        TaskType.FILE_EMBED_TEXT: 1,
-        # 视频相关 - 中等优先级
-        TaskType.VIDEO_SLICE: 3,
-        TaskType.FILE_EMBED_VIDEO: 3,
-        # 音频相关 - 较低优先级
-        TaskType.FILE_EMBED_AUDIO: 4,
-        # 辅助任务 - 低优先级
-        TaskType.THUMBNAIL_GENERATE: 5,
-        TaskType.PREVIEW_GENERATE: 6,
-        TaskType.FILE_SCAN: 7,
-    }
-
     def __init__(self, config: Dict[str, Any]):
         self.config = config
+
+        # 优先级计算器
+        self.priority_calculator = PriorityCalculator()
 
         # 优先级队列
         self._queue: List[PrioritizedTask] = []
@@ -129,61 +114,33 @@ class TaskScheduler:
             self._task_index.clear()
         logger.info("TaskScheduler stopped")
 
-    def calculate_priority(
-        self, task_type: TaskType, file_priority: int = 5, created_at: float = None
-    ) -> int:
+    def calculate_priority(self, task: Task, central_task_manager=None) -> int:
         """
         计算任务优先级
 
-        公式：
-        final_priority = base_priority * 1000 + file_priority * 100 + type_priority * 10 + wait_compensation
-
-        其中：
-        - base_priority: 基础优先级（数值越小优先级越高）
-        - file_priority: 文件优先级（1-10，数值越小优先级越高）
-        - type_priority: 任务类型优先级（1-7，数值越小优先级越高）
-        - wait_compensation: 等待时间补偿（根据等待时间动态计算）
-
-        Args:
-            task_type: 任务类型
-            file_priority: 文件优先级（1-10，默认5）
-            created_at: 任务创建时间（用于计算等待时间补偿）
-
-        Returns:
-            计算后的优先级数值（越小优先级越高）
+        使用优先级计算器来计算任务的最终优先级
         """
-        # 基础优先级
-        base_priority = self.TASK_TYPE_PRIORITY.get(task_type, 5)
-
-        # 任务类型优先级
-        type_priority = self.TASK_TYPE_PRIORITY.get(task_type, 5)
-
-        # 等待时间补偿
-        wait_compensation = 0
-        if self.wait_time_compensation_enabled and created_at:
-            if isinstance(created_at, datetime):
-                # 如果是datetime对象，转换为时间戳
-                created_at_timestamp = created_at.timestamp()
-            else:
-                created_at_timestamp = created_at
-
-            wait_time = time.time() - created_at_timestamp
-            # 每60秒增加1点补偿值，最大999
-            wait_compensation = min(
-                self.wait_time_compensation_max,
-                int(wait_time / self.wait_time_compensation_interval),
-            )
-
-        # 计算最终优先级（数值越小优先级越高）
-        # 使用权重：基础优先级权重最高，其次是文件优先级，然后是类型优先级
-        final_priority = (
-            base_priority * 1000
-            + file_priority * 100
-            + type_priority * 10
-            + wait_compensation
-        )
-
-        return final_priority
+        # 使用文件优先级（如果任务有关联的文件）
+        file_priority = 5  # 默认优先级
+        if task.file_path and central_task_manager:
+            # 从文件路径中提取文件扩展名并映射到文件类型
+            try:
+                file_ext = task.file_path.split('.')[-1].lower() if task.file_path else 'unknown'
+                if file_ext in ['mp4', 'avi', 'mov', 'mkv', 'wmv', 'flv']:
+                    file_type = 'video'
+                elif file_ext in ['mp3', 'wav', 'flac', 'aac', 'ogg', 'wma']:
+                    file_type = 'audio'
+                elif file_ext in ['jpg', 'jpeg', 'png', 'bmp', 'gif', 'webp']:
+                    file_type = 'image'
+                else:
+                    file_type = 'unknown'
+                    
+                if file_type != 'unknown':
+                    file_priority = central_task_manager.get_file_type_priority(file_type)
+            except:
+                pass  # 使用默认优先级
+        
+        return self.priority_calculator.calculate_priority(task, file_priority=file_priority, central_task_manager=central_task_manager)
 
     def recalculate_priority(self, task: Task) -> int:
         """
@@ -191,44 +148,7 @@ class TaskScheduler:
 
         根据任务等待时间和当前状态重新计算优先级
         """
-        current_time = time.time()
-        # 处理datetime类型
-        if isinstance(task.created_at, datetime):
-            created_at_timestamp = task.created_at.timestamp()
-        else:
-            created_at_timestamp = task.created_at
-        wait_time = current_time - created_at_timestamp
-
-        # 基础优先级
-        base_priority = self.TASK_TYPE_PRIORITY.get(task.task_type, 5)
-
-        # 任务类型优先级
-        type_priority = self.TASK_TYPE_PRIORITY.get(task.task_type, 5)
-
-        # 等待时间补偿
-        wait_compensation = 0
-        if self.wait_time_compensation_enabled:
-            wait_compensation = min(
-                self.wait_time_compensation_max,
-                int(wait_time / self.wait_time_compensation_interval),
-            )
-
-        # 长时间等待的任务获得额外优先级提升
-        priority_boost = 0
-        if self.dynamic_priority_enabled and wait_time > self.priority_boost_threshold:
-            # 每超过5分钟，额外降低10点优先级值（提高优先级）
-            priority_boost = int((wait_time - self.priority_boost_threshold) / 300) * 10
-
-        # 计算最终优先级
-        final_priority = (
-            base_priority * 1000
-            + 5 * 100  # 使用默认文件优先级
-            + type_priority * 10
-            + wait_compensation
-            - priority_boost  # 长时间等待获得优先级提升
-        )
-
-        return max(0, final_priority)  # 确保非负
+        return self.priority_calculator.calculate_priority(task)
 
     async def enqueue_task(self, task: Task) -> bool:
         """
@@ -249,6 +169,9 @@ class TaskScheduler:
             if task.id in self._task_index:
                 logger.debug(f"Task already in queue: {task.id}")
                 return False
+
+            # 计算任务优先级
+            task.priority = self.calculate_priority(task)
 
             # 创建带优先级的任务包装器
             prioritized_task = PrioritizedTask(task)
@@ -304,12 +227,12 @@ class TaskScheduler:
     async def _dequeue_critical_task_only(self) -> Optional[Task]:
         """OOM临界状态下，只出队关键任务"""
         critical_types = {
-            TaskType.IMAGE_PREPROCESS,
-            TaskType.VIDEO_PREPROCESS,
-            TaskType.AUDIO_PREPROCESS,
-            TaskType.FILE_EMBED_IMAGE,
-            TaskType.FILE_EMBED_VIDEO,
-            TaskType.FILE_EMBED_AUDIO,
+            TaskType.IMAGE_PREPROCESS.value,
+            TaskType.VIDEO_PREPROCESS.value,
+            TaskType.AUDIO_PREPROCESS.value,
+            TaskType.FILE_EMBED_IMAGE.value,
+            TaskType.FILE_EMBED_VIDEO.value,
+            TaskType.FILE_EMBED_AUDIO.value,
         }
 
         # 遍历队列找出关键任务
@@ -320,7 +243,7 @@ class TaskScheduler:
             prioritized_task = heapq.heappop(self._queue)
             task = prioritized_task.task
 
-            if task.status != TaskStatus.PENDING:
+            if task.status != "pending":
                 continue
 
             if task.task_type in critical_types:

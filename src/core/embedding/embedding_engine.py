@@ -1077,16 +1077,23 @@ class EmbeddingEngine:
                 logger.error(f"视频向量化失败: {e}")
                 raise RuntimeError(f"视频向量化失败: {e}") from e
 
-    async def embed_audio(self, audio_path: str, model_type: str = None) -> List[float]:
+    async def embed_audio(
+        self,
+        audio_path: str,
+        model_type: str = None,
+        is_text_query: bool = False,
+    ) -> List[float]:
         """
         音频向量化（使用统一的EmbeddingService，基于Infinity框架）
 
-        注意：音频预处理（采样率转换、格式转换）应该在MediaProcessor/AudioPreprocessor中完成
-        这里使用EmbeddingService统一接口，model_manager会调用AudioPreprocessor进行预处理
+        支持两种模式：
+        1. 音频文件向量化（默认）：将音频文件转换为向量
+        2. 文本查询跨模态检索：使用CLAP模型将文本查询转换为音频向量空间
 
         Args:
-            audio_path: 音频文件路径
+            audio_path: 音频文件路径 或 文本查询
             model_type: 模型类型，默认为音频模型
+            is_text_query: 是否为文本查询（用于跨模态检索）
 
         Returns:
             向量嵌入
@@ -1101,26 +1108,27 @@ class EmbeddingEngine:
 
         with self.monitor_operation(f"embed_audio_{model_type}"):
             try:
-                if not os.path.exists(audio_path):
+                if not is_text_query and not os.path.exists(audio_path):
                     raise FileNotFoundError(f"音频文件不存在: {audio_path}")
 
-                # 懒加载：确保模型已加载
                 await self._ensure_models_loaded()
 
-                # 标记模型使用时间
                 self._mark_model_used(model_type)
 
-                # 检查内存状态
                 self.check_memory_and_adapt()
 
-                # 使用EmbeddingService统一向量化接口（按照设计文档要求）
-                # AudioPreprocessor会在model_manager的embed方法中被调用
-                embeddings = await self._embedding_service.embed(
-                    model_type, [audio_path], input_type="audio"
-                )
+                if is_text_query:
+                    embeddings = await self._embedding_service.embed(
+                        model_type, [audio_path], input_type="text"
+                    )
+                else:
+                    embeddings = await self._embedding_service.embed(
+                        model_type, [audio_path], input_type="audio"
+                    )
                 result = embeddings[0]
 
-                logger.debug(f"音频向量化成功: {audio_path}, 模型: {model_type}")
+                mode = "text_query" if is_text_query else "audio_file"
+                logger.debug(f"音频向量化成功: {mode}, 模型: {model_type}")
                 return result
             except FileNotFoundError as e:
                 logger.error(f"音频文件不存在: {e}")

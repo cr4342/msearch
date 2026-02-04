@@ -1,209 +1,406 @@
 #!/bin/bash
 ###############################################################################
-# msearch 启动脚本
-# 一键启动完整应用（API服务 + WebUI）
+# msearch 统一启动脚本
+# 整合所有启动功能：API服务、WebUI、离线模式等
 ###############################################################################
 
 set -e
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" &>/dev/null && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 
 # 颜色定义
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+CYAN='\033[0;36m'
+NC='\033[0m'
 
-# 打印函数
-print_info() {
-    echo -e "${BLUE}[INFO]${NC} $1"
+# PID文件
+BACKEND_PID_FILE="$PROJECT_ROOT/data/pids/msearch-backend.pid"
+WEBUI_PID_FILE="$PROJECT_ROOT/data/pids/msearch-webui.pid"
+LOG_DIR="$PROJECT_ROOT/logs"
+BACKEND_LOG_FILE="$LOG_DIR/backend.log"
+WEBUI_LOG_FILE="$LOG_DIR/webui.log"
+
+print_msg() {
+    local color=$1
+    local message=$2
+    echo -e "${color}${message}${NC}"
 }
 
-print_success() {
-    echo -e "${GREEN}[SUCCESS]${NC} $1"
+print_header() {
+    echo -e "\n${CYAN}=====================================================${NC}"
+    echo -e "${CYAN}  $1${NC}"
+    echo -e "${CYAN}=====================================================${NC}"
 }
-
-print_warning() {
-    echo -e "${YELLOW}[WARNING]${NC} $1"
-}
-
-print_error() {
-    echo -e "${RED}[ERROR]${NC} $1"
-}
-
-# 获取脚本所在目录
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
-
-# 切换到项目根目录
-cd "$PROJECT_ROOT"
-
-# 设置离线环境变量
-export HF_HOME="$PROJECT_ROOT/data/models"
-export TRANSFORMERS_OFFLINE=1
-export HF_DATASETS_OFFLINE=1
-export HF_HUB_OFFLINE=1
-export INFINITY_LOCAL_MODE=1
-export NO_PROXY='*'
-export no_proxy='*'
-
-print_info "========================================"
-print_info "  msearch 多模态搜索系统 - 启动"
-print_info "========================================"
-print_info ""
-
-# 检查虚拟环境
-if [ ! -d "venv" ]; then
-    print_error "虚拟环境不存在，请先运行安装脚本: bash scripts/install.sh"
-    exit 1
-fi
 
 # 激活虚拟环境
-print_info "激活虚拟环境..."
-source venv/bin/activate
+activate_venv() {
+    VENV_PATH="$PROJECT_ROOT/venv"
+    if [ ! -d "$VENV_PATH" ]; then
+        print_msg "$RED" "错误: 虚拟环境不存在"
+        print_msg "$YELLOW" "请先运行: bash scripts/install.sh"
+        exit 1
+    fi
+    source "$VENV_PATH/bin/activate"
+}
+
+# 设置环境变量
+setup_env() {
+    export PYTHONPATH="$PROJECT_ROOT/src:$PYTHONPATH"
+    export MSEARCH_CONFIG="$PROJECT_ROOT/config/config.yml"
+    export MSEARCH_DATA_DIR="$PROJECT_ROOT/data"
+    export MSEARCH_LOG_LEVEL="INFO"
+    
+    export HF_HOME="$PROJECT_ROOT/data/models"
+    export TRANSFORMERS_OFFLINE=1
+    export HF_DATASETS_OFFLINE=1
+    export HF_HUB_OFFLINE=1
+    export HF_HUB_DISABLE_IMPORT_ERROR=1
+    
+    print_msg "$BLUE" "环境变量配置完成"
+    print_msg "$BLUE" "  - PYTHONPATH: $PYTHONPATH"
+    print_msg "$BLUE" "  - MSEARCH_CONFIG: $MSEARCH_CONFIG"
+    print_msg "$BLUE" "  - 离线模式: 已启用"
+}
 
 # 检查依赖
-print_info "检查依赖..."
-python -c "import fastapi; import infinity_emb" 2>/dev/null || {
-    print_error "依赖未安装，请先运行: bash scripts/install.sh"
-    exit 1
+check_dependencies() {
+    print_msg "$BLUE" "检查依赖..."
+    
+    if ! python -c "import gradio" 2>/dev/null; then
+        print_msg "$YELLOW" "缺少 gradio 依赖，正在安装..."
+        pip install gradio
+    fi
+    
+    if ! python -c "import fastapi" 2>/dev/null; then
+        print_msg "$YELLOW" "缺少 fastapi 依赖，正在安装..."
+        pip install fastapi uvicorn
+    fi
+    
+    print_msg "$GREEN" "✓ 依赖检查通过"
 }
 
-# 检查模型
-print_info "检查模型..."
-python scripts/setup_models.py check || {
-    print_warning "模型未完整下载，尝试下载..."
-    python scripts/setup_models.py setup || {
-        print_error "模型下载失败，请手动下载: python scripts/setup_models.py setup"
+# 检查后端是否运行
+is_backend_running() {
+    if [ -f "$BACKEND_PID_FILE" ]; then
+        local pid=$(cat "$BACKEND_PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# 检查WebUI是否运行
+is_webui_running() {
+    if [ -f "$WEBUI_PID_FILE" ]; then
+        local pid=$(cat "$WEBUI_PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            return 0
+        fi
+    fi
+    return 1
+}
+
+# 停止服务
+stop() {
+    print_header "停止 msearch 服务"
+
+    # 停止WebUI
+    if [ -f "$WEBUI_PID_FILE" ]; then
+        local pid=$(cat "$WEBUI_PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            print_msg "$YELLOW" "正在停止 WebUI 服务 (PID: $pid)..."
+            kill "$pid" 2>/dev/null || true
+            
+            local count=0
+            while kill -0 "$pid" 2>/dev/null && [ $count -lt 10 ]; do
+                sleep 1
+                ((count++))
+            done
+            
+            if kill -0 "$pid" 2>/dev/null; then
+                kill -9 "$pid" 2>/dev/null || true
+            fi
+        fi
+        rm -f "$WEBUI_PID_FILE"
+        print_msg "$GREEN" "✓ WebUI 服务已停止"
+    else
+        print_msg "$YELLOW" "WebUI 服务未运行"
+    fi
+
+    # 停止后端API
+    if [ -f "$BACKEND_PID_FILE" ]; then
+        local pid=$(cat "$BACKEND_PID_FILE")
+        if kill -0 "$pid" 2>/dev/null; then
+            print_msg "$YELLOW" "正在停止 后端API 服务 (PID: $pid)..."
+            kill "$pid" 2>/dev/null || true
+            
+            local count=0
+            while kill -0 "$pid" 2>/dev/null && [ $count -lt 10 ]; do
+                sleep 1
+                ((count++))
+            done
+            
+            if kill -0 "$pid" 2>/dev/null; then
+                kill -9 "$pid" 2>/dev/null || true
+            fi
+        fi
+        rm -f "$BACKEND_PID_FILE"
+        print_msg "$GREEN" "✓ 后端API服务已停止"
+    else
+        print_msg "$YELLOW" "后端API服务未运行"
+    fi
+    
+    # 清理残留进程
+    print_msg "$BLUE" "清理残留进程..."
+    pkill -f "src/webui/app.py" 2>/dev/null || true
+    pkill -f "src/api_server.py" 2>/dev/null || true
+    pkill -f "src/main.py" 2>/dev/null || true
+    print_msg "$GREEN" "✓ 残留进程已清理"
+}
+
+# 启动后端API
+start_backend() {
+    if is_backend_running; then
+        local pid=$(cat "$BACKEND_PID_FILE")
+        print_msg "$YELLOW" "后端API服务已在运行 (PID: $pid)"
+        return 0
+    fi
+    
+    print_msg "$BLUE" "启动后端API服务..."
+    cd "$PROJECT_ROOT"
+    
+    nohup python src/api_server.py > "$BACKEND_LOG_FILE" 2>&1 &
+    
+    local backend_pid=$!
+    echo "$backend_pid" > "$BACKEND_PID_FILE"
+    
+    print_msg "$BLUE" "等待后端API服务启动..."
+    sleep 8
+    
+    if kill -0 "$backend_pid" 2>/dev/null; then
+        print_msg "$GREEN" "✓ 后端API服务启动成功 (PID: $backend_pid)"
+        print_msg "$GREEN" "✓ API地址: http://localhost:8000"
+    else
+        print_msg "$RED" "✗ 后端API服务启动失败"
+        print_msg "$YELLOW" "查看日志: tail -f $BACKEND_LOG_FILE"
+        rm -f "$BACKEND_PID_FILE"
         exit 1
-    }
+    fi
 }
-
-# 创建日志目录
-mkdir -p logs
-
-# 启动主程序
-print_info "启动主程序..."
-MAIN_PID=""
-python src/main.py > logs/main.log 2>&1 &
-MAIN_PID=$!
-
-# 等待主程序启动
-print_info "等待主程序启动..."
-sleep 5
-
-# 检查主程序是否成功启动
-if ! kill -0 $MAIN_PID 2>/dev/null; then
-    print_error "主程序启动失败，查看日志: tail -f logs/main.log"
-    exit 1
-fi
-
-print_success "主程序已启动 (PID: $MAIN_PID)"
-
-# 启动API服务
-print_info "启动API服务..."
-API_PID=""
-python src/api_server.py > logs/api.log 2>&1 &
-API_PID=$!
-
-# 等待API服务启动
-print_info "等待API服务启动..."
-sleep 5
-
-# 检查API服务是否成功启动
-if ! kill -0 $API_PID 2>/dev/null; then
-    print_error "API服务启动失败，查看日志: tail -f logs/api.log"
-    exit 1
-fi
-
-print_success "API服务已启动 (PID: $API_PID)"
-
-# 获取API服务端口
-API_PORT=$(grep -E "port:\s*[0-9]+" config/config.yml 2>/dev/null | awk '{print $2}' || echo "8000")
 
 # 启动WebUI
-print_info "启动WebUI..."
-if [ -f "webui/index.html" ]; then
-    # 使用Python内置HTTP服务器
-    WEBUI_PID=""
-    python -m http.server 8080 --directory webui > logs/webui.log 2>&1 &
-    WEBUI_PID=$!
+start_webui() {
+    if is_webui_running; then
+        local pid=$(cat "$WEBUI_PID_FILE")
+        print_msg "$YELLOW" "WebUI服务已在运行 (PID: $pid)"
+        return 0
+    fi
+    
+    print_msg "$BLUE" "启动 WebUI 服务..."
+    cd "$PROJECT_ROOT"
+    
+    export GRADIO_SERVER_PORT=7860
+    
+    nohup python src/webui/app.py > "$WEBUI_LOG_FILE" 2>&1 &
+    
+    local webui_pid=$!
+    echo "$webui_pid" > "$WEBUI_PID_FILE"
+    
+    print_msg "$BLUE" "等待 WebUI 服务启动..."
+    sleep 5
+    
+    if kill -0 "$webui_pid" 2>/dev/null; then
+        print_msg "$GREEN" "✓ WebUI 服务启动成功 (PID: $webui_pid)"
+        print_msg "$GREEN" "✓ WebUI 地址: http://localhost:7860"
+        print_msg "$GREEN" "✓ 日志文件: $WEBUI_LOG_FILE"
+    else
+        print_msg "$RED" "✗ WebUI 服务启动失败"
+        print_msg "$YELLOW" "查看日志: tail -f $WEBUI_LOG_FILE"
+        rm -f "$WEBUI_PID_FILE"
+        exit 1
+    fi
+}
+
+# 启动完整服务
+start() {
+    print_header "启动 msearch 完整服务"
+    
+    activate_venv
+    check_dependencies
+    setup_env
+    
+    print_msg "$BLUE" "准备启动环境..."
+    mkdir -p "$PROJECT_ROOT/logs"
+    mkdir -p "$PROJECT_ROOT/data/pids"
+    mkdir -p "$PROJECT_ROOT/data/models"
+    mkdir -p "$PROJECT_ROOT/testdata"
+    
+    start_backend
     
     sleep 2
     
-    if ! kill -0 $WEBUI_PID 2>/dev/null; then
-        print_warning "WebUI启动失败，但API服务仍在运行"
-    else
-        print_success "WebUI已启动 (PID: $WEBUI_PID)"
-    fi
-else
-    print_warning "WebUI文件不存在，跳过启动"
-fi
-
-print_info ""
-print_info "========================================"
-print_success "msearch 已成功启动！"
-print_info "========================================"
-print_info ""
-print_info "服务地址："
-print_info "  - API服务: http://localhost:$API_PORT"
-print_info "  - WebUI:   http://localhost:8080"
-print_info "  - API文档: http://localhost:$API_PORT/docs"
-print_info ""
-print_info "使用方法："
-print_info "  1. 打开浏览器访问: http://localhost:8080"
-print_info "  2. 选择搜索类型（文本/图像/音频）"
-print_info "  3. 输入查询或上传文件"
-print_info "  4. 点击搜索查看结果"
-print_info ""
-print_info "停止服务："
-print_info "  按 Ctrl+C 停止"
-print_info "  或运行: pkill -f 'python src/api_server.py'"
-print_info ""
-print_info "========================================"
-print_info "进程信息"
-print_info "========================================"
-print_info "主程序 PID:  $MAIN_PID"
-print_info "API服务 PID:  $API_PID"
-if [ -n "$WEBUI_PID" ]; then
-    print_info "WebUI PID:   $WEBUI_PID"
-fi
-print_info ""
-print_info "日志文件："
-print_info "  - 主程序日志: logs/main.log"
-print_info "  - API日志:    logs/api.log"
-print_info "  - WebUI日志:  logs/webui.log"
-print_info "========================================"
-print_info ""
-
-# 捕获退出信号，清理进程
-cleanup() {
-    print_info ""
-    print_info "正在停止服务..."
+    start_webui
     
-    if [ -n "$MAIN_PID" ] && kill -0 $MAIN_PID 2>/dev/null; then
-        print_info "停止主程序 (PID: $MAIN_PID)..."
-        kill $MAIN_PID 2>/dev/null || true
-        wait $MAIN_PID 2>/dev/null || true
-    fi
+    print_msg "$GREEN" ""
+    print_msg "$GREEN" "✓ msearch 完整服务启动成功！"
     
-    if [ -n "$API_PID" ] && kill -0 $API_PID 2>/dev/null; then
-        print_info "停止API服务 (PID: $API_PID)..."
-        kill $API_PID 2>/dev/null || true
-        wait $API_PID 2>/dev/null || true
-    fi
-    
-    if [ -n "$WEBUI_PID" ] && kill -0 $WEBUI_PID 2>/dev/null; then
-        print_info "停止WebUI (PID: $WEBUI_PID)..."
-        kill $WEBUI_PID 2>/dev/null || true
-        wait $WEBUI_PID 2>/dev/null || true
-    fi
-    
-    print_success "所有服务已停止"
-    exit 0
+    print_msg "$YELLOW" ""
+    print_msg "$YELLOW" "使用提示:"
+    print_msg "$YELLOW" "  1. WebUI界面: http://localhost:7860"
+    print_msg "$YELLOW" "  2. API接口: http://localhost:8000/docs"
+    print_msg "$YELLOW" "  3. 文件监控: 自动监控 testdata 目录"
+    print_msg "$YELLOW" "  4. 任务管理: 通过WebUI查看索引任务"
+    print_msg "$YELLOW" ""
+    print_msg "$YELLOW" "注意: 系统会自动监控 testdata 目录中的文件变化并创建索引任务"
 }
 
-# 注册信号处理
-trap cleanup SIGINT SIGTERM
+# 启动API服务
+start_api() {
+    print_header "启动 msearch API 服务"
+    
+    activate_venv
+    setup_env
+    
+    mkdir -p "$PROJECT_ROOT/logs"
+    mkdir -p "$PROJECT_ROOT/data/pids"
+    
+    start_backend
+    
+    print_msg "$YELLOW" ""
+    print_msg "$YELLOW" "使用提示:"
+    print_msg "$YELLOW" "  1. API接口: http://localhost:8000/docs"
+    print_msg "$YELLOW" "  2. API文档: http://localhost:8000/docs"
+}
 
-# 保持脚本运行
-wait
+# 启动WebUI服务
+start_webui_only() {
+    print_header "启动 msearch WebUI 服务"
+    
+    activate_venv
+    setup_env
+    
+    mkdir -p "$PROJECT_ROOT/logs"
+    mkdir -p "$PROJECT_ROOT/data/pids"
+    
+    start_webui
+    
+    print_msg "$YELLOW" ""
+    print_msg "$YELLOW" "使用提示:"
+    print_msg "$YELLOW" "  1. WebUI界面: http://localhost:7860"
+}
+
+# 显示状态
+status() {
+    print_header "msearch 服务状态"
+    
+    print_msg "$BLUE" "后端API服务状态:"
+    if is_backend_running; then
+        local pid=$(cat "$BACKEND_PID_FILE")
+        print_msg "$GREEN" "  ✓ 运行中 (PID: $pid)"
+        print_msg "$BLUE" "    - 地址: http://localhost:8000"
+        print_msg "$BLUE" "    - 日志: $BACKEND_LOG_FILE"
+    else
+        print_msg "$YELLOW" "  ✗ 未运行"
+        print_msg "$BLUE" "    - 启动命令: bash $0 start"
+    fi
+    
+    print_msg "$BLUE" "WebUI服务状态:"
+    if is_webui_running; then
+        local pid=$(cat "$WEBUI_PID_FILE")
+        print_msg "$GREEN" "  ✓ 运行中 (PID: $pid)"
+        print_msg "$BLUE" "    - 地址: http://localhost:7860"
+        print_msg "$BLUE" "    - 日志: $WEBUI_LOG_FILE"
+    else
+        print_msg "$YELLOW" "  ✗ 未运行"
+        print_msg "$BLUE" "    - 启动命令: bash $0 start"
+    fi
+    
+    if is_backend_running && is_webui_running; then
+        print_msg "$GREEN" ""
+        print_msg "$GREEN" "✓ 所有服务正常运行"
+    else
+        print_msg "$YELLOW" ""
+        print_msg "$YELLOW" "✗ 部分或全部服务未运行"
+        print_msg "$YELLOW" "  启动服务: bash $0 start"
+    fi
+}
+
+# 重启服务
+restart() {
+    stop
+    sleep 3
+    start
+}
+
+# 显示帮助
+show_help() {
+    print_header "msearch 统一启动脚本 - 使用帮助"
+    
+    echo "用法: $0 {command} [options]"
+    echo ""
+    echo "命令:"
+    echo "  start         启动完整服务 (后端API + WebUI)"
+    echo "  start-api     仅启动后端API服务"
+    echo "  start-webui   仅启动WebUI服务"
+    echo "  stop          停止所有服务"
+    echo "  restart       重启所有服务"
+    echo "  status        查看服务状态"
+    echo "  help          显示帮助信息"
+    echo ""
+    echo "选项:"
+    echo "  --offline      启用离线模式 (默认已启用)"
+    echo "  --debug       启用调试模式"
+    echo ""
+    echo "示例:"
+    echo "  $0 start              # 启动完整服务"
+    echo "  $0 start-api          # 仅启动API服务"
+    echo "  $0 stop               # 停止所有服务"
+    echo "  $0 status             # 查看状态"
+    echo "  $0 restart            # 重启服务"
+    echo ""
+    echo "服务地址:"
+    echo "  - WebUI界面: http://localhost:7860"
+    echo "  - API接口:   http://localhost:8000"
+    echo "  - API文档:   http://localhost:8000/docs"
+    echo ""
+    echo "日志文件:"
+    echo "  - 后端日志: $BACKEND_LOG_FILE"
+    echo "  - WebUI日志: $WEBUI_LOG_FILE"
+    echo ""
+}
+
+# 主逻辑
+case "${1:-help}" in
+    start)
+        start
+        ;;
+    start-api)
+        start_api
+        ;;
+    start-webui)
+        start_webui_only
+        ;;
+    stop)
+        stop
+        ;;
+    restart)
+        restart
+        ;;
+    status)
+        status
+        ;;
+    help|--help|-h)
+        show_help
+        ;;
+    *)
+        print_msg "$RED" "错误: 未知命令 '$1'"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac

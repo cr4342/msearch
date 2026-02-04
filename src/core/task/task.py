@@ -54,6 +54,7 @@ class Task:
             result: 任务结果
         """
         self.id = id or str(uuid.uuid4())
+        self.task_id = self.id  # 添加 task_id 属性，与 id 保持一致
         self.task_type = task_type
         self.task_data = task_data or {}
         self.priority = priority
@@ -70,29 +71,34 @@ class Task:
         self.file_priority = file_priority
         self.progress = progress
         self.result = result
+        self.retry_count = 0
+        self.max_retries = 3
 
     def to_dict(self) -> Dict[str, Any]:
-        """转换为字典"""
+        """
+        将任务对象转换为字典
+        
+        Returns:
+            Dict[str, Any]: 任务字典表示
+        """
         return {
-            "id": self.id,
+            "id": self.task_id,  # 主键使用 task_id
+            "task_id": self.task_id,  # 兼容字段
             "task_type": self.task_type,
-            "task_data": self.task_data,
-            "priority": self.priority,
-            "file_id": self.file_id,
-            "file_path": self.file_path,
-            "depends_on": self.depends_on,
-            "group_id": self.group_id,
             "status": self.status,
-            "created_at": self.created_at.isoformat() if self.created_at else None,
-            "started_at": self.started_at.isoformat() if self.started_at else None,
-            "completed_at": (
-                self.completed_at.isoformat() if self.completed_at else None
-            ),
-            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
-            "error": self.error,
-            "file_priority": self.file_priority,
+            "priority": self.priority,
             "progress": self.progress,
             "result": self.result,
+            "error": self.error,
+            "created_at": self.created_at.isoformat() if self.created_at else None,
+            "updated_at": self.updated_at.isoformat() if self.updated_at else None,
+            "started_at": self.started_at.isoformat() if self.started_at else None,
+            "completed_at": self.completed_at.isoformat() if self.completed_at else None,
+            "task_data": self.task_data,
+            "file_id": self.file_id,
+            "depends_on": self.depends_on,
+            "retry_count": self.retry_count,
+            "max_retries": self.max_retries,
         }
 
     @classmethod

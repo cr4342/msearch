@@ -190,6 +190,88 @@ curl -X POST http://localhost:8000/api/v1/tasks/task_important_file/priority -d 
 curl -X POST http://localhost:8000/api/v1/tasks/cancel-by-type -d "task_type=thumbnail_generate"
 ```
 
+---
+
+### 5. 重试单个失败任务（新增功能 - 2024-02-04）
+
+**接口**: `POST /api/v1/tasks/{task_id}/retry`
+
+**描述**: 重试指定的失败任务，只有失败状态的任务才能重试
+
+**参数**:
+- `task_id` (路径参数): 要重试的任务ID
+
+**重试逻辑**:
+1. 检查任务是否存在
+2. 验证任务状态必须为"failed"
+3. 如果状态正确，创建新的任务实例
+4. 复制原任务的配置（类型、数据、优先级等）
+5. 返回新任务的ID和操作结果
+
+**响应示例**:
+```json
+{
+  "success": true,
+  "message": "任务已重试: task_12345",
+  "data": {
+    "new_task_id": "task_67890"
+  }
+}
+```
+
+**错误响应**:
+```json
+{
+  "detail": "任务不存在: task_12345"
+}
+```
+
+```json
+{
+  "detail": "任务状态不是失败，无法重试: completed"
+}
+```
+
+**使用示例**:
+```bash
+# 重试失败的任务
+curl -X POST http://localhost:8000/api/v1/tasks/task_12345/retry
+```
+
+---
+
+### 6. 批量重试失败任务（新增功能 - 2024-02-04）
+
+**接口**: 通过WebUI界面的批量操作实现
+
+**描述**: 重试多个选中的失败任务
+
+**实现逻辑**:
+1. 遍历选中的任务列表
+2. 检查每个任务的状态，只处理失败状态的任务
+3. 并行调用单个任务重试API
+4. 统计成功和失败的数量
+5. 生成详细的操作结果反馈
+
+**使用场景**:
+```bash
+# 获取失败任务列表
+curl -s "http://localhost:8000/api/v1/tasks?status=failed" | python3 -m json.tool
+
+# 通过WebUI批量重试（推荐方式）
+# 访问 http://localhost:8502 → 📋 任务管理器 → 选中失败任务 → 🔄 批量重试
+```
+
+---
+
+## 更新日志
+
+### 2024-02-04
+- ✅ 新增任务重试功能（单个和批量）
+- ✅ 新增实时进度显示功能
+- ✅ 新增当前操作监控功能
+- ✅ 完善任务管理器界面交互设计
+
 ### 场景4: 延后非关键任务
 
 当需要延后非关键任务（如预览生成）以节省系统资源时：
