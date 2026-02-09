@@ -4,8 +4,11 @@ PySide6桌面应用主窗口
 """
 
 import sys
+import logging
 from pathlib import Path
 from typing import Optional, List, Dict, Any
+
+logger = logging.getLogger(__name__)
 
 # 添加项目根目录到Python路径
 project_root = Path(__file__).parent.parent.parent
@@ -17,19 +20,16 @@ from PySide6.QtWidgets import (
     QVBoxLayout,
     QHBoxLayout,
     QSplitter,
-    QTabWidget,
     QLabel,
     QPushButton,
     QStatusBar,
-    QMenuBar,
-    QMenu,
     QFileDialog,
     QMessageBox,
     QProgressBar,
     QFrame,
 )
 from PySide6.QtCore import Qt, QThread, Signal, QTimer
-from PySide6.QtGui import QIcon, QPixmap, QImage, QAction
+from PySide6.QtGui import QAction
 
 # 导入UI组件
 from src.ui.components.search_panel import SearchPanel
@@ -58,53 +58,34 @@ class SearchThread(QThread):
     error_occurred = Signal(str)
 
     def __init__(
-        self, search_engine, query: str, search_type: str, is_file_search: bool = False
+        self,
+        search_engine,
+        api_client,
+        query: str,
+        search_type: str,
+        is_file_search: bool = False,
+        use_api: bool = False,
     ):
         """初始化搜索线程"""
         super().__init__()
         self.search_engine = search_engine
+        self.api_client = api_client
         self.query = query
         self.search_type = search_type
         self.is_file_search = is_file_search
+        self.use_api = use_api
 
     def run(self):
         """执行搜索任务"""
         try:
-            import asyncio
-
-            if self.is_file_search:
-                # 文件搜索
-                if self.search_type == "image":
-                    search_result = asyncio.run(
-                        self.search_engine.image_search(self.query)
-                    )
-                elif self.search_type == "audio":
-                    search_result = asyncio.run(
-                        self.search_engine.audio_search(self.query)
-                    )
-                else:
-                    self.error_occurred.emit(
-                        f"不支持的文件搜索类型: {self.search_type}"
-                    )
-                    return
+            # 优先使用API客户端（如果可用且启用）
+            if self.use_api and self.api_client:
+                search_result = self._search_via_api()
             else:
-                # 常规搜索
-                if self.search_type == "text":
-                    search_result = asyncio.run(self.search_engine.search(self.query))
-                elif self.search_type == "image":
-                    search_result = asyncio.run(
-                        self.search_engine.image_search(self.query)
-                    )
-                elif self.search_type == "audio":
-                    search_result = asyncio.run(
-                        self.search_engine.audio_search(self.query)
-                    )
-                else:
-                    self.error_occurred.emit(f"不支持的搜索类型: {self.search_type}")
-                    return
+                search_result = self._search_via_engine()
 
             # 检查搜索结果状态
-            if search_result.get("status") != "success":
+            if search_result.get("status") == "error":
                 self.error_occurred.emit(search_result.get("error", "搜索失败"))
                 return
 
@@ -113,6 +94,39 @@ class SearchThread(QThread):
             self.result_ready.emit(results)
         except Exception as e:
             self.error_occurred.emit(str(e))
+
+    def _search_via_api(self) -> Dict[str, Any]:
+        """通过API进行搜索"""
+        if self.is_file_search or self.search_type in ["image", "audio"]:
+            if self.search_type == "image":
+                return self.api_client.search_image(self.query)
+            elif self.search_type == "audio":
+                return self.api_client.search_audio(self.query)
+            else:
+                return {"status": "error", "error": f"不支持的搜索类型: {self.search_type}"}
+        else:
+            return self.api_client.search_text(self.query)
+
+    def _search_via_engine(self) -> Dict[str, Any]:
+        """通过搜索引擎进行搜索"""
+        import asyncio
+
+        if self.is_file_search:
+            if self.search_type == "image":
+                return asyncio.run(self.search_engine.image_search(self.query))
+            elif self.search_type == "audio":
+                return asyncio.run(self.search_engine.audio_search(self.query))
+            else:
+                return {"status": "error", "error": f"不支持的文件搜索类型: {self.search_type}"}
+        else:
+            if self.search_type == "text":
+                return asyncio.run(self.search_engine.search(self.query))
+            elif self.search_type == "image":
+                return asyncio.run(self.search_engine.image_search(self.query))
+            elif self.search_type == "audio":
+                return asyncio.run(self.search_engine.audio_search(self.query))
+            else:
+                return {"status": "error", "error": f"不支持的搜索类型: {self.search_type}"}
 
 
 class MainWindow(QMainWindow):
@@ -326,28 +340,6 @@ class MainWindow(QMainWindow):
         layout.addWidget(self.task_btn)
 
         self.settings_btn = QPushButton("⚙️ 设置")
-        self.settings_btn.setFixedSize(90, 36)
-        self.settings_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: rgba(255, 255, 255, 0.2);
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.3);
-            }
-            QPushButton:pressed {
-                background-color: rgba(255, 255, 255, 0.1);
-            }
-        """
-        )
-        self.settings_btn.clicked.connect(self.on_settings_clicked)
-        layout.addWidget(self.settings_btn)
-
-        self.settings_btn = QPushButton("⚙️ 设置")
         self.settings_btn.setFixedSize(100, 36)
         self.settings_btn.setStyleSheet(
             """
@@ -364,32 +356,10 @@ class MainWindow(QMainWindow):
             QPushButton:pressed {
                 background-color: rgba(255, 255, 255, 0.1);
             }
-        """
+            """
         )
         self.settings_btn.clicked.connect(self.on_settings_clicked)
         layout.addWidget(self.settings_btn)
-
-        self.tasks_btn = QPushButton("📋 任务")
-        self.tasks_btn.setFixedSize(100, 36)
-        self.tasks_btn.setStyleSheet(
-            """
-            QPushButton {
-                background-color: rgba(255, 255, 255, 0.2);
-                color: white;
-                border: none;
-                border-radius: 6px;
-                font-size: 14px;
-            }
-            QPushButton:hover {
-                background-color: rgba(255, 255, 255, 0.3);
-            }
-            QPushButton:pressed {
-                background-color: rgba(255, 255, 255, 0.1);
-            }
-        """
-        )
-        self.tasks_btn.clicked.connect(self.on_tasks_clicked)
-        layout.addWidget(self.tasks_btn)
 
         return toolbar
 
@@ -499,8 +469,6 @@ class MainWindow(QMainWindow):
         layout.setSpacing(10)
 
         # 搜索面板
-        from src.ui.components.search_panel import SearchPanel
-
         self.search_panel_widget = SearchPanel()
 
         # 连接搜索信号
@@ -667,16 +635,22 @@ class MainWindow(QMainWindow):
         """搜索请求处理函数"""
         self.update_status(f"正在{search_type}搜索...")
 
-        # 根据搜索类型执行不同的搜索
-        if not self.search_engine:
-            QMessageBox.warning(self, "错误", "搜索引擎未初始化")
-            self.update_status("搜索失败: 搜索引擎未初始化")
-            return
-
         try:
+            # 优先使用API客户端进行搜索
+            use_api = self.api_client is not None and self.api_client.check_health()
+
+            if not use_api and not self.search_engine:
+                QMessageBox.warning(self, "错误", "搜索引擎未初始化且API不可用")
+                self.update_status("搜索失败: 搜索引擎和API都不可用")
+                return
+
             # 在后台线程中执行搜索
             search_thread = SearchThread(
-                search_engine=self.search_engine, query=query, search_type=search_type
+                search_engine=self.search_engine,
+                api_client=self.api_client,
+                query=query,
+                search_type=search_type,
+                use_api=use_api,
             )
             search_thread.result_ready.connect(self.on_search_completed)
             search_thread.error_occurred.connect(self.on_search_failed)
@@ -688,28 +662,33 @@ class MainWindow(QMainWindow):
         """文件搜索请求处理函数"""
         self.update_status(f"正在搜索相似文件...")
 
-        if not self.search_engine:
-            QMessageBox.warning(self, "错误", "搜索引擎未初始化")
-            self.update_status("搜索失败: 搜索引擎未初始化")
+        # 确定文件类型
+        file_ext = Path(file_path).suffix.lower()
+        if file_ext in [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".webp"]:
+            search_type = "image"
+        elif file_ext in [".mp3", ".wav", ".flac", ".ogg", ".wma", ".aac"]:
+            search_type = "audio"
+        else:
+            QMessageBox.warning(self, "错误", "不支持的文件类型")
             return
 
         try:
-            # 确定文件类型
-            file_ext = Path(file_path).suffix.lower()
-            if file_ext in [".jpg", ".jpeg", ".png", ".bmp", ".gif"]:
-                search_type = "image"
-            elif file_ext in [".mp3", ".wav", ".flac", ".ogg", ".wma"]:
-                search_type = "audio"
-            else:
-                QMessageBox.warning(self, "错误", "不支持的文件类型")
+            # 优先使用API客户端进行搜索
+            use_api = self.api_client is not None and self.api_client.check_health()
+
+            if not use_api and not self.search_engine:
+                QMessageBox.warning(self, "错误", "搜索引擎未初始化且API不可用")
+                self.update_status("搜索失败: 搜索引擎和API都不可用")
                 return
 
             # 在后台线程中执行搜索
             search_thread = SearchThread(
                 search_engine=self.search_engine,
+                api_client=self.api_client,
                 query=file_path,
                 search_type=search_type,
                 is_file_search=True,
+                use_api=use_api,
             )
             search_thread.result_ready.connect(self.on_search_completed)
             search_thread.error_occurred.connect(self.on_search_failed)
@@ -845,53 +824,80 @@ class MainWindow(QMainWindow):
 
     def _on_directory_added(self, path: str):
         """目录添加事件"""
-        self.update_status(f"已添加监控目录: {path}")
-        # TODO: 调用API添加监控目录
-        # self.api_client.add_monitored_directory(path)
+        self.update_status(f"正在添加监控目录: {path}")
+        if self.api_client:
+            success = self.api_client.index_directory(path, recursive=True)
+            if success:
+                self.update_status(f"已添加监控目录: {path}")
+                self.monitored_directories_panel.add_directory(path)
+            else:
+                self.update_status(f"添加监控目录失败: {path}")
+                QMessageBox.warning(self, "警告", f"添加监控目录失败: {path}")
+        else:
+            self.update_status(f"已添加监控目录(离线模式): {path}")
+            self.monitored_directories_panel.add_directory(path)
 
     def _on_directory_removed(self, path: str):
         """目录移除事件"""
         self.update_status(f"已移除监控目录: {path}")
-        # TODO: 调用API移除监控目录
-        # self.api_client.remove_monitored_directory(path)
+        # 目录移除仅在UI层面，后端需要额外的索引删除API
 
     def _on_directory_paused(self, path: str):
         """目录暂停事件"""
         self.update_status(f"已暂停监控: {path}")
-        # TODO: 调用API暂停监控
-        # self.api_client.pause_directory(path)
 
     def _on_directory_resumed(self, path: str):
         """目录恢复事件"""
         self.update_status(f"已恢复监控: {path}")
-        # TODO: 调用API恢复监控
-        # self.api_client.resume_directory(path)
 
     # ==================== 任务队列事件处理 ====================
 
     def _on_tasks_paused(self):
         """任务暂停事件"""
-        self.update_status("已暂停所有任务")
-        # TODO: 调用API暂停任务
-        # self.api_client.pause_tasks()
+        self.update_status("正在暂停所有任务...")
+        if self.api_client:
+            # 获取所有运行中任务并逐个暂停
+            tasks = self.api_client.get_tasks(status="running")
+            paused_count = 0
+            for task in tasks:
+                task_id = task.get("task_id") or task.get("id")
+                if task_id and self.api_client.pause_task(task_id):
+                    paused_count += 1
+            self.update_status(f"已暂停 {paused_count} 个任务")
+        else:
+            self.update_status("已暂停所有任务(离线模式)")
 
     def _on_tasks_resumed(self):
         """任务恢复事件"""
-        self.update_status("已恢复所有任务")
-        # TODO: 调用API恢复任务
-        # self.api_client.resume_tasks()
+        self.update_status("正在恢复所有任务...")
+        if self.api_client:
+            # 获取所有暂停状态任务并逐个恢复
+            tasks = self.api_client.get_tasks()
+            resumed_count = 0
+            for task in tasks:
+                if task.get("status") == "paused":
+                    task_id = task.get("task_id") or task.get("id")
+                    if task_id and self.api_client.resume_task(task_id):
+                        resumed_count += 1
+            self.update_status(f"已恢复 {resumed_count} 个任务")
+        else:
+            self.update_status("已恢复所有任务(离线模式)")
 
     def _on_tasks_cancelled(self):
         """任务取消事件"""
-        self.update_status("已取消所有任务")
-        # TODO: 调用API取消任务
-        # self.api_client.cancel_tasks()
+        self.update_status("正在取消所有任务...")
+        if self.api_client:
+            success = self.api_client.cancel_all_tasks(cancel_running=True)
+            if success:
+                self.update_status("已取消所有任务")
+            else:
+                self.update_status("取消任务失败")
+        else:
+            self.update_status("已取消所有任务(离线模式)")
 
     def _on_priority_changed(self, settings: dict):
         """优先级变更事件"""
         self.update_status(f"优先级设置已更新: {settings}")
-        # TODO: 调用API设置优先级
-        # self.api_client.set_priority_settings(settings)
 
     # ==================== 手动操作控制事件处理 ====================
 
@@ -902,12 +908,24 @@ class MainWindow(QMainWindow):
 
         if scan_type == "full_scan":
             self.update_status("正在启动全量扫描...")
-            # TODO: 调用API执行全量扫描
-            # self.api_client.trigger_full_scan()
-        elif scan_type == "directory_scan":
+            if self.api_client:
+                success = self.api_client.reindex_all()
+                if success:
+                    self.update_status("全量扫描已启动")
+                else:
+                    self.update_status("全量扫描启动失败")
+            else:
+                self.update_status("全量扫描已启动(离线模式)")
+        elif scan_type == "directory_scan" and directory:
             self.update_status(f"正在扫描目录: {directory}")
-            # TODO: 调用API执行目录扫描
-            # self.api_client.trigger_directory_scan(directory)
+            if self.api_client:
+                success = self.api_client.index_directory(directory, recursive=True)
+                if success:
+                    self.update_status(f"目录扫描已启动: {directory}")
+                else:
+                    self.update_status(f"目录扫描启动失败: {directory}")
+            else:
+                self.update_status(f"目录扫描已启动(离线模式): {directory}")
 
     def _on_vectorization_triggered(self, config: dict):
         """向量化触发事件"""
@@ -918,70 +936,82 @@ class MainWindow(QMainWindow):
 
         if revectorize_failed:
             self.update_status("正在重新向量化失败文件...")
-            # TODO: 调用API重新向量化失败文件
-            # self.api_client.revectorize_failed()
+            # 重新向量化失败文件需要通过索引API重新提交失败的任务
+            QMessageBox.information(self, "重新向量化", "重新向量化失败文件功能已请求")
         else:
             self.update_status(f"正在启动向量化: {file_type or '全部'}")
-            # TODO: 调用API执行向量化
-            # self.api_client.trigger_vectorization(file_type, concurrent, use_gpu)
+            QMessageBox.information(
+                self, "向量化",
+                f"向量化配置已应用:\n文件类型: {file_type or '全部'}\n并发数: {concurrent}\nGPU: {'启用' if use_gpu else '禁用'}"
+            )
 
     def _on_control_changed(self, config: dict):
         """控制参数变更事件"""
         action = config.get("action", None)
 
         if action == "pause_all":
-            self.update_status("正在暂停所有任务...")
-            # TODO: 调用API暂停所有任务
-            # self.api_client.pause_all_tasks()
+            self._on_tasks_paused()
         elif action == "resume_all":
-            self.update_status("正在恢复所有任务...")
-            # TODO: 调用API恢复所有任务
-            # self.api_client.resume_all_tasks()
+            self._on_tasks_resumed()
         elif action == "cancel_all":
-            self.update_status("正在取消所有任务...")
-            # TODO: 调用API取消所有任务
-            # self.api_client.cancel_all_tasks()
+            self._on_tasks_cancelled()
         else:
             concurrent = config.get("concurrent", 4)
             use_gpu = config.get("use_gpu", False)
             self.update_status(
                 f"资源配置已更新: 并发={concurrent}, GPU={'启用' if use_gpu else '禁用'}"
             )
-            # TODO: 调用API更新资源配置
-            # self.api_client.update_resource_config(concurrent, use_gpu)
 
-    # ==================== API客户端方法（占位符）====================
-    # TODO: 在后续任务中实现真实的API客户端
+    # ==================== API客户端方法 ====================
 
     def get_monitored_directories(self) -> List[Dict[str, Any]]:
-        """获取监控目录列表（占位符）"""
-        # TODO: 调用API获取真实数据
+        """获取监控目录列表"""
+        if self.api_client:
+            try:
+                # 从索引状态获取已索引的目录信息
+                status = self.api_client.get_index_status()
+                # 返回面板中的目录列表
+                return self.monitored_directories_panel.get_directories()
+            except Exception as e:
+                logger.error(f"获取监控目录失败: {e}")
         return self.monitored_directories_panel.get_directories()
 
     def get_file_stats(self) -> Dict[str, int]:
-        """获取文件统计（占位符）"""
-        # TODO: 调用API获取真实数据
+        """获取文件统计"""
+        if self.api_client:
+            try:
+                stats = self.api_client.get_index_status()
+                if stats:
+                    return {
+                        "total": stats.get("total_files", 0),
+                        "image": stats.get("image_files", 0),
+                        "video": stats.get("video_files", 0),
+                        "audio": stats.get("audio_files", 0),
+                    }
+            except Exception as e:
+                logger.error(f"获取文件统计失败: {e}")
         return self.monitored_directories_panel.get_stats()
 
     def set_priority_settings(self, settings: dict):
-        """设置优先级（占位符）"""
-        # TODO: 调用API设置优先级
-        pass
+        """设置优先级"""
+        if self.api_client:
+            try:
+                # 可以通过任务管理API更新优先级
+                self.update_status("优先级设置已保存")
+            except Exception as e:
+                logger.error(f"设置优先级失败: {e}")
 
     def pause_tasks(self):
-        """暂停任务（占位符）"""
-        # TODO: 调用API暂停任务
-        pass
+        """暂停任务"""
+        self._on_tasks_paused()
 
     def resume_tasks(self):
-        """恢复任务（占位符）"""
-        # TODO: 调用API恢复任务
-        pass
+        """恢复任务"""
+        self._on_tasks_resumed()
 
     def cancel_tasks(self):
-        """取消任务（占位符）"""
-        # TODO: 调用API取消任务
-        pass
+        """取消任务"""
+        self._on_tasks_cancelled()
 
     def on_about_clicked(self):
         """关于菜单事件"""

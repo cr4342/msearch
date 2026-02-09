@@ -221,12 +221,11 @@ class MonitoredDirectoriesPanel(QWidget):
 
     def _add_directory(self):
         """添加监控目录"""
-        # TODO: 实现目录选择对话框
-        # 暂时添加一个模拟目录
-        import random
+        from PySide6.QtWidgets import QFileDialog
 
-        mock_dirs = ["/home/user/Videos", "/home/user/Music", "/home/user/Pictures"]
-        new_dir = random.choice(mock_dirs)
+        new_dir = QFileDialog.getExistingDirectory(self, "选择要监控的目录")
+        if not new_dir:
+            return
 
         # 检查是否已存在
         for d in self.directories:
@@ -238,10 +237,10 @@ class MonitoredDirectoriesPanel(QWidget):
         new_directory = {
             "path": new_dir,
             "status": "initializing",
-            "file_count": random.randint(50, 200),
-            "image_count": random.randint(30, 150),
-            "video_count": random.randint(10, 50),
-            "audio_count": random.randint(5, 30),
+            "file_count": 0,
+            "image_count": 0,
+            "video_count": 0,
+            "audio_count": 0,
         }
 
         self.directories.append(new_directory)
@@ -253,15 +252,18 @@ class MonitoredDirectoriesPanel(QWidget):
 
     def _remove_directory(self):
         """移除监控目录"""
-        # TODO: 实现移除逻辑
-        # 暂时移除最后一个目录
-        if len(self.directories) > 0:
-            removed_dir = self.directories.pop()
-            self._refresh_directories()
-            self._refresh_stats()
+        # 获取当前选中的项
+        current_row = self.directory_list.currentRow()
+        if current_row < 0 or current_row >= len(self.directories):
+            QMessageBox.warning(self, "警告", "请先选择要移除的目录")
+            return
 
-            # 发射信号
-            self.directory_removed.emit(removed_dir["path"])
+        removed_dir = self.directories.pop(current_row)
+        self._refresh_directories()
+        self._refresh_stats()
+
+        # 发射信号
+        self.directory_removed.emit(removed_dir["path"])
 
     def _refresh_directories(self):
         """刷新目录列表"""

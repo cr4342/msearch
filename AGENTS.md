@@ -168,3 +168,59 @@ self.api_server = loop.run_until_complete(_create_server())
 - Use thread pools for CPU-bound and I/O-bound tasks
 - Configure worker counts based on hardware
 - Implement proper resource cleanup in shutdown
+
+## Dependency Management
+
+### Core Dependencies
+- **numpy, pandas**: Data processing
+- **infinity-emb, colpali-engine**: High-performance model runtime
+- **fastapi, uvicorn**: Web framework
+- **lancedb**: Vector database
+- **sentence-transformers**: AI model loading
+- **pillow, opencv-python, librosa**: Media processing
+
+### Development Dependencies
+- **black, mypy, flake8**: Code formatting and checking
+- **ipython, jupyter**: Interactive development
+
+### Testing Dependencies
+- **pytest, pytest-asyncio**: Testing framework
+- **pytest-cov**: Coverage testing
+
+### Optional Dependencies
+- **PySide6**: Desktop UI (Qt for Python)
+
+## Installation and Setup
+
+### Installation
+```bash
+# Install all dependencies
+pip install -r requirements/dev.txt -r requirements/test.txt -r requirements/optional.txt
+
+# Or install only core dependencies
+pip install -r requirements/base.txt
+```
+
+### Running Scripts
+```bash
+# Run install script
+bash scripts/install.sh
+
+# Run application
+bash scripts/run.sh
+
+# Run offline mode
+bash scripts/run_offline.sh
+```
+
+## CI/CD Configuration
+
+### Test Coverage
+- All tests must pass before merging
+- Code coverage should be maintained above 80%
+- New code must include appropriate tests
+
+### Code Quality Checks
+- All code must pass flake8 and mypy validation
+- Code must be formatted with black
+- Import order must be checked with isort

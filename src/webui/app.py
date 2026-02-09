@@ -595,6 +595,12 @@ class MSearchWebUI:
         """
         normalized = []
         for task in tasks:
+            # 处理Task对象或字典格式
+            if hasattr(task, 'to_dict'):
+                task = task.to_dict()
+            elif not isinstance(task, dict):
+                task = {}
+
             task_id = task.get("task_id") or task.get("id", "")
             result = task.get("result") or {}
             file_path = (
@@ -608,19 +614,25 @@ class MSearchWebUI:
             completed_at = self._to_timestamp(task.get("completed_at"))
             updated_at = completed_at or started_at or created_at
 
+            # 处理进度值（API返回可能是0-1或0-100）
+            progress = task.get("progress", 0) or 0
+            if progress > 1:
+                progress = progress / 100.0
+
             normalized.append(
                 {
                     "id": task_id,
+                    "task_id": task_id,
                     "task_type": task.get("task_type", ""),
                     "status": task.get("status", ""),
                     "priority": task.get("priority", 0),
-                    "progress": task.get("progress", 0) or 0,
+                    "progress": progress,
                     "created_at": created_at,
                     "updated_at": updated_at,
                     "duration": task.get("duration", 0) or 0,
                     "tags": task.get("tags", []) or [],
                     "file_path": file_path,
-                    "error_message": task.get("error_message"),
+                    "error_message": task.get("error_message") or task.get("error"),
                 }
             )
         return normalized
@@ -670,7 +682,12 @@ class MSearchWebUI:
 
             # 调用API获取所有任务
             response = self.api_client.get_all_tasks()
-            all_tasks = self._normalize_tasks(response.get("tasks", []))
+            # 处理API响应格式
+            if hasattr(response, 'json'):
+                response_data = response.json()
+            else:
+                response_data = response if isinstance(response, dict) else {}
+            all_tasks = self._normalize_tasks(response_data.get("tasks", []))
 
             filtered_tasks = self._filter_tasks(
                 all_tasks,
@@ -685,7 +702,7 @@ class MSearchWebUI:
 
             df_data = []
             for task in sorted_tasks:
-                task_id = task.get("id", "")
+                task_id = task.get("task_id", task.get("id", ""))
                 df_data.append(
                     [
                         False,
@@ -937,7 +954,7 @@ class MSearchWebUI:
                 except Exception as e:
                     logger.error(f"取消任务失败: {task_id}, 错误: {e}")
 
-        return task_list, f"已取消 {selected_count} 个任务"
+        return self.refresh_task_manager()[0], f"已取消 {selected_count} 个任务"
 
     def pause_selected_tasks(self, task_list: List[List]) -> tuple:
         """暂停选中的任务"""
@@ -946,13 +963,12 @@ class MSearchWebUI:
             if row[0]:
                 task_id = row[1]
                 try:
-                    # API暂不支持暂停任务，使用取消任务代替
-                    self.api_client.cancel_task(task_id)
+                    self.api_client.pause_task(task_id)
                     selected_count += 1
                 except Exception as e:
                     logger.error(f"暂停任务失败: {task_id}, 错误: {e}")
 
-        return task_list, f"已暂停 {selected_count} 个任务"
+        return self.refresh_task_manager()[0], f"已暂停 {selected_count} 个任务"
 
     def resume_selected_tasks(self, task_list: List[List]) -> tuple:
         """恢复选中的任务"""
@@ -961,12 +977,12 @@ class MSearchWebUI:
             if row[0]:
                 task_id = row[1]
                 try:
-                    # API暂不支持恢复任务，返回提示
+                    self.api_client.resume_task(task_id)
                     selected_count += 1
                 except Exception as e:
                     logger.error(f"恢复任务失败: {task_id}, 错误: {e}")
 
-        return task_list, f"已恢复 {selected_count} 个任务"
+        return self.refresh_task_manager()[0], f"已恢复 {selected_count} 个任务"
 
     def retry_selected_tasks(self, task_list: List[List]) -> tuple:
         """重试选中的任务"""
@@ -975,12 +991,12 @@ class MSearchWebUI:
             if row[0]:
                 task_id = row[1]
                 try:
-                    # API暂不支持重试任务，返回提示
+                    self.api_client.retry_task(task_id)
                     selected_count += 1
                 except Exception as e:
                     logger.error(f"重试任务失败: {task_id}, 错误: {e}")
 
-        return task_list, f"已重试 {selected_count} 个任务"
+        return self.refresh_task_manager()[0], f"已重试 {selected_count} 个任务"
 
     def delete_selected_tasks(self, task_list: List[List]) -> tuple:
         """删除选中的任务"""
@@ -989,12 +1005,12 @@ class MSearchWebUI:
             if row[0]:
                 task_id = row[1]
                 try:
-                    # API暂不支持删除任务，返回提示
+                    self.api_client.cancel_task(task_id)
                     selected_count += 1
                 except Exception as e:
                     logger.error(f"删除任务失败: {task_id}, 错误: {e}")
 
-        return task_list, f"已删除 {selected_count} 个任务"
+        return self.refresh_task_manager()[0], f"已删除 {selected_count} 个任务"
 
     def archive_selected_tasks(self, task_list: List[List]) -> tuple:
         """归档选中的任务"""
@@ -1003,12 +1019,12 @@ class MSearchWebUI:
             if row[0]:
                 task_id = row[1]
                 try:
-                    # API暂不支持归档任务，返回提示
+                    self.api_client.archive_task(task_id)
                     selected_count += 1
                 except Exception as e:
                     logger.error(f"归档任务失败: {task_id}, 错误: {e}")
 
-        return task_list, f"已归档 {selected_count} 个任务"
+        return self.refresh_task_manager()[0], f"已归档 {selected_count} 个任务"
 
     def set_task_priority(self, task_list: List[List], new_priority: int) -> tuple:
         """设置任务优先级"""
@@ -1022,7 +1038,7 @@ class MSearchWebUI:
                 except Exception as e:
                     logger.error(f"设置任务优先级失败: {task_id}, 错误: {e}")
 
-        return task_list, f"已为 {selected_count} 个任务设置优先级为 {new_priority}"
+        return self.refresh_task_manager()[0], f"已为 {selected_count} 个任务设置优先级为 {new_priority}"
 
     def add_task_tags(self, task_list: List[List], tags: str) -> tuple:
         """添加任务标签"""
@@ -1122,29 +1138,28 @@ class MSearchWebUI:
             return {}, {}, f"获取任务详情失败: {e}", {}, []
 
     def get_task_statistics(self) -> str:
-        """
-        获取任务统计信息
-
-        Returns:
-            任务统计字符串
-        """
+        """获取任务统计信息"""
         try:
             stats = self.api_client.get_task_stats()
+
+            # API返回嵌套结构：task_stats.overall包含统计信息
+            task_stats = stats.get("task_stats", {})
+            if isinstance(task_stats, dict) and "overall" in task_stats:
+                overall = task_stats["overall"]
+            else:
+                overall = task_stats if isinstance(task_stats, dict) else stats
 
             output = "\n" + "=" * 60 + "\n"
             output += "任务统计信息\n"
             output += "=" * 60 + "\n\n"
 
-            # 任务统计
             output += "[任务统计]\n"
-            output += f"  总任务数: {stats.get('total', 0)}\n"
-            output += f"  待处理: {stats.get('pending', 0)}\n"
-            output += f"  运行中: {stats.get('running', 0)}\n"
-            output += f"  已完成: {stats.get('completed', 0)}\n"
-            output += f"  失败: {stats.get('failed', 0)}\n"
-            output += f"  成功率: {stats.get('success_rate', '0%')}\n"
-            output += f"  平均耗时: {stats.get('avg_duration', '0s')}\n"
-            output += f"  吞吐量: {stats.get('throughput', '0/min')}\n"
+            output += f" 总任务数: {overall.get('total', 0)}\n"
+            output += f" 待处理: {overall.get('pending', 0)}\n"
+            output += f" 运行中: {overall.get('running', 0)}\n"
+            output += f" 已完成: {overall.get('completed', 0)}\n"
+            output += f" 失败: {overall.get('failed', 0)}\n"
+            output += f" 已取消: {overall.get('cancelled', 0)}\n"
             output += "\n"
 
             output += "=" * 60 + "\n"
@@ -1152,6 +1167,197 @@ class MSearchWebUI:
             return output
         except Exception as e:
             return f"获取任务统计失败: {e}"
+
+    def get_realtime_progress(self) -> tuple:
+        """
+        获取实时进度显示
+
+        Returns:
+            (progress_display, current_operation) 元组
+        """
+        try:
+            response = self.api_client.get_all_tasks()
+            if hasattr(response, 'json'):
+                response_data = response.json()
+            else:
+                response_data = response if isinstance(response, dict) else {}
+            
+            all_tasks = self._normalize_tasks(response_data.get("tasks", []))
+            
+            running_tasks = [t for t in all_tasks if t.get("status") == "running"]
+            
+            running_tasks = running_tasks[:5]
+            
+            if not running_tasks:
+                return (
+                    "<div style='padding: 20px; text-align: center; color: #666;'>暂无运行中的任务</div>",
+                    "<div style='padding: 20px; text-align: center; color: #666;'>暂无操作</div>"
+                )
+            
+            progress_html = self._generate_progress_html(running_tasks)
+            operation_html = self._generate_operation_html(running_tasks)
+            
+            return progress_html, operation_html
+            
+        except Exception as e:
+            logger.error(f"获取实时进度失败: {e}", exc_info=True)
+            return (
+                f"<div style='padding: 20px; text-align: center; color: #f44;'>获取进度失败: {e}</div>",
+                f"<div style='padding: 20px; text-align: center; color: #f44;'>获取操作失败: {e}</div>"
+            )
+    
+    def _generate_progress_html(self, tasks: List[Dict]) -> str:
+        """生成进度显示HTML"""
+        html = "<div style='padding: 10px;'>"
+
+        for task in tasks:
+            task_type = task.get("task_type", "")
+            progress = task.get("progress", 0)
+            # 确保progress是0-1范围，转换为百分比
+            if progress > 1:
+                progress = progress / 100.0
+            progress_percent = progress * 100
+
+            file_path = task.get("file_path", "")
+            file_name = os.path.basename(file_path) if file_path else "未知文件"
+
+            icon = self._get_task_icon(task_type)
+
+            if progress_percent >= 100:
+                bar_color = "#4caf50"
+            elif progress_percent >= 50:
+                bar_color = "#2196f3"
+            else:
+                bar_color = "#ff9800"
+
+            bar_width = min(progress_percent, 100)
+
+            html += f"""
+            <div style='margin-bottom: 15px; padding: 10px; background: #f5f5f5; border-radius: 5px;'>
+                <div style='display: flex; align-items: center; margin-bottom: 5px;'>
+                    <span style='font-size: 20px; margin-right: 10px;'>{icon}</span>
+                    <span style='flex: 1; font-weight: bold;'>{file_name}</span>
+                    <span style='color: {bar_color}; font-weight: bold;'>{progress_percent:.1f}%</span>
+                </div>
+                <div style='background: #e0e0e0; height: 20px; border-radius: 10px; overflow: hidden;'>
+                    <div style='background: {bar_color}; height: 100%; width: {bar_width}%; transition: width 0.3s;'></div>
+                </div>
+            </div>
+            """
+
+        html += "</div>"
+        return html
+    
+    def _generate_operation_html(self, tasks: List[Dict]) -> str:
+        """
+        生成当前操作显示HTML
+
+        Args:
+            tasks: 任务列表
+
+        Returns:
+            HTML字符串
+        """
+        html = "<div style='padding: 10px;'>"
+        
+        for task in tasks:
+            task_type = task.get("task_type", "")
+            file_path = task.get("file_path", "")
+            file_name = os.path.basename(file_path) if file_path else "未知文件"
+            status = task.get("status", "")
+            
+            icon, operation = self._get_task_operation(task_type, status)
+            
+            status_color = {
+                "running": "#2196f3",
+                "paused": "#ff9800",
+                "completed": "#4caf50",
+                "failed": "#f44336",
+                "pending": "#9e9e9e"
+            }.get(status, "#666")
+            
+            html += f"""
+            <div style='margin-bottom: 10px; padding: 10px; background: #f5f5f5; border-radius: 5px; border-left: 4px solid {status_color};'>
+                <div style='display: flex; align-items: center;'>
+                    <span style='font-size: 18px; margin-right: 10px;'>{icon}</span>
+                    <span style='flex: 1; color: #333;'>{operation}: {file_name}</span>
+                </div>
+            </div>
+            """
+        
+        html += "</div>"
+        return html
+    
+    def _get_task_icon(self, task_type: str) -> str:
+        """
+        获取任务类型图标
+
+        Args:
+            task_type: 任务类型
+
+        Returns:
+            图标emoji
+        """
+        icon_map = {
+            "file_embed_image": "🖼️",
+            "file_embed_video": "🎬",
+            "file_embed_audio": "🎵",
+            "search_query": "🔍",
+            "file_scan": "🔍",
+            "vectorization": "📊"
+        }
+        return icon_map.get(task_type, "📄")
+    
+    def _get_task_operation(self, task_type: str, status: str) -> tuple:
+        """
+        获取任务操作描述
+
+        Args:
+            task_type: 任务类型
+            status: 任务状态
+
+        Returns:
+            (图标, 操作描述) 元组
+        """
+        operation_map = {
+            "file_embed_image": ("🖼️", "处理图像"),
+            "file_embed_video": ("🎬", "处理视频"),
+            "file_embed_audio": ("🎵", "处理音频"),
+            "search_query": ("🔍", "搜索查询"),
+            "file_scan": ("🔍", "扫描文件"),
+            "vectorization": ("📊", "向量化")
+        }
+        
+        icon, operation = operation_map.get(task_type, ("📄", "处理文件"))
+        
+        if status == "running":
+            operation = f"{operation}中"
+        elif status == "paused":
+            operation = f"{operation}(已暂停)"
+        elif status == "completed":
+            operation = f"{operation}完成"
+        elif status == "failed":
+            operation = f"{operation}失败"
+        
+        return icon, operation
+
+    def get_realtime_progress_with_control(self, auto_refresh: bool) -> tuple:
+        """
+        获取实时进度显示（带自动刷新控制）
+
+        Args:
+            auto_refresh: 是否自动刷新
+
+        Returns:
+            (progress_display, current_operation) 元组
+        """
+        if auto_refresh:
+            return self.get_realtime_progress()
+        else:
+            return (
+                "<div style='padding: 20px; text-align: center; color: #666;'>自动刷新已禁用</div>",
+                "<div style='padding: 20px; text-align: center; color: #666;'>点击手动刷新按钮查看进度</div>"
+            )
 
     def full_scan(self, directories: str) -> str:
         """
@@ -1566,6 +1772,31 @@ class MSearchWebUI:
                             label="系统负载", value="0%", interactive=False
                         )
 
+                # 实时任务监控区域
+                with gr.Accordion("🔍 实时任务监控", open=True):
+                    with gr.Row():
+                        auto_refresh = gr.Checkbox(
+                            label="自动刷新", value=True, scale=1
+                        )
+                        refresh_interval = gr.Slider(
+                            label="刷新间隔(秒)", minimum=5, maximum=60, value=10, step=5, scale=2
+                        )
+                        manual_refresh_btn = gr.Button("🔄 手动刷新", variant="secondary", scale=1)
+
+                    # 实时进度显示
+                    with gr.Row():
+                        progress_display = gr.HTML(
+                            value="<div style='padding: 20px; text-align: center; color: #666;'>暂无运行中的任务</div>",
+                            label="实时进度"
+                        )
+
+                    # 当前操作显示
+                    with gr.Row():
+                        current_operation = gr.HTML(
+                            value="<div style='padding: 20px; text-align: center; color: #666;'>暂无操作</div>",
+                            label="当前操作"
+                        )
+
                 # 任务列表
                 task_list = gr.Dataframe(
                     label="任务列表",
@@ -1758,6 +1989,26 @@ class MSearchWebUI:
                         queue_depth,
                         system_load,
                     ],
+                )
+
+                # 手动刷新实时进度
+                manual_refresh_btn.click(
+                    fn=self.get_realtime_progress,
+                    outputs=[progress_display, current_operation]
+                )
+
+                # 自动刷新定时器（10秒间隔）
+                refresh_timer = gr.Timer(10)
+                refresh_timer.tick(
+                    fn=lambda: self.get_realtime_progress_with_control(True),
+                    outputs=[progress_display, current_operation]
+                )
+
+                # 自动刷新复选框变化时更新显示
+                auto_refresh.change(
+                    fn=self.get_realtime_progress_with_control,
+                    inputs=[auto_refresh],
+                    outputs=[progress_display, current_operation]
                 )
 
             with gr.Tab("📜 搜索历史"):

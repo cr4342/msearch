@@ -20,468 +20,683 @@ class APIClient:
         Args:
             base_url: API基础URL
         """
-        self.base_url = base_url
+        self.base_url = base_url.rstrip("/")
         self.session = requests.Session()
         self.session.headers.update({"Content-Type": "application/json"})
 
         logger.info(f"API客户端初始化完成: {base_url}")
 
-    def get_monitored_directories(self) -> List[Dict[str, Any]]:
+    # ==================== 搜索相关API ====================
+
+    def search_text(self, query: str, top_k: int = 20, threshold: float = None) -> Dict[str, Any]:
         """
-        获取监控目录列表
+        文本搜索
+
+        Args:
+            query: 搜索查询
+            top_k: 返回结果数量
+            threshold: 相似度阈值
 
         Returns:
-            监控目录列表
+            搜索结果
         """
         try:
-            response = self.session.get(f"{self.base_url}/directories")
-            response.raise_for_status()
+            data = {"query": query, "top_k": top_k}
+            if threshold is not None:
+                data["threshold"] = threshold
 
+            response = self.session.post(f"{self.base_url}/search/text", json=data)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"文本搜索失败: {e}")
+            return {"status": "error", "error": str(e), "results": []}
+        except Exception as e:
+            logger.error(f"文本搜索失败: {e}")
+            return {"status": "error", "error": str(e), "results": []}
+
+    def search_image(self, image_path: str, top_k: int = 20) -> Dict[str, Any]:
+        """
+        图像搜索
+
+        Args:
+            image_path: 图像文件路径
+            top_k: 返回结果数量
+
+        Returns:
+            搜索结果
+        """
+        try:
+            from pathlib import Path
+
+            # 使用文件上传方式
+            with open(image_path, "rb") as f:
+                files = {"file": (Path(image_path).name, f)}
+                data = {"top_k": str(top_k)}
+                response = self.session.post(
+                    f"{self.base_url}/search/image", files=files, data=data
+                )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"图像搜索失败: {e}")
+            return {"status": "error", "error": str(e), "results": []}
+        except Exception as e:
+            logger.error(f"图像搜索失败: {e}")
+            return {"status": "error", "error": str(e), "results": []}
+
+    def search_audio(self, audio_path: str, top_k: int = 20) -> Dict[str, Any]:
+        """
+        音频搜索
+
+        Args:
+            audio_path: 音频文件路径
+            top_k: 返回结果数量
+
+        Returns:
+            搜索结果
+        """
+        try:
+            from pathlib import Path
+
+            with open(audio_path, "rb") as f:
+                files = {"file": (Path(audio_path).name, f)}
+                data = {"top_k": str(top_k)}
+                response = self.session.post(
+                    f"{self.base_url}/search/audio", files=files, data=data
+                )
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"音频搜索失败: {e}")
+            return {"status": "error", "error": str(e), "results": []}
+        except Exception as e:
+            logger.error(f"音频搜索失败: {e}")
+            return {"status": "error", "error": str(e), "results": []}
+
+    # ==================== 索引相关API ====================
+
+    def index_file(self, file_path: str) -> bool:
+        """
+        索引单个文件
+
+        Args:
+            file_path: 文件路径
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(
+                f"{self.base_url}/index/file", data={"file_path": file_path}
+            )
+            response.raise_for_status()
+            logger.info(f"已提交索引任务: {file_path}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"索引文件失败 {file_path}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"索引文件失败 {file_path}: {e}")
+            return False
+
+    def index_directory(self, directory: str, recursive: bool = True) -> bool:
+        """
+        索引目录
+
+        Args:
+            directory: 目录路径
+            recursive: 是否递归
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(
+                f"{self.base_url}/index/directory",
+                data={"directory": directory, "recursive": str(recursive).lower()},
+            )
+            response.raise_for_status()
+            logger.info(f"已提交目录索引任务: {directory}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"索引目录失败 {directory}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"索引目录失败 {directory}: {e}")
+            return False
+
+    def reindex_all(self) -> bool:
+        """
+        重新索引所有文件
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(f"{self.base_url}/index/reindex-all")
+            response.raise_for_status()
+            logger.info("已启动全量重新索引")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"重新索引失败: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"重新索引失败: {e}")
+            return False
+
+    def get_index_status(self) -> Dict[str, Any]:
+        """
+        获取索引状态
+
+        Returns:
+            索引状态信息
+        """
+        try:
+            response = self.session.get(f"{self.base_url}/index/status")
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"获取索引状态失败: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"获取索引状态失败: {e}")
+            return {}
+
+    # ==================== 文件相关API ====================
+
+    def get_files_list(
+        self, file_type: str = None, indexed_only: bool = False, limit: int = 100, offset: int = 0
+    ) -> Dict[str, Any]:
+        """
+        获取文件列表
+
+        Args:
+            file_type: 文件类型过滤
+            indexed_only: 仅已索引文件
+            limit: 返回数量限制
+            offset: 偏移量
+
+        Returns:
+            文件列表
+        """
+        try:
+            params = {"indexed_only": indexed_only, "limit": limit, "offset": offset}
+            if file_type:
+                params["file_type"] = file_type
+
+            response = self.session.get(f"{self.base_url}/files/list", params=params)
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"获取文件列表失败: {e}")
+            return {"files": [], "total_files": 0}
+        except Exception as e:
+            logger.error(f"获取文件列表失败: {e}")
+            return {"files": [], "total_files": 0}
+
+    def get_file_info(self, file_uuid: str) -> Optional[Dict[str, Any]]:
+        """
+        获取文件信息
+
+        Args:
+            file_uuid: 文件UUID
+
+        Returns:
+            文件信息或None
+        """
+        try:
+            response = self.session.get(f"{self.base_url}/files/{file_uuid}")
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"获取文件信息失败 {file_uuid}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"获取文件信息失败 {file_uuid}: {e}")
+            return None
+
+    def upload_file(self, file_path: str) -> Optional[str]:
+        """
+        上传文件
+
+        Args:
+            file_path: 文件路径
+
+        Returns:
+            上传后的文件路径或None
+        """
+        try:
+            from pathlib import Path
+
+            with open(file_path, "rb") as f:
+                files = {"file": (Path(file_path).name, f)}
+                response = self.session.post(f"{self.base_url}/files/upload", files=files)
+            response.raise_for_status()
             data = response.json()
-            return data.get("directories", [])
-
+            return data.get("file_path")
         except requests.RequestException as e:
-            logger.error(f"获取监控目录失败: {e}")
-            return []
+            logger.error(f"上传文件失败 {file_path}: {e}")
+            return None
         except Exception as e:
-            logger.error(f"解析监控目录响应失败: {e}")
-            return []
+            logger.error(f"上传文件失败 {file_path}: {e}")
+            return None
 
-    def add_monitored_directory(self, directory: str) -> bool:
+    def get_file_preview(self, file_path: str) -> Optional[bytes]:
         """
-        添加监控目录
+        获取文件预览
 
         Args:
-            directory: 目录路径
+            file_path: 文件路径
 
         Returns:
-            是否成功添加
+            预览数据或None
         """
         try:
-            response = self.session.post(
-                f"{self.base_url}/directories", json={"path": directory}
+            response = self.session.get(
+                f"{self.base_url}/files/preview", params={"path": file_path}
             )
             response.raise_for_status()
-
-            logger.info(f"已添加监控目录: {directory}")
-            return True
-
+            return response.content
         except requests.RequestException as e:
-            logger.error(f"添加监控目录失败 {directory}: {e}")
-            return False
+            logger.error(f"获取文件预览失败 {file_path}: {e}")
+            return None
         except Exception as e:
-            logger.error(f"添加监控目录失败 {directory}: {e}")
-            return False
+            logger.error(f"获取文件预览失败 {file_path}: {e}")
+            return None
 
-    def remove_monitored_directory(self, directory: str) -> bool:
+    def get_file_thumbnail(self, thumbnail_path: str) -> Optional[bytes]:
         """
-        移除监控目录
+        获取文件缩略图
 
         Args:
-            directory: 目录路径
+            thumbnail_path: 缩略图路径
 
         Returns:
-            是否成功移除
+            缩略图数据或None
         """
         try:
-            response = self.session.delete(
-                f"{self.base_url}/directories", params={"path": directory}
+            response = self.session.get(
+                f"{self.base_url}/files/thumbnail", params={"path": thumbnail_path}
             )
             response.raise_for_status()
-
-            logger.info(f"已移除监控目录: {directory}")
-            return True
-
+            return response.content
         except requests.RequestException as e:
-            logger.error(f"移除监控目录失败 {directory}: {e}")
-            return False
+            logger.error(f"获取缩略图失败 {thumbnail_path}: {e}")
+            return None
         except Exception as e:
-            logger.error(f"移除监控目录失败 {directory}: {e}")
-            return False
+            logger.error(f"获取缩略图失败 {thumbnail_path}: {e}")
+            return None
 
-    def pause_directory(self, directory: str) -> bool:
-        """
-        暂停监控目录
+    # ==================== 任务管理相关API ====================
 
-        Args:
-            directory: 目录路径
-
-        Returns:
-            是否成功暂停
-        """
-        try:
-            response = self.session.post(
-                f"{self.base_url}/directories/pause", json={"path": directory}
-            )
-            response.raise_for_status()
-
-            logger.info(f"已暂停监控目录: {directory}")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"暂停监控目录失败 {directory}: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"暂停监控目录失败 {directory}: {e}")
-            return False
-
-    def resume_directory(self, directory: str) -> bool:
-        """
-        恢复监控目录
-
-        Args:
-            directory: 目录路径
-
-        Returns:
-            是否成功恢复
-        """
-        try:
-            response = self.session.post(
-                f"{self.base_url}/directories/resume", json={"path": directory}
-            )
-            response.raise_for_status()
-
-            logger.info(f"已恢复监控目录: {directory}")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"恢复监控目录失败 {directory}: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"恢复监控目录失败 {directory}: {e}")
-            return False
-
-    def get_file_stats(self) -> Dict[str, int]:
-        """
-        获取文件统计
-
-        Returns:
-            文件统计字典
-        """
-        try:
-            response = self.session.get(f"{self.base_url}/stats/files")
-            response.raise_for_status()
-
-            data = response.json()
-            return data.get("stats", {"total": 0, "image": 0, "video": 0, "audio": 0})
-
-        except requests.RequestException as e:
-            logger.error(f"获取文件统计失败: {e}")
-            return {"total": 0, "image": 0, "video": 0, "audio": 0}
-        except Exception as e:
-            logger.error(f"解析文件统计响应失败: {e}")
-            return {"total": 0, "image": 0, "video": 0, "audio": 0}
-
-    def set_priority_settings(self, settings: Dict[str, str]) -> bool:
-        """
-        设置优先级配置
-
-        Args:
-            settings: 优先级设置字典，例如 {'video': 'high', 'audio': 'medium', 'image': 'low'}
-
-        Returns:
-            是否成功设置
-        """
-        try:
-            response = self.session.put(
-                f"{self.base_url}/tasks/priority", json=settings
-            )
-            response.raise_for_status()
-
-            logger.info(f"优先级设置已更新: {settings}")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"设置优先级失败: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"设置优先级失败: {e}")
-            return False
-
-    def get_priority_settings(self) -> Dict[str, str]:
-        """
-        获取优先级配置
-
-        Returns:
-            优先级设置字典
-        """
-        try:
-            response = self.session.get(f"{self.base_url}/tasks/priority")
-            response.raise_for_status()
-
-            data = response.json()
-            return data.get(
-                "settings", {"video": "medium", "audio": "medium", "image": "medium"}
-            )
-
-        except requests.RequestException as e:
-            logger.error(f"获取优先级设置失败: {e}")
-            return {"video": "medium", "audio": "medium", "image": "medium"}
-        except Exception as e:
-            logger.error(f"解析优先级设置响应失败: {e}")
-            return {"video": "medium", "audio": "medium", "image": "medium"}
-
-    def pause_tasks(self) -> bool:
-        """
-        暂停所有任务
-
-        Returns:
-            是否成功暂停
-        """
-        try:
-            response = self.session.post(f"{self.base_url}/tasks/pause")
-            response.raise_for_status()
-
-            logger.info("已暂停所有任务")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"暂停任务失败: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"暂停任务失败: {e}")
-            return False
-
-    def resume_tasks(self) -> bool:
-        """
-        恢复所有任务
-
-        Returns:
-            是否成功恢复
-        """
-        try:
-            response = self.session.post(f"{self.base_url}/tasks/resume")
-            response.raise_for_status()
-
-            logger.info("已恢复所有任务")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"恢复任务失败: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"恢复任务失败: {e}")
-            return False
-
-    def cancel_tasks(self) -> bool:
-        """
-        取消所有任务
-
-        Returns:
-            是否成功取消
-        """
-        try:
-            response = self.session.delete(f"{self.base_url}/tasks")
-            response.raise_for_status()
-
-            logger.info("已取消所有任务")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"取消任务失败: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"取消任务失败: {e}")
-            return False
-
-    def trigger_full_scan(self) -> bool:
-        """
-        触发全量扫描
-
-        Returns:
-            是否成功触发
-        """
-        try:
-            response = self.session.post(f"{self.base_url}/scan/full")
-            response.raise_for_status()
-
-            logger.info("已启动全量扫描")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"触发全量扫描失败: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"触发全量扫描失败: {e}")
-            return False
-
-    def trigger_directory_scan(self, directory: str) -> bool:
-        """
-        触发目录扫描
-
-        Args:
-            directory: 目录路径
-
-        Returns:
-            是否成功触发
-        """
-        try:
-            response = self.session.post(
-                f"{self.base_url}/scan/directory", json={"path": directory}
-            )
-            response.raise_for_status()
-
-            logger.info(f"已启动目录扫描: {directory}")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"触发目录扫描失败 {directory}: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"触发目录扫描失败 {directory}: {e}")
-            return False
-
-    def trigger_vectorization(
-        self,
-        file_type: Optional[str] = None,
-        concurrent: int = 4,
-        use_gpu: bool = False,
-    ) -> bool:
-        """
-        触发向量化
-
-        Args:
-            file_type: 文件类型（image/video/audio）
-            concurrent: 并发数
-            use_gpu: 是否使用GPU
-
-        Returns:
-            是否成功触发
-        """
-        try:
-            response = self.session.post(
-                f"{self.base_url}/vectorize",
-                json={
-                    "file_type": file_type,
-                    "concurrent": concurrent,
-                    "use_gpu": use_gpu,
-                },
-            )
-            response.raise_for_status()
-
-            logger.info(f"已启动向量化: {file_type}")
-            return True
-
-        except requests.RequestException as e:
-            logger.error(f"触导向量化失败: {e}")
-            return False
-        except Exception as e:
-            logger.error(f"触导向量化失败: {e}")
-            return False
-
-    def get_tasks(self) -> List[Dict[str, Any]]:
+    def get_tasks(
+        self, status: str = None, task_type: str = None, limit: int = 100, offset: int = 0
+    ) -> List[Dict[str, Any]]:
         """
         获取任务列表
+
+        Args:
+            status: 状态过滤
+            task_type: 任务类型过滤
+            limit: 返回数量限制
+            offset: 偏移量
 
         Returns:
             任务列表
         """
         try:
-            response = self.session.get(f"{self.base_url}/tasks")
-            response.raise_for_status()
+            params = {"limit": limit, "offset": offset}
+            if status:
+                params["status"] = status
+            if task_type:
+                params["task_type"] = task_type
 
+            response = self.session.get(f"{self.base_url}/tasks", params=params)
+            response.raise_for_status()
             data = response.json()
             return data.get("tasks", [])
-
         except requests.RequestException as e:
             logger.error(f"获取任务列表失败: {e}")
             return []
         except Exception as e:
-            logger.error(f"解析任务列表响应失败: {e}")
+            logger.error(f"获取任务列表失败: {e}")
             return []
 
-    def get_task_stats(self) -> Dict[str, int]:
+    def get_task(self, task_id: str) -> Optional[Dict[str, Any]]:
+        """
+        获取单个任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            任务信息或None
+        """
+        try:
+            response = self.session.get(f"{self.base_url}/tasks/{task_id}")
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"获取任务失败 {task_id}: {e}")
+            return None
+        except Exception as e:
+            logger.error(f"获取任务失败 {task_id}: {e}")
+            return None
+
+    def cancel_task(self, task_id: str) -> bool:
+        """
+        取消任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.delete(f"{self.base_url}/tasks/{task_id}")
+            response.raise_for_status()
+            logger.info(f"已取消任务: {task_id}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"取消任务失败 {task_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"取消任务失败 {task_id}: {e}")
+            return False
+
+    def update_task_priority(self, task_id: str, priority: int) -> bool:
+        """
+        更新任务优先级
+
+        Args:
+            task_id: 任务ID
+            priority: 优先级（1-10）
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(
+                f"{self.base_url}/tasks/{task_id}/priority", data={"priority": str(priority)}
+            )
+            response.raise_for_status()
+            logger.info(f"已更新任务优先级: {task_id} -> {priority}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"更新任务优先级失败 {task_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"更新任务优先级失败 {task_id}: {e}")
+            return False
+
+    def pause_task(self, task_id: str) -> bool:
+        """
+        暂停任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(f"{self.base_url}/tasks/{task_id}/pause")
+            response.raise_for_status()
+            logger.info(f"已暂停任务: {task_id}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"暂停任务失败 {task_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"暂停任务失败 {task_id}: {e}")
+            return False
+
+    def resume_task(self, task_id: str) -> bool:
+        """
+        恢复任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(f"{self.base_url}/tasks/{task_id}/resume")
+            response.raise_for_status()
+            logger.info(f"已恢复任务: {task_id}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"恢复任务失败 {task_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"恢复任务失败 {task_id}: {e}")
+            return False
+
+    def retry_task(self, task_id: str) -> bool:
+        """
+        重试任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(f"{self.base_url}/tasks/{task_id}/retry")
+            response.raise_for_status()
+            logger.info(f"已重试任务: {task_id}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"重试任务失败 {task_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"重试任务失败 {task_id}: {e}")
+            return False
+
+    def archive_task(self, task_id: str) -> bool:
+        """
+        归档任务
+
+        Args:
+            task_id: 任务ID
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(f"{self.base_url}/tasks/{task_id}/archive")
+            response.raise_for_status()
+            logger.info(f"已归档任务: {task_id}")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"归档任务失败 {task_id}: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"归档任务失败 {task_id}: {e}")
+            return False
+
+    def get_task_stats(self) -> Dict[str, Any]:
         """
         获取任务统计
 
         Returns:
-            任务统计字典
+            任务统计信息
         """
         try:
             response = self.session.get(f"{self.base_url}/tasks/stats")
             response.raise_for_status()
-
-            data = response.json()
-            return data.get(
-                "stats", {"pending": 0, "running": 0, "completed": 0, "failed": 0}
-            )
-
+            return response.json()
         except requests.RequestException as e:
             logger.error(f"获取任务统计失败: {e}")
-            return {"pending": 0, "running": 0, "completed": 0, "failed": 0}
+            return {}
         except Exception as e:
-            logger.error(f"解析任务统计响应失败: {e}")
-            return {"pending": 0, "running": 0, "completed": 0, "failed": 0}
+            logger.error(f"获取任务统计失败: {e}")
+            return {}
 
-    def get_thread_pool_status(self) -> Dict[str, int]:
+    def cancel_all_tasks(self, cancel_running: bool = False) -> bool:
+        """
+        取消所有任务
+
+        Args:
+            cancel_running: 是否取消运行中的任务
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(
+                f"{self.base_url}/tasks/cancel-all", data={"cancel_running": str(cancel_running).lower()}
+            )
+            response.raise_for_status()
+            logger.info("已取消所有任务")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"取消所有任务失败: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"取消所有任务失败: {e}")
+            return False
+
+    def cancel_tasks_by_type(self, task_type: str, cancel_running: bool = False) -> bool:
+        """
+        按类型取消任务
+
+        Args:
+            task_type: 任务类型
+            cancel_running: 是否取消运行中的任务
+
+        Returns:
+            是否成功
+        """
+        try:
+            response = self.session.post(
+                f"{self.base_url}/tasks/cancel-by-type",
+                data={"task_type": task_type, "cancel_running": str(cancel_running).lower()},
+            )
+            response.raise_for_status()
+            logger.info(f"已取消类型为 {task_type} 的所有任务")
+            return True
+        except requests.RequestException as e:
+            logger.error(f"按类型取消任务失败: {e}")
+            return False
+        except Exception as e:
+            logger.error(f"按类型取消任务失败: {e}")
+            return False
+
+    def get_thread_pool_status(self) -> Dict[str, Any]:
         """
         获取线程池状态
 
         Returns:
-            线程池状态字典，包含：
-            - max_workers: 最大线程数
-            - active_threads: 活跃线程数
-            - idle_threads: 空闲线程数
-            - load_percentage: 负载百分比
+            线程池状态
         """
         try:
             response = self.session.get(f"{self.base_url}/tasks/thread-pool/status")
             response.raise_for_status()
-
             data = response.json()
-            return data.get(
-                "thread_pool",
-                {
-                    "max_workers": 8,
-                    "active_threads": 0,
-                    "idle_threads": 8,
-                    "load_percentage": 0,
-                },
-            )
-
+            return data.get("thread_pool", {})
         except requests.RequestException as e:
             logger.error(f"获取线程池状态失败: {e}")
-            return {
-                "max_workers": 8,
-                "active_threads": 0,
-                "idle_threads": 8,
-                "load_percentage": 0,
-            }
+            return {"max_workers": 8, "active_threads": 0, "idle_threads": 8, "load_percentage": 0}
         except Exception as e:
-            logger.error(f"解析线程池状态响应失败: {e}")
-            return {
-                "max_workers": 8,
-                "active_threads": 0,
-                "idle_threads": 8,
-                "load_percentage": 0,
-            }
+            logger.error(f"获取线程池状态失败: {e}")
+            return {"max_workers": 8, "active_threads": 0, "idle_threads": 8, "load_percentage": 0}
 
-    def update_resource_config(self, concurrent: int, use_gpu: bool) -> bool:
+    # ==================== 系统相关API ====================
+
+    def get_system_info(self) -> Dict[str, Any]:
         """
-        更新资源配置
-
-        Args:
-            concurrent: 并发数
-            use_gpu: 是否使用GPU
+        获取系统信息
 
         Returns:
-            是否成功更新
+            系统信息
         """
         try:
-            response = self.session.put(
-                f"{self.base_url}/config/resources",
-                json={"concurrent": concurrent, "use_gpu": use_gpu},
-            )
+            response = self.session.get(f"{self.base_url}/system/info")
             response.raise_for_status()
-
-            logger.info(
-                f"资源配置已更新: 并发={concurrent}, GPU={'启用' if use_gpu else '禁用'}"
-            )
-            return True
-
+            return response.json()
         except requests.RequestException as e:
-            logger.error(f"更新资源配置失败: {e}")
-            return False
+            logger.error(f"获取系统信息失败: {e}")
+            return {}
         except Exception as e:
-            logger.error(f"更新资源配置失败: {e}")
+            logger.error(f"获取系统信息失败: {e}")
+            return {}
+
+    def get_system_stats(self) -> Dict[str, Any]:
+        """
+        获取系统统计
+
+        Returns:
+            系统统计信息
+        """
+        try:
+            response = self.session.get(f"{self.base_url}/system/stats")
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"获取系统统计失败: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"获取系统统计失败: {e}")
+            return {}
+
+    def check_health(self) -> bool:
+        """
+        检查API健康状态
+
+        Returns:
+            是否健康
+        """
+        try:
+            response = self.session.get(f"{self.base_url}/health", timeout=5)
+            response.raise_for_status()
+            data = response.json()
+            return data.get("status") == "healthy"
+        except requests.RequestException:
             return False
+        except Exception:
+            return False
+
+    # ==================== 向量存储相关API ====================
+
+    def get_vector_stats(self) -> Dict[str, Any]:
+        """
+        获取向量存储统计
+
+        Returns:
+            向量统计信息
+        """
+        try:
+            response = self.session.get(f"{self.base_url}/vector/stats")
+            response.raise_for_status()
+            return response.json()
+        except requests.RequestException as e:
+            logger.error(f"获取向量统计失败: {e}")
+            return {}
+        except Exception as e:
+            logger.error(f"获取向量统计失败: {e}")
+            return {}
+
+
+# 全局API客户端实例
+_api_client: Optional[APIClient] = None
+
+
+def get_api_client(base_url: str = "http://localhost:8000/api/v1") -> APIClient:
+    """
+    获取全局API客户端实例
+
+    Args:
+        base_url: API基础URL
+
+    Returns:
+        API客户端实例
+    """
+    global _api_client
+    if _api_client is None:
+        _api_client = APIClient(base_url)
+    return _api_client

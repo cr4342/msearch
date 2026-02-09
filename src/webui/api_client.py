@@ -178,9 +178,9 @@ class APIClient:
         endpoint = f"/api/v1/tasks/{task_id}"
         return self._make_request("GET", endpoint)
 
-    def set_task_priority(self, task_id: str, priority: int) -> Dict[str, Any]:
+    def update_task_priority(self, task_id: str, priority: int) -> Dict[str, Any]:
         """
-        设置任务优先级
+        更新任务优先级
 
         Args:
             task_id: 任务ID
@@ -191,7 +191,7 @@ class APIClient:
         """
         endpoint = f"/api/v1/tasks/{task_id}/priority"
         data = {"priority": priority}
-        return self._make_request("POST", endpoint, json=data)
+        return self._make_request("POST", endpoint, data=data)
 
     def pause_task(self, task_id: str) -> Dict[str, Any]:
         """
