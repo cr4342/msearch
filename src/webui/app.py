@@ -21,6 +21,7 @@ sys.path.insert(0, str(project_root))
 from core.config.config_manager import ConfigManager
 from webui.api_client import APIClient
 from services.file.file_monitor import FileMonitor
+from webui.enhanced_task_manager import EnhancedTaskManager
 
 logger = logging.getLogger(__name__)
 
@@ -95,6 +96,13 @@ class MSearchWebUI:
         # 启动文件监控
         self.file_monitor.start_monitoring()
         logger.info("✓ 文件监控器已启动")
+
+        # 初始化增强型任务管理器
+        self.enhanced_task_manager = EnhancedTaskManager(
+            api_client=self.api_client,
+            config=self.config
+        )
+        logger.info("✓ 增强型任务管理器初始化完成")
 
         logger.info("MSearch WebUI 初始化完成")
 
@@ -1525,6 +1533,41 @@ class MSearchWebUI:
 
         except Exception as e:
             return f"获取处理进度失败: {e}"
+
+    def enhanced_get_directories(self):
+        try:
+            self.enhanced_task_manager.get_monitored_directories()
+            return self.enhanced_task_manager.get_directory_status_display()
+        except Exception as e:
+            logger.error(f"获取监控目录失败: {e}")
+            return f"<div style='padding: 20px; color: red;'>获取监控目录失败: {e}</div>"
+
+    def enhanced_get_task_queue(self):
+        try:
+            return self.enhanced_task_manager.get_task_queue_display()
+        except Exception as e:
+            logger.error(f"获取任务队列失败: {e}")
+            return f"<div style='padding: 20px; color: red;'>获取任务队列失败: {e}</div>"
+
+    def enhanced_add_directory(self, directory_path: str):
+        try:
+            if not directory_path or not directory_path.strip():
+                return self.enhanced_get_directories(), ""
+            success = self.enhanced_task_manager.add_monitored_directory(directory_path.strip())
+            return self.enhanced_get_directories(), "" if success else directory_path
+        except Exception as e:
+            logger.error(f"添加监控目录失败: {e}")
+            return self.enhanced_get_directories(), directory_path
+
+    def enhanced_update_priority_config(self, video_priority: int, audio_priority: int, image_priority: int):
+        try:
+            self.enhanced_task_manager.update_file_type_priority("video", video_priority)
+            self.enhanced_task_manager.update_file_type_priority("audio", audio_priority)
+            self.enhanced_task_manager.update_file_type_priority("image", image_priority)
+            return f"优先级配置已保存: 视频={video_priority}, 音频={audio_priority}, 图像={image_priority}"
+        except Exception as e:
+            logger.error(f"更新优先级配置失败: {e}")
+            return f"更新优先级配置失败: {e}"
 
     def create_interface(self):
         """
